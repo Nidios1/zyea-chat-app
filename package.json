@@ -1,0 +1,26 @@
+{
+  "name": "zalo-clone",
+  "version": "1.0.0",
+  "description": "Zalo Clone - Chat and Social Network App",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node start_production.js",
+    "start:network": "node start_with_network.js",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "dev:network": "node auto_config_network.js && concurrently \"npm run server\" \"npm run client\"",
+    "client:network": "node start_client_network.js",
+    "server": "cd server && npm start",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "setup": "cd server && npm run setup-db",
+    "get-ip": "cd server && npm run get-ip",
+    "update-config": "node update_client_config.js",
+    "config-network": "node auto_config_network.js"
+  },
+  "keywords": ["zalo", "clone", "chat", "social", "network"],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^7.6.0"
+  }
+}

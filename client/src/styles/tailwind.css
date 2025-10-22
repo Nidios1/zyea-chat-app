@@ -1,0 +1,244 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+@layer base {
+  * {
+    @apply box-border;
+  }
+  
+  body {
+    @apply font-sans antialiased;
+    @apply text-gray-900 bg-gray-50;
+    @apply dark:text-dark-text dark:bg-dark-bg;
+    /* Support for notch devices */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  
+  /* Smooth scrolling */
+  html {
+    @apply scroll-smooth;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-gray-100 dark:bg-dark-card;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400 dark:bg-gray-500;
+  }
+}
+
+/* Custom components */
+@layer components {
+  /* Chat bubble */
+  .chat-bubble {
+    @apply px-4 py-2 rounded-bubble max-w-xs break-words;
+    @apply shadow-chat;
+  }
+  
+  .chat-bubble-sent {
+    @apply bg-primary-500 text-white;
+    @apply ml-auto;
+  }
+  
+  .chat-bubble-received {
+    @apply bg-white dark:bg-dark-card text-gray-900 dark:text-dark-text;
+    @apply mr-auto;
+  }
+  
+  /* Button styles */
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium;
+    @apply transition-all duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-offset-2;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-primary {
+    @apply btn bg-primary-500 text-white;
+    @apply hover:bg-primary-600 active:bg-primary-700;
+    @apply focus:ring-primary-500;
+  }
+  
+  .btn-secondary {
+    @apply btn bg-gray-200 text-gray-900;
+    @apply hover:bg-gray-300 active:bg-gray-400;
+    @apply dark:bg-dark-card dark:text-dark-text;
+    @apply focus:ring-gray-500;
+  }
+  
+  .btn-success {
+    @apply btn bg-success-500 text-white;
+    @apply hover:bg-success-600 active:bg-success-700;
+    @apply focus:ring-success-500;
+  }
+  
+  /* Card */
+  .card {
+    @apply bg-white dark:bg-dark-card;
+    @apply rounded-card shadow-soft;
+    @apply border border-gray-200 dark:border-dark-border;
+  }
+  
+  /* Input */
+  .input {
+    @apply w-full px-4 py-2 rounded-lg;
+    @apply border border-gray-300 dark:border-dark-border;
+    @apply bg-white dark:bg-dark-card;
+    @apply text-gray-900 dark:text-dark-text;
+    @apply placeholder-gray-400 dark:placeholder-gray-500;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    @apply transition-all duration-200;
+  }
+  
+  /* Modal overlay */
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-50;
+  }
+  
+  /* Modal content */
+  .modal-content {
+    @apply bg-white dark:bg-dark-card rounded-card shadow-modal;
+    @apply max-w-lg w-full mx-4;
+    @apply transform transition-all duration-300;
+  }
+  
+  /* Avatar */
+  .avatar {
+    @apply rounded-full object-cover;
+    @apply border-2 border-white dark:border-dark-border;
+  }
+  
+  .avatar-sm {
+    @apply avatar w-8 h-8;
+  }
+  
+  .avatar-md {
+    @apply avatar w-12 h-12;
+  }
+  
+  .avatar-lg {
+    @apply avatar w-16 h-16;
+  }
+  
+  .avatar-xl {
+    @apply avatar w-24 h-24;
+  }
+  
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center justify-center;
+    @apply px-2 py-1 text-xs font-semibold rounded-full;
+  }
+  
+  .badge-primary {
+    @apply badge bg-primary-100 text-primary-700;
+    @apply dark:bg-primary-900 dark:text-primary-300;
+  }
+  
+  .badge-success {
+    @apply badge bg-success-100 text-success-700;
+    @apply dark:bg-success-900 dark:text-success-300;
+  }
+  
+  .badge-danger {
+    @apply badge bg-red-100 text-red-700;
+    @apply dark:bg-red-900 dark:text-red-300;
+  }
+  
+  /* Divider */
+  .divider {
+    @apply border-t border-gray-200 dark:border-dark-border;
+  }
+  
+  /* Bottom sheet */
+  .bottom-sheet {
+    @apply fixed bottom-0 left-0 right-0;
+    @apply bg-white dark:bg-dark-card;
+    @apply rounded-t-3xl shadow-modal;
+    @apply z-60;
+    @apply transform transition-transform duration-300;
+  }
+  
+  /* Skeleton loader */
+  .skeleton {
+    @apply bg-gray-200 dark:bg-dark-border;
+    @apply animate-pulse rounded;
+  }
+}
+
+/* Custom utilities */
+@layer utilities {
+  /* Text ellipsis */
+  .text-ellipsis {
+    @apply truncate;
+  }
+  
+  .text-ellipsis-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .text-ellipsis-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  /* Flex center */
+  .flex-center {
+    @apply flex items-center justify-center;
+  }
+  
+  /* Absolute center */
+  .absolute-center {
+    @apply absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2;
+  }
+  
+  /* Touch manipulation */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+  
+  /* Prevent select */
+  .no-select {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+  
+  /* Tap highlight */
+  .tap-highlight-none {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* iOS safe area support */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Dark mode transition */
+.dark-mode-transition {
+  @apply transition-colors duration-300;
+}
+

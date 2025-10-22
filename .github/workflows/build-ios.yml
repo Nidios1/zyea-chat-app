@@ -1,0 +1,115 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch: # Cho phép trigger manual
+
+jobs:
+  build-ios:
+    runs-on: macos-latest # GitHub cung cấp macOS runner miễn phí
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: 'zalo-clone/client/package-lock.json'
+      
+      - name: Install dependencies
+        run: |
+          cd zalo-clone/client
+          npm ci
+      
+      - name: Build React app
+        run: |
+          cd zalo-clone/client
+          npm run build
+        env:
+          REACT_APP_API_URL: http://192.168.0.101:5000/api
+          REACT_APP_SOCKET_URL: http://192.168.0.101:5000
+      
+      - name: Setup Capacitor
+        run: |
+          cd zalo-clone/client
+          npx cap sync ios
+      
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      
+      - name: Install CocoaPods dependencies
+        run: |
+          cd zalo-clone/client/ios/App
+          pod install
+      
+      # Import certificate và provisioning profile
+      - name: Import Code-Signing Certificates
+        uses: Apple-Actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+      
+      - name: Import Provisioning Profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+      
+      # Build IPA
+      - name: Build IPA
+        run: |
+          cd zalo-clone/client/ios/App
+          
+          # Build archive
+          xcodebuild clean archive \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -archivePath $PWD/build/App.xcarchive \
+            CODE_SIGN_IDENTITY="${{ secrets.IOS_CODE_SIGN_IDENTITY }}" \
+            PROVISIONING_PROFILE_SPECIFIER="${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}" \
+            CODE_SIGN_STYLE=Manual
+          
+          # Export IPA
+          xcodebuild -exportArchive \
+            -archivePath $PWD/build/App.xcarchive \
+            -exportOptionsPlist exportOptions.plist \
+            -exportPath $PWD/build \
+            -allowProvisioningUpdates
+      
+      # Upload IPA artifact
+      - name: Upload IPA
+        uses: actions/upload-artifact@v3
+        with:
+          name: Zyea-Plus-${{ github.run_number }}.ipa
+          path: zalo-clone/client/ios/App/build/*.ipa
+          retention-days: 30
+      
+      # Optional: Upload to TestFlight hoặc custom distribution
+      - name: Upload to Custom Distribution (Optional)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo "Upload IPA to your custom distribution service here"
+          # Ví dụ: scp, curl upload, etc.
+
+  # Job notify khi build xong
+  notify:
+    needs: build-ios
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Notify build result
+        run: |
+          if [ "${{ needs.build-ios.result }}" == "success" ]; then
+            echo "✅ iOS build SUCCESS!"
+          else
+            echo "❌ iOS build FAILED!"
+          fi
+

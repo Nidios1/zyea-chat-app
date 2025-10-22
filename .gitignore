@@ -1,0 +1,76 @@
+# Dependencies
+node_modules/
+*/node_modules/
+client/node_modules/
+server/node_modules/
+
+# Build outputs
+build/
+dist/
+client/build/
+*.log
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+config.env
+server/config.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Capacitor
+android/
+ios/
+client/android/
+client/ios/
+
+# Uploads
+uploads/
+server/uploads/
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Production
+*.tgz
+*.zip
+*.rar
+../htdocs.rar
+
+# Local files
+*.local
+
+# Package manager
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Temp files
+*.tmp
+*.temp
+.cache/

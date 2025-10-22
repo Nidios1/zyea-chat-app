@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/Zyea.jpg" type="image/jpeg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#0084ff" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Zyea+" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Copy Protection Meta Tags -->
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="format-detection" content="address=no" />
+    <meta name="format-detection" content="email=no" />
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />
+    <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet" />
+    <meta
+      name="description"
+      content="Zyea+ - A modern chat application"
+    />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/Zyea.jpg" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
+    <!-- Preload logo để hiển thị nhanh hơn -->
+    <link rel="preload" href="%PUBLIC_URL%/Zyea.jpg" as="image" />
+    
+    <title>Zyea+</title>
+    
+    <!-- Detect mobile early to prevent PC layout flash -->
+    <script>
+      (function() {
+        var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+        if (isMobile) {
+          document.documentElement.classList.add('is-mobile');
+        } else {
+          document.documentElement.classList.add('is-desktop');
+        }
+      })();
+    </script>
+    
+    <!-- Prevent layout flash - CRITICAL CSS -->
+    <style>
+      /* Reset cơ bản */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      html, body {
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+        /* Background gradient ngay từ đầu - giống splash screen */
+        background: linear-gradient(135deg, #0084ff 0%, #00a651 100%);
+        width: 100%;
+        height: 100%;
+      }
+      
+      /* Chỉ desktop mới có background xám */
+      @media (min-width: 769px) {
+        html, body {
+          background-color: #f0f2f5;
+        }
+      }
+      
+      #root {
+        min-height: 100vh;
+        background: transparent;
+      }
+    </style>
+  </head>
+  <body oncontextmenu="return false" onselectstart="return false" ondragstart="return false" oncopy="return false" onpaste="return false" style="margin:0;padding:0;background:linear-gradient(135deg,#0084ff 0%,#00a651 100%);touch-action:manipulation;min-height:100vh;">
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    
+    <div id="root"></div>
+    
+    <!-- Override body background for desktop -->
+    <script>
+      if (window.innerWidth > 768) {
+        document.body.style.background = '#f0f2f5';
+      }
+    </script>
+  </body>
+</html>
