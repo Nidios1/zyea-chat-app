@@ -212,10 +212,11 @@ function App() {
     } else {
       // Nếu không có token (chưa đăng nhập)
       // Kiểm tra xem có cần hiện download prompt không
+      const isCapacitor = window.Capacitor !== undefined;
       const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
                     window.navigator.standalone === true;
       const hasClosedPrompt = localStorage.getItem('downloadPromptClosed');
-      const shouldShowDownloadPrompt = isMobile && !isPWA && !hasClosedPrompt;
+      const shouldShowDownloadPrompt = isMobile && !isPWA && !hasClosedPrompt && !isCapacitor;
       
       if (shouldShowDownloadPrompt) {
         // Nếu cần hiện download prompt → bỏ qua splash screen
@@ -241,6 +242,9 @@ function App() {
   }, []); // ← QUAN TRỌNG: Chỉ chạy 1 lần khi mount, không phụ thuộc vào isLoggingIn
 
   const checkDownloadPrompt = () => {
+    // Check if running in Capacitor native app
+    const isCapacitor = window.Capacitor !== undefined;
+    
     // Check if user is in PWA mode
     const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
                   window.navigator.standalone === true;
@@ -248,8 +252,8 @@ function App() {
     // Check if user has already closed the prompt before
     const hasClosedPrompt = localStorage.getItem('downloadPromptClosed');
     
-    // Only show download prompt on mobile, not in PWA mode, and hasn't been closed before
-    if (isMobile && !isPWA && !hasClosedPrompt) {
+    // Only show download prompt on mobile, not in PWA/Capacitor, and hasn't been closed before
+    if (isMobile && !isPWA && !hasClosedPrompt && !isCapacitor) {
       setShowDownloadPrompt(true);
     }
   };
