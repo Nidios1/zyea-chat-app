@@ -402,7 +402,7 @@ const BottomNav = styled.div`
   /* Removed border-top for cleaner look */
   display: flex;
   padding: 4px 0;
-  padding-bottom: calc(4px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
   /* Subtle shadow only */
   box-shadow: 0 -1px 3px var(--shadow-color, rgba(0, 0, 0, 0.05));
   position: fixed;
@@ -410,6 +410,8 @@ const BottomNav = styled.div`
   left: 0;
   right: 0;
   z-index: 1000;
+  /* Ensure it stretches to bottom edge including safe area */
+  min-height: calc(52px + env(safe-area-inset-bottom));
 `;
 
 const NavItem = styled.div`
