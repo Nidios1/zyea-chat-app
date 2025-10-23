@@ -401,7 +401,8 @@ const BottomNav = styled.div`
   background: var(--bg-primary, white);
   /* Removed border-top for cleaner look */
   display: flex;
-  padding: 4px 0 env(safe-area-inset-bottom) 0;
+  padding: 4px 0;
+  padding-bottom: calc(4px + env(safe-area-inset-bottom));
   /* Subtle shadow only */
   box-shadow: 0 -1px 3px var(--shadow-color, rgba(0, 0, 0, 0.05));
   position: fixed;
