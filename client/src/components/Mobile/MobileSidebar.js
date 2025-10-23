@@ -486,7 +486,8 @@ const TabBar = styled.div`
   gap: 4px;
   overflow-x: auto;
   position: sticky;
-  top: 45px;
+  /* Dynamic top based on TopBar height + safe area */
+  top: calc(45px + env(safe-area-inset-top, 0px));
   z-index: 99;
   
   &::-webkit-scrollbar {

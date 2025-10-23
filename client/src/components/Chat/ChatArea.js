@@ -542,31 +542,46 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
     console.log('Window width:', window.innerWidth);
   }, [isMobile]);
 
-  // iOS Keyboard detection to push input above keyboard
+  // iOS Keyboard detection - ENHANCED for IPA
   useEffect(() => {
     if (!isMobile) return;
 
+    let initialHeight = window.innerHeight;
+
     const handleResize = () => {
+      // Method 1: visualViewport API
       if (window.visualViewport) {
         const viewportHeight = window.visualViewport.height;
         const windowHeight = window.innerHeight;
         const keyboardHeight = windowHeight - viewportHeight;
         
-        // If keyboard is open (viewport shrinks), push input up
         if (keyboardHeight > 100) {
           setKeyboardOffset(keyboardHeight);
-        } else {
-          setKeyboardOffset(0);
+          return;
         }
+      }
+      
+      // Method 2: Fallback - window resize
+      const currentHeight = window.innerHeight;
+      const heightDiff = initialHeight - currentHeight;
+      
+      if (heightDiff > 100) {
+        // Keyboard is open
+        setKeyboardOffset(heightDiff);
+      } else {
+        setKeyboardOffset(0);
       }
     };
 
+    // Listen to multiple events for better compatibility
+    window.addEventListener('resize', handleResize);
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', handleResize);
       window.visualViewport.addEventListener('scroll', handleResize);
     }
 
     return () => {
+      window.removeEventListener('resize', handleResize);
       if (window.visualViewport) {
         window.visualViewport.removeEventListener('resize', handleResize);
         window.visualViewport.removeEventListener('scroll', handleResize);
@@ -1379,6 +1394,12 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
             value={newMessage}
             onChange={handleTyping}
             onKeyPress={handleKeyPress}
+            onFocus={(e) => {
+              // CRITICAL: Scroll input into view when keyboard opens
+              setTimeout(() => {
+                e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }, 300);
+            }}
             placeholder="Tin nhắn"
             rows={1}
           />
