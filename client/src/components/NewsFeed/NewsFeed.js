@@ -44,7 +44,7 @@ const NewsFeedContainer = styled.div`
   @media (max-width: 768px) {
     background: var(--bg-secondary, #f8f9fa);
     /* Add padding for bottom nav instead of reducing bottom */
-    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+    padding-bottom: calc(45px + env(safe-area-inset-bottom));
   }
 `;
 

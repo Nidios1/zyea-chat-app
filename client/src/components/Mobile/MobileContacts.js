@@ -24,7 +24,7 @@ const ContactsContainer = styled.div`
   
   /* Add padding for mobile bottom nav */
   @media (max-width: 768px) {
-    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+    padding-bottom: calc(45px + env(safe-area-inset-bottom));
   }
 `;
 
