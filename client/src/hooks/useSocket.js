@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 
-const useSocket = (url = 'http://192.168.0.101:5000') => {
+const useSocket = (url = 'http://192.168.0.103:5000') => {
   const socketRef = useRef(null);
 
   useEffect(() => {

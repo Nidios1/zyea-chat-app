@@ -10,10 +10,10 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
     // allowNavigation cho phép app gọi API tới IP wifi
     allowNavigation: [
-      'http://192.168.0.101:5000',
-      'http://192.168.0.101:3000',
-      'https://192.168.0.101:5000',
-      'https://192.168.0.101:3000',
+      'http://192.168.0.103:5000',
+      'http://192.168.0.103:3000',
+      'https://192.168.0.103:5000',
+      'https://192.168.0.103:3000',
       'http://localhost:5000',
       'http://localhost:3000'
     ],

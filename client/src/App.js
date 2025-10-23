@@ -113,7 +113,7 @@ function App() {
     // CHỈ verify token khi app khởi động lần đầu, KHÔNG verify khi đang login
     if (token && !user) {
       // Verify token and get user info + Preload data
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://192.168.0.101:5000/api';
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://192.168.0.103:5000/api';
       const loadStartTime = Date.now();
       
       console.log('🔐 Verifying existing token...');

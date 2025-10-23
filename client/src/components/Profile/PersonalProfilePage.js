@@ -723,7 +723,7 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
       
       if (isCapacitor) {
         // Mobile app - use environment variable or default
-        API_BASE_URL = process.env.REACT_APP_API_URL || 'http://192.168.0.101:5000/api';
+        API_BASE_URL = process.env.REACT_APP_API_URL || 'http://192.168.0.103:5000/api';
         console.log('📱 Capacitor detected, using API:', API_BASE_URL);
       } else if (window.location.hostname === 'localhost' || window.location.hostname.includes('192.168')) {
         // Development on browser

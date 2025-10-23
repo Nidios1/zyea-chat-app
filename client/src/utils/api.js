@@ -4,7 +4,7 @@ import { getToken } from './auth';
 // Use proxy in development for better compatibility
 const API_BASE_URL = process.env.NODE_ENV === 'development' 
   ? '/api'  // Use proxy
-  : (process.env.REACT_APP_API_URL || 'http://192.168.0.101:5000/api');
+  : (process.env.REACT_APP_API_URL || 'http://192.168.0.103:5000/api');
 
 const api = axios.create({
   baseURL: API_BASE_URL,

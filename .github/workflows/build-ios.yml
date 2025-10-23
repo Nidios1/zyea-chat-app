@@ -36,8 +36,8 @@ jobs:
           CI: false
           DISABLE_ESLINT_PLUGIN: true
           GENERATE_SOURCEMAP: false
-          REACT_APP_API_URL: http://192.168.0.101:5000/api
-          REACT_APP_SOCKET_URL: http://192.168.0.101:5000
+          REACT_APP_API_URL: http://192.168.0.103:5000/api
+          REACT_APP_SOCKET_URL: http://192.168.0.103:5000
       
       - name: Setup Capacitor iOS
         run: |
