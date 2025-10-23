@@ -401,8 +401,7 @@ const BottomNav = styled.div`
   background: var(--bg-primary, white);
   /* Removed border-top for cleaner look */
   display: flex;
-  padding: 4px 0;
-  padding-bottom: env(safe-area-inset-bottom);
+  flex-direction: column;
   /* Subtle shadow only */
   box-shadow: 0 -1px 3px var(--shadow-color, rgba(0, 0, 0, 0.05));
   position: fixed;
@@ -410,8 +409,13 @@ const BottomNav = styled.div`
   left: 0;
   right: 0;
   z-index: 1000;
-  /* Ensure it stretches to bottom edge including safe area */
-  min-height: calc(52px + env(safe-area-inset-bottom));
+  /* Fill completely to bottom including safe area */
+  padding-bottom: env(safe-area-inset-bottom);
+`;
+
+const NavItemsContainer = styled.div`
+  display: flex;
+  padding: 4px 0;
 `;
 
 const NavItem = styled.div`
@@ -1548,21 +1552,23 @@ const MobileSidebar = ({
 
       {!selectedConversation && !showProfile && (
         <BottomNav>
-          {navItems.map((item) => (
-            <NavItem 
-              key={item.id} 
-              active={item.id === currentView}
-              onClick={() => handleNavClick(item.id)}
-            >
-              <NavIcon>
-                <item.icon size={20} />
-                {item.badge && item.badge > 0 && (
-                  <NotificationBadge>{item.badge}</NotificationBadge>
-                )}
-              </NavIcon>
-              <NavLabel>{item.label}</NavLabel>
-            </NavItem>
-          ))}
+          <NavItemsContainer>
+            {navItems.map((item) => (
+              <NavItem 
+                key={item.id} 
+                active={item.id === currentView}
+                onClick={() => handleNavClick(item.id)}
+              >
+                <NavIcon>
+                  <item.icon size={20} />
+                  {item.badge && item.badge > 0 && (
+                    <NotificationBadge>{item.badge}</NotificationBadge>
+                  )}
+                </NavIcon>
+                <NavLabel>{item.label}</NavLabel>
+              </NavItem>
+            ))}
+          </NavItemsContainer>
         </BottomNav>
       )}
 

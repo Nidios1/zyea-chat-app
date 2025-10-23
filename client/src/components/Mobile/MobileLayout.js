@@ -242,15 +242,19 @@ const BottomNav = styled.div`
   background: white;
   /* Removed border-top for cleaner look */
   display: flex;
-  padding: 4px 0;
-  padding-bottom: env(safe-area-inset-bottom);
+  flex-direction: column;
   /* Subtle shadow only */
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.05);
   position: sticky;
   bottom: 0;
   z-index: 100;
-  /* Ensure it stretches to bottom edge including safe area */
-  min-height: calc(52px + env(safe-area-inset-bottom));
+  /* Fill completely to bottom including safe area */
+  padding-bottom: env(safe-area-inset-bottom);
+`;
+
+const NavItemsContainer = styled.div`
+  display: flex;
+  padding: 4px 0;
 `;
 
 const NavItem = styled.button`
@@ -498,32 +502,34 @@ const MobileLayout = ({
       </Content>
 
       <BottomNav>
-        {navItems.map((item) => (
-          <NavItem 
-            key={item.id} 
-            active={currentView === item.id}
-            onClick={() => handleNavClick(item.id)}
-          >
-            <NavIcon>
-              <item.icon size={20} />
-              {item.badge && item.badge !== 'dot' && item.badge > 0 && (
-                <NotificationBadge>{item.badge}</NotificationBadge>
-              )}
-              {item.badge === 'dot' && (
-                <div style={{
-                  position: 'absolute',
-                  top: '-2px',
-                  right: '-2px',
-                  width: '8px',
-                  height: '8px',
-                  background: '#ff4444',
-                  borderRadius: '50%'
-                }} />
-              )}
-            </NavIcon>
-            <NavLabel>{item.label}</NavLabel>
-          </NavItem>
-        ))}
+        <NavItemsContainer>
+          {navItems.map((item) => (
+            <NavItem 
+              key={item.id} 
+              active={currentView === item.id}
+              onClick={() => handleNavClick(item.id)}
+            >
+              <NavIcon>
+                <item.icon size={20} />
+                {item.badge && item.badge !== 'dot' && item.badge > 0 && (
+                  <NotificationBadge>{item.badge}</NotificationBadge>
+                )}
+                {item.badge === 'dot' && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '-2px',
+                    right: '-2px',
+                    width: '8px',
+                    height: '8px',
+                    background: '#ff4444',
+                    borderRadius: '50%'
+                  }} />
+                )}
+              </NavIcon>
+              <NavLabel>{item.label}</NavLabel>
+            </NavItem>
+          ))}
+        </NavItemsContainer>
       </BottomNav>
     </MobileContainer>
   );
