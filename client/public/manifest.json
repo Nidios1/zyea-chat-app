@@ -3,7 +3,7 @@
   "short_name": "Zyea+",
   "description": "Ứng dụng nhắn tin Zyea+ - Kết nối bạn bè, chia sẻ khoảnh khắc",
   "start_url": "/",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#0084ff",
   "theme_color": "#0084ff",
   "orientation": "portrait-primary",
@@ -11,10 +11,6 @@
   "lang": "vi",
   "categories": ["social", "communication", "messaging"],
   "prefer_related_applications": false,
-  "display_override": ["window-controls-overlay", "standalone"],
-  "edge_side_panel": {
-    "preferred_width": 400
-  },
   "launch_handler": {
     "client_mode": "focus-existing"
   },
