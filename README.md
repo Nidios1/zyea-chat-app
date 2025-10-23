@@ -15,6 +15,15 @@ Trò chuyện chưa bao giờ nhanh, mượt và gần gũi đến thế!
 📱 **Thiết kế hiện đại:** Giao diện thân thiện, tối ưu cho mọi thiết bị – từ điện thoại đến máy tính.  
 
 ---
+
+## 📱 Hỗ trợ Android & iOS
+
+- ✅ **Hỗ trợ đầy đủ trên Android và iOS** — trải nghiệm mượt mà trên cả hai nền tảng di động.  
+- 🔔 **Tương thích tính năng di động:** thông báo đẩy, trạng thái trực tuyến, giao diện tối ưu cho thao tác chạm.  
+- 📲 **Cài đặt như ứng dụng:** Người dùng có thể sử dụng trên điện thoại như một ứng dụng thực thụ, với trải nghiệm native-like.  
+
+---
+
 ## 🎨 Giao diện
 
 Ứng dụng có giao diện hiện đại với:
