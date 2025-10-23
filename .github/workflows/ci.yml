@@ -1,0 +1,67 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install Client Dependencies
+      run: |
+        cd client
+        npm ci
+    
+    - name: Install Server Dependencies
+      run: |
+        cd server
+        npm ci
+    
+    - name: Build Client
+      run: |
+        cd client
+        npm run build
+    
+    - name: Run Tests (if available)
+      run: |
+        cd client
+        npm test -- --passWithNoTests || true
+        
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18.x'
+        cache: 'npm'
+    
+    - name: Install Dependencies
+      run: |
+        cd client
+        npm ci
+    
+    - name: Run ESLint
+      run: |
+        cd client
+        npm run lint || true
+

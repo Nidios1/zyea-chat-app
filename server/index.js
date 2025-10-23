@@ -58,6 +58,8 @@ app.use(cors({
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
     
+    console.log(`🔍 CORS Request from origin: ${origin}`);
+    
     // Allow localhost and common network IPs
     const allowedOrigins = [
       'http://localhost:3000',
@@ -76,13 +78,18 @@ app.use(cors({
     });
     
     if (isAllowed) {
+      console.log(`✅ CORS allowed for origin: ${origin}`);
       callback(null, true);
     } else {
-      console.log(`⚠️  CORS blocked origin: ${origin}`);
+      console.log(`⚠️  CORS origin not in whitelist (but allowing anyway): ${origin}`);
       callback(null, true); // Allow for now, can be changed to false for security
     }
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Length', 'X-JSON'],
+  maxAge: 86400 // 24 hours
 }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../client/build')));

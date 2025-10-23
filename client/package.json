@@ -59,7 +59,8 @@
     "ios": "npm run cap:build && cap run ios",
     "ios:config": "node configure-ios-info-plist.js",
     "ios:setup": "npm run build && npx cap add ios && npm run ios:config && npx cap sync ios",
-    "ios:full": "npm run ios:setup && npx cap open ios"
+    "ios:full": "npm run ios:setup && npx cap open ios",
+    "ios:rebuild": "npm run build && npx cap sync ios && npm run ios:config"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

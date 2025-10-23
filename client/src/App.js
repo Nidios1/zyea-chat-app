@@ -22,6 +22,7 @@ import { initCopyProtection, preventDevTools } from './utils/copyProtection';
 import { useOfflineSync } from './hooks/useOfflineSync';
 import { useNativeFeatures } from './hooks/useNativeFeatures';
 import { isCapacitor, logPlatformInfo } from './utils/platformDetection';
+import { getApiBaseUrl } from './utils/platformConfig';
 
 
 function App() {
@@ -137,7 +138,7 @@ function App() {
     // CHỈ verify token khi app khởi động lần đầu, KHÔNG verify khi đang login
     if (token && !user) {
       // Verify token and get user info + Preload data
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://192.168.0.103:5000/api';
+      const apiUrl = getApiBaseUrl();
       const loadStartTime = Date.now();
       
       console.log('🔐 Verifying existing token...');

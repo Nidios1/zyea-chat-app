@@ -78,17 +78,14 @@
   }
 }
 
-/* Status bar overlay prevention */
+/* Status bar overlay prevention - REMOVED to enable fullscreen */
+/* CRITICAL: Do NOT add padding-top to body on iOS - it breaks fullscreen layout */
 @supports (padding-top: env(safe-area-inset-top)) {
   @media (max-width: 768px) {
-    /* Ensure status bar area is visible */
-    body {
-      padding-top: env(safe-area-inset-top);
-    }
-
-    /* But remove from #root since we're adding it to specific elements */
-    #root {
-      padding-top: 0;
+    /* Keep body and root fullscreen - individual components handle safe areas */
+    body, #root {
+      padding-top: 0 !important;
+      margin-top: 0 !important;
     }
   }
 }

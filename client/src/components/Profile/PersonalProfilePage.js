@@ -1063,7 +1063,7 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
           ))}
           
           <Footer>
-            Zyea v1.0.14 © 2025 Zyea+ Corporation
+            Zyea v1.0 © 2025 Zyea+ Corporation
           </Footer>
         </MenuSection>
       </PersonalProfileContainer>

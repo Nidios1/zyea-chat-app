@@ -93,8 +93,11 @@ router.post('/login', [
   body('password').notEmpty().withMessage('Password is required')
 ], async (req, res) => {
   try {
+    console.log('📥 Login request received:', { email: req.body.email, passwordLength: req.body.password?.length });
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({ errors: errors.array() });
     }
     const { email, phone, password } = req.body;

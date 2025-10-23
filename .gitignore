@@ -31,20 +31,23 @@ server/config.env
 Thumbs.db
 desktop.ini
 
-# Capacitor
-android/
-ios/
+# Capacitor (generated folders)
 client/android/
 client/ios/
 
-# Uploads
-uploads/
-server/uploads/
-*.jpg
-*.jpeg
-*.png
-*.gif
-*.webp
+# Keep iOS export options and capacitor config
+!client/ios-export-options.plist
+!client/capacitor.config.ts
+
+# Uploads (user uploaded files only)
+server/uploads/avatars/
+server/uploads/posts/
+
+# Keep public assets for iOS/Android build
+!client/public/**/*.png
+!client/public/**/*.jpg
+!client/public/**/*.jpeg
+!client/resources/**/*.png
 
 # Logs
 npm-debug.log*
@@ -65,8 +68,8 @@ coverage/
 # Local files
 *.local
 
-# Package manager
-package-lock.json
+# Package manager (keep package-lock for consistency)
+# package-lock.json
 yarn.lock
 pnpm-lock.yaml
 

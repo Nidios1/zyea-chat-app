@@ -38,9 +38,9 @@ const config: CapacitorConfig = {
       useDialog: true,
     },
     StatusBar: {
-      style: 'dark',
+      style: 'light',
       backgroundColor: '#0084ff',
-      overlaysWebView: true
+      overlaysWebView: false
     },
     PushNotifications: {
       presentationOptions: ["badge", "sound", "alert"],
@@ -62,11 +62,13 @@ const config: CapacitorConfig = {
   },
   // iOS specific config
   ios: {
-    contentInset: 'always',
+    contentInset: 'never',
     preferredContentMode: 'mobile',
     // Enable edge-to-edge content (extends behind notch/status bar)
-    scrollEnabled: true,
-    allowsLinkPreview: false
+    scrollEnabled: false,
+    allowsLinkPreview: false,
+    // CRITICAL: Enable fullscreen with notch support
+    limitsNavigationsToAppBoundDomains: false
   },
   // Android specific config
   android: {

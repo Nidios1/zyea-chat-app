@@ -29,13 +29,7 @@ export const getApiBaseUrl = () => {
     return process.env.REACT_APP_API_URL;
   }
 
-  // Development mode - use proxy
-  if (process.env.NODE_ENV === 'development' && !isNativeApp()) {
-    console.log('📡 Using API URL: /api (proxy)');
-    return '/api';
-  }
-
-  // Native app or production - use full URL
+  // Always use full URL (proxy has issues)
   const defaultApiUrl = 'http://192.168.0.103:5000/api';
   
   if (isNativeApp()) {
