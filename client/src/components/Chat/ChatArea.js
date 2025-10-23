@@ -11,6 +11,7 @@ import { chatAPI } from '../../utils/api';
 import useSwipeNavigation from '../../hooks/useSwipeNavigation';
 import SmartNavigationIndicator from '../Common/SmartNavigationIndicator';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL } from '../../utils/imageUtils';
 
 const ChatContainer = styled.div`
   flex: 1;
@@ -1228,7 +1229,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         )}
         <Avatar color={getAvatarColor(conversation.full_name)}>
           {conversation.avatar_url ? (
-            <img src={conversation.avatar_url} alt={conversation.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            <img src={getAvatarURL(conversation.avatar_url)} alt={conversation.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
           ) : (
             getInitials(conversation.full_name)
           )}

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import styled from 'styled-components';
 import { FiCheck, FiCheckCircle, FiArrowLeft } from 'react-icons/fi';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const MessageContainer = styled.div`
   display: flex;
@@ -215,7 +216,7 @@ const Message = ({ message, isOwn, showAvatar, showTime }) => {
         showAvatar={showAvatar}
       >
         {message.avatar_url ? (
-          <img src={message.avatar_url} alt={senderName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+          <img src={getAvatarURL(message.avatar_url)} alt={senderName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
         ) : (
           getInitials(senderName)
         )}
@@ -225,9 +226,9 @@ const Message = ({ message, isOwn, showAvatar, showTime }) => {
         <MessageBubble isOwn={isOwn} isImage={message.message_type === 'image'}>
           {message.message_type === 'image' ? (
             <MessageImage 
-              src={message.content} 
+              src={getUploadedImageURL(message.content)} 
               alt="Message image"
-              onClick={() => window.open(message.content, '_blank')}
+              onClick={() => window.open(getUploadedImageURL(message.content), '_blank')}
             />
           ) : (
             message.content

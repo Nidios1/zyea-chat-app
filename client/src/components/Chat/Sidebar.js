@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { FiSearch, FiPlus, FiMessageCircle, FiUser } from 'react-icons/fi';
 import { chatAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL } from '../../utils/imageUtils';
 
 const SidebarContainer = styled.div`
   width: 300px;
@@ -516,7 +517,7 @@ const Sidebar = ({
               >
                 <Avatar color={getAvatarColor(conversation.full_name)}>
                   {conversation.avatar_url ? (
-                    <img src={conversation.avatar_url} alt={conversation.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    <img src={getAvatarURL(conversation.avatar_url)} alt={conversation.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                   ) : (
                     getInitials(conversation.full_name)
                   )}
