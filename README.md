@@ -1,17 +1,16 @@
-# 💬 Zyea+ - Real-time Chat Application
+# 💬 Zyea+ - Kết Nội Mọi  Khoảnh Khắc
 
-Một ứng dụng chat real-time được xây dựng với React, Node.js, Express, MySQL và Socket.io, có thể build thành mobile app với Capacitor.
+Trò chuyện chưa bao giờ nhanh, mượt và gần gũi đến thế!
+Ứng dụng chat real-time mang đến cho bạn trải nghiệm trò chuyện tức thì, hiện đại và đầy cảm xúc – nơi mọi cuộc trò chuyện trở nên sống động như thật 💖
 
 ## 🚀 Tính năng
 
-- ✅ **Đăng ký/Đăng nhập** với xác thực JWT
-- ✅ **Chat real-time** với Socket.io
-- ✅ **Giao diện thân thiện** giống Zalo
-- ✅ **Tìm kiếm người dùng** để bắt đầu cuộc trò chuyện
-- ✅ **Lưu trữ tin nhắn** trong MySQL
-- ✅ **Trạng thái online/offline** của người dùng
-- ✅ **Responsive design** cho mobile và desktop
-
+✨ Chat tức thì – Không độ trễ: Gửi và nhận tin nhắn ngay trong tích tắc.
+🔒 Đăng nhập an toàn: Bảo mật thông tin tuyệt đối, bảo vệ quyền riêng tư của bạn.
+👀 Trạng thái online/offline: Biết ngay ai đang sẵn sàng trò chuyện.
+🔍 Tìm kiếm bạn bè: Dễ dàng kết nối và bắt đầu cuộc trò chuyện mới.
+💾 Lưu trữ thông minh: Giữ lại mọi kỷ niệm, tin nhắn được lưu trữ an toàn.
+📱 Thiết kế hiện đại: Giao diện thân thiện, tối ưu cho mọi thiết bị – từ điện thoại đến máy tính.
 ## 🎨 Giao diện
 
 Ứng dụng có giao diện hiện đại với:
