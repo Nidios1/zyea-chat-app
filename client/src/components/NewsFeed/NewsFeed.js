@@ -27,6 +27,7 @@ import PostCreatorModal from './PostCreatorModal';
 import PullToRefresh from '../Common/PullToRefresh';
 import { newsfeedAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const NewsFeedContainer = styled.div`
   position: fixed;
@@ -708,7 +709,7 @@ const NewsFeed = ({ currentUser, onBack, onGoToMessages, onNavigateToContacts, o
           <PostCreatorHeader>
             <UserAvatar>
               {currentUser?.avatar_url ? (
-                <img src={currentUser.avatar_url} alt={currentUser.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={getAvatarURL(currentUser.avatar_url)} alt={currentUser.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
                 getInitials(currentUser?.fullName || currentUser?.full_name)
               )}

@@ -21,6 +21,7 @@ import {
 } from 'react-icons/fi';
 import { profileAPI, friendsAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const ProfileContainer = styled.div`
   position: fixed;
@@ -1054,7 +1055,7 @@ const ProfilePage = ({ user, onBack, onLogout, isOwnProfile = false }) => {
           <AvatarContainer>
             <ProfileAvatar color={getAvatarColor(profile.full_name || profile.username)}>
               {profile.avatar_url ? (
-                <img src={profile.avatar_url} alt={profile.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={getAvatarURL(profile.avatar_url)} alt={profile.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
                 getInitials(profile.full_name || profile.username)
               )}

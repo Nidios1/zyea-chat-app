@@ -17,6 +17,7 @@ import MobileSidebar from '../Mobile/MobileSidebar';
 import useSocket from '../../hooks/useSocket';
 import { chatAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const Container = styled.div`
   display: flex;
@@ -645,7 +646,7 @@ const Chat = () => {
           <UserProfile onClick={() => setShowProfile(true)} style={{ cursor: 'pointer' }}>
             <Avatar>
               {user?.avatar_url ? (
-                <img src={user.avatar_url} alt={user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={getAvatarURL(user.avatar_url)} alt={user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
                 getInitials(user?.full_name || user?.fullName || user?.username)
               )}

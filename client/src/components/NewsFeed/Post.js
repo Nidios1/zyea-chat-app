@@ -11,6 +11,7 @@ import {
 } from 'react-icons/fi';
 import ReactionBar from './ReactionBar';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const PostContainer = styled.div`
   background: white;
@@ -429,7 +430,7 @@ const Post = ({ post, currentUser, onLike, onComment, onShare, onDelete }) => {
         <UserInfo>
           <UserAvatar color={getAvatarColor(post.user?.full_name)}>
             {post.user?.avatar_url ? (
-              <img src={post.user.avatar_url} alt={post.user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              <img src={getAvatarURL(post.user.avatar_url)} alt={post.user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
             ) : (
               getInitials(post.user?.full_name)
             )}
@@ -464,7 +465,7 @@ const Post = ({ post, currentUser, onLike, onComment, onShare, onDelete }) => {
 
       {post.image_url && (
         <PostImage 
-          src={post.image_url} 
+          src={getUploadedImageURL(post.image_url)} 
           alt="Post image"
           onClick={() => window.open(post.image_url, '_blank')}
         />
@@ -519,7 +520,7 @@ const Post = ({ post, currentUser, onLike, onComment, onShare, onDelete }) => {
           <CommentInput>
             <CommentAvatar color={getAvatarColor(currentUser?.full_name)}>
               {currentUser?.avatar_url ? (
-                <img src={currentUser.avatar_url} alt={currentUser.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={getAvatarURL(currentUser.avatar_url)} alt={currentUser.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
                 getInitials(currentUser?.full_name)
               )}
@@ -544,7 +545,7 @@ const Post = ({ post, currentUser, onLike, onComment, onShare, onDelete }) => {
                 <Comment key={index}>
                   <CommentAvatar color={getAvatarColor(comment.user?.full_name)}>
                     {comment.user?.avatar_url ? (
-                      <img src={comment.user.avatar_url} alt={comment.user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                      <img src={getAvatarURL(comment.user.avatar_url)} alt={comment.user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                     ) : (
                       getInitials(comment.user?.full_name)
                     )}

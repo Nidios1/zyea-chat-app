@@ -26,6 +26,7 @@ import AuthContext from '../../contexts/AuthContext';
 import { chatAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const PersonalProfileContainer = styled.div`
   position: fixed;

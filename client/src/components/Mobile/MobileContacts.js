@@ -13,6 +13,7 @@ import {
 } from 'react-icons/fi';
 import { BsQrCodeScan } from 'react-icons/bs';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const ContactsContainer = styled.div`
   display: flex;
@@ -524,7 +525,7 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend }) => {
                       <ContactItem key={friend.id}>
                         <Avatar color={getAvatarColor(friend.full_name)}>
                           {friend.avatar_url ? (
-                            <img src={friend.avatar_url} alt={friend.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                            <img src={getAvatarURL(friend.avatar_url)} alt={friend.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                           ) : (
                             getInitials(friend.full_name)
                           )}
@@ -581,7 +582,7 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend }) => {
                 <ContactItem key={request.id}>
                   <Avatar color={getAvatarColor(request.full_name)}>
                     {request.avatar_url ? (
-                      <img src={request.avatar_url} alt={request.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                      <img src={getAvatarURL(request.avatar_url)} alt={request.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                     ) : (
                       getInitials(request.full_name)
                     )}

@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { FiSearch, FiX, FiUser, FiArrowLeft } from 'react-icons/fi';
 import api from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const SearchContainer = styled.div`
   flex: 1;
@@ -436,7 +437,7 @@ const UserSearch = ({ onUserSelect, onClose }) => {
             <UserItem key={user.id}>
               <Avatar color={getAvatarColor(user.full_name || user.username)}>
                 {user.avatar_url ? (
-                  <img src={user.avatar_url} alt={user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                  <img src={getAvatarURL(user.avatar_url)} alt={user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                 ) : (
                   getInitials(user.full_name || user.username)
                 )}

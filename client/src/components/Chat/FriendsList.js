@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { FiUser, FiMessageCircle, FiSearch, FiX } from 'react-icons/fi';
 import api from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const FriendsContainer = styled.div`
   flex: 1;
@@ -324,7 +325,7 @@ const FriendsListComponent = ({ onClose, onStartChat }) => {
             <FriendItem key={friend.id} onClick={() => handleStartChat(friend)}>
               <Avatar color={getAvatarColor(friend.full_name || friend.username)}>
                 {friend.avatar_url ? (
-                  <img src={friend.avatar_url} alt={friend.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                  <img src={getAvatarURL(friend.avatar_url)} alt={friend.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                 ) : (
                   getInitials(friend.full_name || friend.username)
                 )}

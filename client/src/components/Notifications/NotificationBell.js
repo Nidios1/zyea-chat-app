@@ -4,6 +4,7 @@ import { FiBell } from 'react-icons/fi';
 import { notificationAPI } from '../../utils/api';
 import useSocket from '../../hooks/useSocket';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const BellContainer = styled.div`
   position: relative;
@@ -406,7 +407,7 @@ const NotificationBell = ({ theme = 'light', onOpenNotificationCenter }) => {
                 >
                   <NotificationAvatar color={getAvatarColor(notification.from_user?.full_name)}>
                     {notification.from_user?.avatar_url ? (
-                      <img src={notification.from_user.avatar_url} alt={notification.from_user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                      <img src={getAvatarURL(notification.from_user.avatar_url)} alt={notification.from_user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                     ) : (
                       getInitials(notification.from_user?.full_name)
                     )}

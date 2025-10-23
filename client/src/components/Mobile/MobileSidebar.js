@@ -31,6 +31,7 @@ import Toast from './Toast';
 import ConfirmDialog from './ConfirmDialog';
 import { chatAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 const MobileSidebarContainer = styled.div`
   display: none;
   flex-direction: column;
@@ -1458,7 +1459,7 @@ const MobileSidebar = ({
                       >
                       <Avatar color={getAvatarColor(conv.full_name || conv.participant_name || conv.name)}>
                         {conv.avatar_url ? (
-                          <img src={conv.avatar_url} alt={conv.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                          <img src={getAvatarURL(conv.avatar_url)} alt={conv.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                         ) : (
                           getInitials(conv.full_name || conv.participant_name || conv.name)
                         )}

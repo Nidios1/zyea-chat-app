@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { friendsAPI } from '../../utils/api';
 import { FiSearch, FiUserPlus, FiCheck, FiX, FiUsers, FiUserMinus, FiUser, FiHeart } from 'react-icons/fi';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const FriendsContainer = styled.div`
   position: fixed;
@@ -475,7 +476,7 @@ const Friends = ({ onBack }) => {
       <UserItem key={user.id}>
         <UserAvatar color={getAvatarColor(user.full_name)}>
           {user.avatar_url ? (
-            <img src={user.avatar_url} alt={user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            <img src={getAvatarURL(user.avatar_url)} alt={user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
           ) : (
             getInitials(user.full_name)
           )}

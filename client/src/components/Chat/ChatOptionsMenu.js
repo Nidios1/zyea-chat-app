@@ -7,6 +7,7 @@ import {
 } from 'react-icons/fi';
 import { chatAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const Overlay = styled.div`
   position: fixed;
@@ -551,7 +552,7 @@ const ChatOptionsMenu = ({ isOpen, onClose, conversation, currentUser, onSetting
         <ProfileSection>
           <ProfileAvatar color={getAvatarColor(conversation?.full_name || conversation?.username)}>
             {conversation?.avatar_url ? (
-              <img src={conversation.avatar_url} alt={conversation.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              <img src={getAvatarURL(conversation.avatar_url)} alt={conversation.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
             ) : (
               getInitials(conversation?.full_name || conversation?.username)
             )}

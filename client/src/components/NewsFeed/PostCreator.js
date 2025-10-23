@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { FiImage, FiSmile, FiSend, FiX } from 'react-icons/fi';
 import EmojiPicker from '../Chat/EmojiPicker';
 import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const PostCreatorContainer = styled.div`
   background: white;
@@ -272,7 +273,7 @@ const PostCreator = ({ currentUser, onCreatePost }) => {
       <UserInfo>
         <UserAvatar color={getAvatarColor(currentUser?.full_name)}>
           {currentUser?.avatar_url ? (
-            <img src={currentUser.avatar_url} alt={currentUser.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            <img src={getAvatarURL(currentUser.avatar_url)} alt={currentUser.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
           ) : (
             getInitials(currentUser?.full_name)
           )}
