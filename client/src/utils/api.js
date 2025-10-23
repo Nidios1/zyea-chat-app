@@ -1,10 +1,9 @@
 import axios from 'axios';
 import { getToken } from './auth';
+import { getApiBaseUrl } from './platformConfig';
 
-// Use proxy in development for better compatibility
-const API_BASE_URL = process.env.NODE_ENV === 'development' 
-  ? '/api'  // Use proxy
-  : (process.env.REACT_APP_API_URL || 'http://192.168.0.103:5000/api');
+// Get API URL based on platform (PWA vs Native) and environment
+const API_BASE_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: API_BASE_URL,

@@ -56,7 +56,10 @@
     "cap:run:ios": "cap run ios",
     "cap:run:android": "cap run android",
     "android": "npm run cap:build && cap run android",
-    "ios": "npm run cap:build && cap run ios"
+    "ios": "npm run cap:build && cap run ios",
+    "ios:config": "node configure-ios-info-plist.js",
+    "ios:setup": "npm run build && npx cap add ios && npm run ios:config && npx cap sync ios",
+    "ios:full": "npm run ios:setup && npx cap open ios"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

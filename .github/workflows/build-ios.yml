@@ -31,13 +31,17 @@ jobs:
       - name: Build React app
         run: |
           cd client
+          echo "🏗️  Building React app for iOS..."
+          echo "📡 API URL: ${{ secrets.API_URL || 'http://192.168.0.103:5000/api' }}"
+          echo "🔌 Socket URL: ${{ secrets.SOCKET_URL || 'http://192.168.0.103:5000' }}"
           npm run build
         env:
           CI: false
           DISABLE_ESLINT_PLUGIN: true
           GENERATE_SOURCEMAP: false
-          REACT_APP_API_URL: http://192.168.0.103:5000/api
-          REACT_APP_SOCKET_URL: http://192.168.0.103:5000
+          # Use GitHub Secrets if available, otherwise use default
+          REACT_APP_API_URL: ${{ secrets.API_URL || 'http://192.168.0.103:5000/api' }}
+          REACT_APP_SOCKET_URL: ${{ secrets.SOCKET_URL || 'http://192.168.0.103:5000' }}
       
       - name: Generate iOS Assets (Icons & Splash)
         run: |
@@ -51,6 +55,12 @@ jobs:
         run: |
           cd client
           npx cap add ios || echo "iOS already added"
+          
+      - name: Configure iOS Info.plist (HTTP & Permissions)
+        run: |
+          cd client
+          node configure-ios-info-plist.js
+          echo "✅ iOS Info.plist configured!"
           
       - name: Generate iOS Native Assets (CRITICAL for Splash Screen)
         run: |
