@@ -228,10 +228,13 @@ const MessagesContainer = styled.div`
 
   @media (max-width: 768px) {
     padding: 0.75rem;
+    /* Add padding-bottom to prevent messages being hidden by fixed input */
+    padding-bottom: 80px;
   }
 
   @media (max-width: 480px) {
     padding: 0.5rem;
+    padding-bottom: 75px;
   }
 `;
 
@@ -242,21 +245,23 @@ const MessageInputContainer = styled.div`
   position: relative;
 
   @media (max-width: 768px) {
-    /* CRITICAL: Sticky position to stay above keyboard */
-    position: sticky;
+    /* CRITICAL: Fixed position to float above keyboard */
+    position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    z-index: 10;
-    padding: 0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom)) 0.75rem;
-    /* Safe area for iPhone home indicator + keyboard */
-    /* iOS keyboard pushes content up, sticky keeps input visible */
+    z-index: 1001;
+    padding: 0.5rem 0.75rem;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+    /* Fixed at bottom, always visible above keyboard */
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
   }
 
   @media (max-width: 480px) {
-    position: sticky;
+    position: fixed;
     bottom: 0;
-    padding: 0.5rem 0.5rem calc(0.5rem + env(safe-area-inset-bottom)) 0.5rem;
+    padding: 0.4rem 0.5rem;
+    padding-bottom: calc(0.4rem + env(safe-area-inset-bottom));
   }
 `;
 
