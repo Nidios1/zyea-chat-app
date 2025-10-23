@@ -27,6 +27,7 @@ import { chatAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
+import { getApiBaseUrl } from '../../utils/platformConfig';
 
 const PersonalProfileContainer = styled.div`
   position: fixed;
@@ -637,7 +638,13 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
   // Set initial avatar URL on mount and when user changes
   useEffect(() => {
     if (user?.avatar_url) {
-      setAvatarUrl(user.avatar_url);
+      // Add cache busting if URL doesn't already have query params
+      const url = user.avatar_url;
+      if (url.includes('?')) {
+        setAvatarUrl(url);
+      } else {
+        setAvatarUrl(`${url}?t=${Date.now()}`);
+      }
     } else {
       setAvatarUrl('');
     }
@@ -714,34 +721,15 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
       const formData = new FormData();
       formData.append('avatar', file);
 
-      // Get API base URL - detect environment
-      let API_BASE_URL;
-      
-      // Check if running in Capacitor/mobile app
-      const isCapacitor = window.location.protocol === 'capacitor:' || 
-                          window.location.protocol === 'ionic:' ||
-                          window.location.protocol === 'file:';
-      
-      if (isCapacitor) {
-        // Mobile app - use environment variable or default
-        API_BASE_URL = process.env.REACT_APP_API_URL || 'http://192.168.0.103:5000/api';
-        console.log('📱 Capacitor detected, using API:', API_BASE_URL);
-      } else if (window.location.hostname === 'localhost' || window.location.hostname.includes('192.168')) {
-        // Development on browser
-        API_BASE_URL = `${window.location.protocol}//${window.location.hostname}:5000/api`;
-        console.log('💻 Development mode, using API:', API_BASE_URL);
-      } else {
-        // Production
-        API_BASE_URL = `${window.location.origin}/api`;
-        console.log('🌐 Production mode, using API:', API_BASE_URL);
-      }
-
+      // Use platformConfig to get correct API URL
+      const API_BASE_URL = getApiBaseUrl();
       const uploadUrl = `${API_BASE_URL}/profile/avatar`;
+      
       console.log('📤 Uploading to:', uploadUrl);
-      console.log('📍 Current location:', {
+      console.log('📱 Platform detection:', {
         protocol: window.location.protocol,
         hostname: window.location.hostname,
-        origin: window.location.origin
+        apiUrl: API_BASE_URL
       });
 
       const response = await fetch(uploadUrl, {
@@ -757,41 +745,65 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ Upload failed:', errorText);
-        console.error('❌ Failed URL:', uploadUrl);
-        throw new Error(`Upload failed: ${response.status}\nURL: ${uploadUrl}\n${errorText}`);
+        throw new Error(`Upload failed: ${response.status} - ${errorText}`);
       }
 
       const data = await response.json();
       console.log('✅ Upload success:', data);
       
       if (data.avatar_url) {
-        // Construct full URL for avatar
-        const fullAvatarUrl = data.avatar_url.startsWith('http') 
-          ? data.avatar_url 
-          : `${window.location.protocol}//${window.location.hostname}:5000${data.avatar_url}`;
+        // Construct full URL for avatar with cache busting
+        let fullAvatarUrl;
         
-        setAvatarUrl(fullAvatarUrl);
+        if (data.avatar_url.startsWith('http')) {
+          // Already full URL
+          fullAvatarUrl = data.avatar_url;
+        } else {
+          // Relative URL - construct full URL
+          const baseUrl = API_BASE_URL.replace('/api', ''); // Remove /api suffix
+          fullAvatarUrl = `${baseUrl}${data.avatar_url}`;
+        }
+        
+        // Add cache busting timestamp
+        const cacheBuster = `?t=${Date.now()}`;
+        const urlWithCache = fullAvatarUrl + cacheBuster;
+        
+        console.log('🖼️ New avatar URL:', urlWithCache);
+        
+        // Force update avatar URL - this triggers re-render
+        setAvatarUrl(urlWithCache);
         
         // Update user object in AuthContext if available
         if (authContext && authContext.user) {
-          // Create updated user object
           const updatedUser = {
             ...authContext.user,
-            avatar_url: fullAvatarUrl
+            avatar_url: fullAvatarUrl // Store without cache buster
           };
           
-          // Update by calling login again with updated user data
+          // Update AuthContext
           if (authContext.login) {
             const token = localStorage.getItem('token');
             authContext.login(updatedUser, token);
           }
         }
         
-        alert('Cập nhật ảnh đại diện thành công!');
+        // Update localStorage for persistence
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          try {
+            const userObj = JSON.parse(storedUser);
+            userObj.avatar_url = fullAvatarUrl;
+            localStorage.setItem('user', JSON.stringify(userObj));
+          } catch (e) {
+            console.error('Error updating localStorage:', e);
+          }
+        }
+        
+        alert('✅ Cập nhật ảnh đại diện thành công!');
       }
     } catch (error) {
       console.error('❌ Error uploading avatar:', error);
-      alert(`Có lỗi xảy ra khi tải ảnh lên: ${error.message}\nVui lòng thử lại!`);
+      alert(`❌ Có lỗi xảy ra khi tải ảnh lên:\n${error.message}\n\nVui lòng kiểm tra:\n- Kết nối mạng\n- Server đang chạy\n- Đã đăng nhập`);
     } finally {
       setIsUploadingAvatar(false);
       // Reset input
