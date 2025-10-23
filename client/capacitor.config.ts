@@ -63,7 +63,10 @@ const config: CapacitorConfig = {
   // iOS specific config
   ios: {
     contentInset: 'always',
-    preferredContentMode: 'mobile'
+    preferredContentMode: 'mobile',
+    // Enable edge-to-edge content (extends behind notch/status bar)
+    scrollEnabled: true,
+    allowsLinkPreview: false
   },
   // Android specific config
   android: {

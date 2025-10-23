@@ -1,0 +1,154 @@
+/**
+ * iOS Safe Area Support
+ * For iPhone X, 11, 12, 13, 14, 15, 16 Pro with Notch/Dynamic Island
+ */
+
+/* Mobile headers - Add padding for notch */
+@media (max-width: 768px) {
+  /* Chat header */
+  .chat-header,
+  [class*="ChatHeader"] {
+    padding-top: calc(0.75rem + env(safe-area-inset-top)) !important;
+  }
+
+  /* NewsFeed header */
+  .newsfeed-header,
+  [class*="NewsFeedHeader"] {
+    padding-top: calc(1rem + env(safe-area-inset-top)) !important;
+  }
+
+  /* Friends header */
+  .friends-header,
+  [class*="FriendsHeader"] {
+    padding-top: calc(1rem + env(safe-area-inset-top)) !important;
+  }
+
+  /* Profile header */
+  .profile-header,
+  [class*="ProfileHeader"] {
+    padding-top: calc(1rem + env(safe-area-inset-top)) !important;
+  }
+
+  /* Mobile bottom navigation */
+  .mobile-bottom-nav,
+  [class*="BottomNav"] {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)) !important;
+  }
+
+  /* Message input area - already has safe-area-inset-bottom */
+  .message-input-container,
+  [class*="MessageInputContainer"] {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)) !important;
+  }
+
+  /* Sidebar on mobile */
+  .mobile-sidebar {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Modal full screen */
+  .modal-fullscreen {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Fixed headers that need to account for notch */
+  .fixed-header {
+    top: env(safe-area-inset-top);
+  }
+
+  /* Fixed footers that need to account for home indicator */
+  .fixed-footer {
+    bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Landscape orientation - handle left/right safe areas */
+@media (max-width: 768px) and (orientation: landscape) {
+  #root {
+    padding-left: env(safe-area-inset-left) !important;
+    padding-right: env(safe-area-inset-right) !important;
+  }
+
+  .chat-container,
+  .newsfeed-container,
+  .friends-container {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Status bar overlay prevention */
+@supports (padding-top: env(safe-area-inset-top)) {
+  @media (max-width: 768px) {
+    /* Ensure status bar area is visible */
+    body {
+      padding-top: env(safe-area-inset-top);
+    }
+
+    /* But remove from #root since we're adding it to specific elements */
+    #root {
+      padding-top: 0;
+    }
+  }
+}
+
+/* Debug mode - visualize safe areas (comment out in production) */
+/* 
+@media (max-width: 768px) {
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-top);
+    background: rgba(255, 0, 0, 0.3);
+    z-index: 99999;
+    pointer-events: none;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-bottom);
+    background: rgba(0, 255, 0, 0.3);
+    z-index: 99999;
+    pointer-events: none;
+  }
+}
+*/
+
+/* iPhone notch specific adjustments */
+@supports (padding-top: max(0px)) {
+  @media (max-width: 768px) {
+    /* Use max() to ensure minimum padding even without notch */
+    .mobile-header {
+      padding-top: max(0.75rem, env(safe-area-inset-top));
+    }
+
+    .mobile-footer {
+      padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
+  }
+}
+
+/* Splash screen safe area */
+.splash-screen {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* PWA install prompt safe area */
+.install-prompt {
+  bottom: env(safe-area-inset-bottom);
+}
+
+/* Notification banner safe area */
+.notification-banner {
+  top: env(safe-area-inset-top);
+}
+
