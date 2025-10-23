@@ -57,31 +57,69 @@ const LogoContainer = styled.div`
   animation: ${pulse} 2s ease-in-out infinite;
 `;
 
-const Logo = styled.div`
-  font-size: 4rem;
-  font-weight: 700;
-  color: white;
-  text-align: center;
-  margin-bottom: 1rem;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+const AppIcon = styled.div`
+  width: 120px;
+  height: 120px;
+  border-radius: 26px;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  background: rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
   
   @media (max-width: 768px) {
-    font-size: 3.5rem;
+    width: 100px;
+    height: 100px;
+    border-radius: 22px;
   }
   
   @media (max-width: 480px) {
-    font-size: 3rem;
+    width: 90px;
+    height: 90px;
+    border-radius: 20px;
+  }
+`;
+
+const Logo = styled.div`
+  font-size: 3rem;
+  font-weight: 700;
+  color: white;
+  text-align: center;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.5px;
+  
+  @media (max-width: 768px) {
+    font-size: 2.5rem;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 2.2rem;
   }
 `;
 
 const Subtitle = styled.div`
-  font-size: 1.2rem;
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: 300;
-  margin-bottom: 2rem;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 400;
+  margin-bottom: 3rem;
+  letter-spacing: 0.3px;
   
   @media (max-width: 768px) {
-    font-size: 1rem;
+    font-size: 0.9rem;
+    margin-bottom: 2.5rem;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 0.85rem;
+    margin-bottom: 2rem;
   }
 `;
 
@@ -211,7 +249,7 @@ const SplashScreen = ({ onComplete, isVisible = true, loadingProgress = 0 }) => 
   // Preload logo ngay khi component mount
   useEffect(() => {
     const img = new Image();
-    img.src = '/Zyea.jpg';
+    img.src = '/apple-touch-icon.png';
     img.onload = () => setLogoLoaded(true);
     img.onerror = () => setLogoLoaded(true); // Vẫn hiển thị dù logo lỗi
   }, []);
@@ -274,30 +312,16 @@ const SplashScreen = ({ onComplete, isVisible = true, loadingProgress = 0 }) => 
   return (
     <SplashContainer>
       <LogoContainer>
-        <div style={{ 
-          width: '84px', 
-          height: '84px', 
-          borderRadius: '20px', 
-          overflow: 'hidden', 
-          marginBottom: '0.75rem', 
-          boxShadow: '0 8px 20px rgba(0, 0, 0, 0.25)',
-          background: 'rgba(255, 255, 255, 0.2)', // Fallback background
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
+        <AppIcon>
           <img 
-            src="/Zyea.jpg" 
+            src="/apple-touch-icon.png" 
             alt="Zyea+" 
             style={{ 
-              width: '100%', 
-              height: '100%', 
-              objectFit: 'cover',
               opacity: logoLoaded ? 1 : 0,
               transition: 'opacity 0.3s ease-in-out'
             }} 
           />
-        </div>
+        </AppIcon>
         <Logo>Zyea+</Logo>
         <Subtitle>Kết nối mọi người</Subtitle>
         

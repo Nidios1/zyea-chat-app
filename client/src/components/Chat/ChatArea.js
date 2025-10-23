@@ -237,12 +237,12 @@ const MessageInputContainer = styled.div`
   position: relative;
 
   @media (max-width: 768px) {
-    padding: 0.75rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom)) 0.75rem;
-    /* Add safe area for iPhone home indicator */
+    padding: 0.75rem 0.75rem calc(1rem + env(safe-area-inset-bottom)) 0.75rem;
+    /* Add safe area for iPhone home indicator - increased padding */
   }
 
   @media (max-width: 480px) {
-    padding: 0.5rem 0.5rem calc(0.375rem + env(safe-area-inset-bottom)) 0.5rem;
+    padding: 0.5rem 0.5rem calc(0.875rem + env(safe-area-inset-bottom)) 0.5rem;
   }
 `;
 

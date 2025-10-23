@@ -398,7 +398,7 @@ const BottomNav = styled.div`
   background: var(--bg-primary, white);
   border-top: 1px solid var(--border-color, #e1e5e9);
   display: flex;
-  padding: 8px 0 calc(8px + env(safe-area-inset-bottom)) 0;
+  padding: 8px 0 calc(12px + env(safe-area-inset-bottom)) 0;
   box-shadow: 0 -2px 8px var(--shadow-color, rgba(0, 0, 0, 0.1));
   position: fixed;
   bottom: 0;

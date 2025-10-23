@@ -989,7 +989,7 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
             <AvatarWrapper isScrolled={isScrolled}>
               <HeaderAvatar>
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt={user?.full_name || 'Profile'} />
+                  <img src={getAvatarURL(avatarUrl)} alt={user?.full_name || 'Profile'} />
                 ) : (
                   getInitials(user?.full_name || user?.fullName)
                 )}
