@@ -426,7 +426,8 @@ const BottomNav = styled.div`
 
 const NavItemsContainer = styled.div`
   display: flex;
-  padding: 4px 0;
+  padding: 2px 0;
+  /* Reduce padding to move items closer to bottom */
 `;
 
 const NavItem = styled.div`
@@ -434,7 +435,8 @@ const NavItem = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 6px 4px;
+  padding: 4px 4px 2px 4px;
+  /* Reduced padding to move items closer to bottom */
   cursor: pointer;
   transition: all 0.2s ease;
   color: ${props => props.active ? 'var(--primary-color, #0084ff)' : 'var(--text-secondary, #666)'};
@@ -451,7 +453,8 @@ const NavItem = styled.div`
 
 const NavIcon = styled.div`
   position: relative;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  /* Reduced margin for tighter spacing */
 `;
 
 const NavLabel = styled.span`
