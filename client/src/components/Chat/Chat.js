@@ -72,8 +72,9 @@ const Header = styled.div`
   box-shadow: 0 2px 8px rgba(0, 104, 255, 0.3);
 
   @media (max-width: 768px) {
-    padding: 0 0.5rem;
-    height: 56px;
+    /* Add safe area for notch/status bar */
+    padding: env(safe-area-inset-top) 0.5rem 0 0.5rem;
+    height: calc(56px + env(safe-area-inset-top));
   }
 `;
 
@@ -305,8 +306,9 @@ const MainContent = styled.div`
   z-index: 1;
 
   @media (max-width: 768px) {
-    margin-top: 56px;
-    height: calc(100vh - 56px);
+    /* Account for safe area - notch + home indicator */
+    margin-top: calc(56px + env(safe-area-inset-top));
+    height: calc(100vh - 56px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     flex-direction: column;
   }
 `;

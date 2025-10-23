@@ -36,12 +36,14 @@ const MobileSidebarContainer = styled.div`
   display: none;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh; /* Use dynamic viewport height on mobile */
   background: var(--bg-primary, white);
   width: 100vw;
   position: fixed;
   top: 0;
   left: 0;
   z-index: 1000;
+  overflow: hidden;
 
   @media (max-width: 768px) {
     display: flex;
@@ -50,7 +52,8 @@ const MobileSidebarContainer = styled.div`
 
 const TopBar = styled.div`
   background: var(--header-bg, #0084ff);
-  padding: 8px 12px;
+  /* Add safe area for notch/status bar */
+  padding: calc(8px + env(safe-area-inset-top)) 12px 8px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
