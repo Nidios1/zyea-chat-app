@@ -54,6 +54,11 @@ const TopBar = styled.div`
   align-items: center;
   justify-content: space-between;
   color: white;
+  
+  /* Safe area for iPhone notch/Dynamic Island */
+  @media (max-width: 768px) {
+    padding-top: calc(8px + env(safe-area-inset-top));
+  }
 `;
 
 const SearchSection = styled.div`

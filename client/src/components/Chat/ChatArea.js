@@ -39,11 +39,13 @@ const ChatHeader = styled.div`
 
   @media (max-width: 768px) {
     padding: 0.75rem;
+    padding-top: calc(0.75rem + env(safe-area-inset-top));
     gap: 0.75rem;
   }
 
   @media (max-width: 480px) {
     padding: 0.5rem;
+    padding-top: calc(0.5rem + env(safe-area-inset-top));
     gap: 0.5rem;
   }
 `;

@@ -27,6 +27,11 @@ const Header = styled.div`
   align-items: center;
   justify-content: space-between;
   box-shadow: 0 2px 4px var(--shadow-color, rgba(0,0,0,0.1));
+  
+  /* Safe area for iPhone notch/Dynamic Island */
+  @media (max-width: 768px) {
+    padding-top: calc(15px + env(safe-area-inset-top));
+  }
 `;
 
 const BackButton = styled.button`

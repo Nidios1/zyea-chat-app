@@ -50,6 +50,11 @@ const Header = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  
+  /* Safe area for iPhone notch/Dynamic Island */
+  @media (max-width: 768px) {
+    padding-top: calc(16px + env(safe-area-inset-top));
+  }
 `;
 
 const HeaderProfile = styled.div`
@@ -287,6 +292,11 @@ const ActivityStatusHeader = styled.div`
   align-items: center;
   gap: 16px;
   border-bottom: none;
+  
+  /* Safe area for iPhone notch/Dynamic Island */
+  @media (max-width: 768px) {
+    padding-top: calc(12px + env(safe-area-inset-top));
+  }
 `;
 
 const ActivityStatusTitle = styled.div`
@@ -470,6 +480,11 @@ const InterfaceSettingsHeader = styled.div`
   align-items: center;
   gap: 16px;
   border-bottom: none;
+  
+  /* Safe area for iPhone notch/Dynamic Island */
+  @media (max-width: 768px) {
+    padding-top: calc(12px + env(safe-area-inset-top));
+  }
 `;
 
 const InterfaceSettingsTitle = styled.div`
