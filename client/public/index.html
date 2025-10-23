@@ -98,10 +98,15 @@
     
     <div id="root"></div>
     
-    <!-- Override body background for desktop -->
+    <!-- Set body and html background based on device -->
     <script>
       if (window.innerWidth > 768) {
+        document.documentElement.style.background = '#f0f2f5';
         document.body.style.background = '#f0f2f5';
+      } else {
+        // Mobile: use dark background to match app theme
+        document.documentElement.style.background = '#1a1a1c';
+        document.body.style.background = '#1a1a1c';
       }
     </script>
   </body>
