@@ -15,7 +15,6 @@ Trò chuyện chưa bao giờ nhanh, mượt và gần gũi đến thế!
 📱 **Thiết kế hiện đại:** Giao diện thân thiện, tối ưu cho mọi thiết bị – từ điện thoại đến máy tính.  
 
 ---
-
 ## 🎨 Giao diện
 
 Ứng dụng có giao diện hiện đại với:
