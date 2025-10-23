@@ -243,23 +243,24 @@ const MessageInputContainer = styled.div`
   border-top: 1px solid var(--border-color, #e1e5e9);
   background: var(--bg-primary, white);
   position: relative;
+  transition: bottom 0.3s ease;
 
   @media (max-width: 768px) {
     /* CRITICAL: Fixed position to float above keyboard */
     position: fixed;
-    bottom: 0;
+    bottom: ${props => props.keyboardOffset || 0}px;
     left: 0;
     right: 0;
     z-index: 1001;
     padding: 0.5rem 0.75rem;
     padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
-    /* Fixed at bottom, always visible above keyboard */
+    /* Fixed at bottom, push up when keyboard opens */
     box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
   }
 
   @media (max-width: 480px) {
     position: fixed;
-    bottom: 0;
+    bottom: ${props => props.keyboardOffset || 0}px;
     padding: 0.4rem 0.5rem;
     padding-bottom: calc(0.4rem + env(safe-area-inset-bottom));
   }
@@ -515,6 +516,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [conversationSettings, setConversationSettings] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
   
   // Smart swipe navigation
   const {
@@ -538,6 +540,38 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
   useEffect(() => {
     console.log('ChatArea mounted with isMobile:', isMobile);
     console.log('Window width:', window.innerWidth);
+  }, [isMobile]);
+
+  // iOS Keyboard detection to push input above keyboard
+  useEffect(() => {
+    if (!isMobile) return;
+
+    const handleResize = () => {
+      if (window.visualViewport) {
+        const viewportHeight = window.visualViewport.height;
+        const windowHeight = window.innerHeight;
+        const keyboardHeight = windowHeight - viewportHeight;
+        
+        // If keyboard is open (viewport shrinks), push input up
+        if (keyboardHeight > 100) {
+          setKeyboardOffset(keyboardHeight);
+        } else {
+          setKeyboardOffset(0);
+        }
+      }
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleResize);
+      window.visualViewport.addEventListener('scroll', handleResize);
+    }
+
+    return () => {
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleResize);
+        window.visualViewport.removeEventListener('scroll', handleResize);
+      }
+    };
   }, [isMobile]);
 
   // Smart navigation handler
@@ -1311,7 +1345,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         )}
       </MessagesContainer>
 
-      <MessageInputContainer>
+      <MessageInputContainer keyboardOffset={keyboardOffset}>
         {selectedImage && (
           <ImageUpload
             onImageSelect={handleImageSelect}
