@@ -22,11 +22,19 @@ import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 const Container = styled.div`
   display: flex;
   height: 100vh;
+  height: 100dvh; /* Use dynamic viewport height */
+  width: 100vw;
   background: ${props => props.theme === 'dark' 
     ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)' 
     : 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'};
-  position: relative;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   overflow: hidden;
+  margin: 0;
+  padding: 0;
 
   &::before {
     content: '';
@@ -51,8 +59,6 @@ const Container = styled.div`
 
   @media (max-width: 768px) {
     flex-direction: column;
-    height: 100vh;
-    overflow: hidden;
   }
 `;
 

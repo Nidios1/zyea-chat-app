@@ -53,8 +53,8 @@
         margin: 0;
         padding: 0;
         overflow-x: hidden;
-        /* Background gradient extend to safe areas including notch */
-        background: linear-gradient(135deg, #0084ff 0%, #00a651 100%);
+        /* Remove background - will be handled by app */
+        background: transparent;
         width: 100vw;
         min-height: 100vh;
         min-height: -webkit-fill-available;
@@ -68,8 +68,7 @@
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: none;
         touch-action: pan-y;
-        /* Ensure content extends behind notch/status bar */
-        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        /* NO PADDING - full screen edge to edge */
       }
       
       /* Chỉ desktop mới có background xám */

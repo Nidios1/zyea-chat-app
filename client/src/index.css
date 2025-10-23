@@ -17,13 +17,16 @@
   html, body {
     position: fixed;
     overflow: hidden;
-    width: 100%;
-    height: 100%;
-    /* Full screen including notch area */
+    width: 100vw;
     height: 100vh;
+    height: 100dvh;
+    /* Full screen including notch area */
     height: -webkit-fill-available;
     overscroll-behavior: none;
     -webkit-overflow-scrolling: touch;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent;
   }
   
   #root {
@@ -33,6 +36,11 @@
     right: 0;
     bottom: 0;
     overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    margin: 0;
+    padding: 0;
     /* Safe area handled by individual components for better control */
   }
   
