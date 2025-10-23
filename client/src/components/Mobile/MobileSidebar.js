@@ -58,8 +58,9 @@ const MobileSidebarContainer = styled.div`
 
 const TopBar = styled.div`
   background: var(--header-bg, #0084ff);
-  /* Add safe area for notch/status bar */
-  padding: calc(8px + env(safe-area-inset-top)) 12px 8px 12px;
+  /* Safe area padding - seamless with body background */
+  padding: 8px 12px;
+  padding-top: max(env(safe-area-inset-top), 8px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -67,6 +68,9 @@ const TopBar = styled.div`
   position: sticky;
   top: 0;
   z-index: 100;
+  /* CRITICAL: Extend blue background into safe area */
+  margin-top: calc(-1 * env(safe-area-inset-top, 0));
+  padding-top: calc(env(safe-area-inset-top, 0) + 8px);
 `;
 
 const SearchSection = styled.div`
