@@ -39,10 +39,22 @@ jobs:
           REACT_APP_API_URL: http://192.168.0.103:5000/api
           REACT_APP_SOCKET_URL: http://192.168.0.103:5000
       
+      - name: Generate iOS Assets (Icons & Splash)
+        run: |
+          cd client
+          # Generate icon.png và splash.png từ JPG nếu chưa có
+          node generate-assets.js || echo "Assets already exist"
+          # Install Capacitor Assets tool
+          npm install @capacitor/assets --save-dev
+          # Generate iOS icons và splash screens
+          npx @capacitor/assets generate --iconBackgroundColor "#0084ff" --splashBackgroundColor "#0084ff" --ios || echo "Will generate after iOS platform added"
+      
       - name: Setup Capacitor iOS
         run: |
           cd client
           npx cap add ios || echo "iOS already added"
+          # Generate iOS assets again after iOS platform is added
+          npx @capacitor/assets generate --iconBackgroundColor "#0084ff" --splashBackgroundColor "#0084ff" --ios || echo "Assets generation skipped"
           npx cap sync ios
       
       - name: Setup Xcode
