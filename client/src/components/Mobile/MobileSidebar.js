@@ -415,20 +415,9 @@ const BottomNav = styled.div`
   left: 0;
   right: 0;
   z-index: 1000;
-  /* Fill completely to bottom including safe area */
-  padding-bottom: env(safe-area-inset-bottom);
-  
-  /* CRITICAL: Extend white background BEYOND bottom edge */
-  &::after {
-    content: '';
-    position: fixed;
-    bottom: calc(-1 * max(env(safe-area-inset-bottom), 34px));
-    left: 0;
-    right: 0;
-    height: max(env(safe-area-inset-bottom), 34px);
-    background: var(--bg-primary, white);
-    z-index: -1;
-  }
+  /* SIMPLE: Let padding-bottom auto fill safe area */
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  /* Body background is white, so safe area automatically matches! */
 `;
 
 const NavItemsContainer = styled.div`
