@@ -411,6 +411,18 @@ const BottomNav = styled.div`
   z-index: 1000;
   /* Fill completely to bottom including safe area */
   padding-bottom: env(safe-area-inset-bottom);
+  
+  /* CRITICAL: Extend white background to cover safe area at bottom */
+  &::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-bottom);
+    background: var(--bg-primary, white);
+    z-index: -1;
+  }
 `;
 
 const NavItemsContainer = styled.div`
