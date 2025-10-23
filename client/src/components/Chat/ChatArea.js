@@ -24,8 +24,11 @@ const ChatContainer = styled.div`
   transition: transform 0.3s ease;
 
   @media (max-width: 768px) {
+    /* Use dynamic viewport height to handle keyboard */
     height: 100vh;
+    height: 100dvh; /* Dynamic viewport - excludes keyboard */
     position: relative;
+    overflow: hidden;
   }
 `;
 
@@ -239,12 +242,21 @@ const MessageInputContainer = styled.div`
   position: relative;
 
   @media (max-width: 768px) {
-    padding: 0.75rem 0.75rem calc(1rem + env(safe-area-inset-bottom)) 0.75rem;
-    /* Add safe area for iPhone home indicator - increased padding */
+    /* CRITICAL: Sticky position to stay above keyboard */
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    padding: 0.75rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom)) 0.75rem;
+    /* Safe area for iPhone home indicator + keyboard */
+    /* iOS keyboard pushes content up, sticky keeps input visible */
   }
 
   @media (max-width: 480px) {
-    padding: 0.5rem 0.5rem calc(0.875rem + env(safe-area-inset-bottom)) 0.5rem;
+    position: sticky;
+    bottom: 0;
+    padding: 0.5rem 0.5rem calc(0.5rem + env(safe-area-inset-bottom)) 0.5rem;
   }
 `;
 
@@ -286,9 +298,16 @@ const MessageInput = styled.textarea`
     color: var(--text-tertiary, #999);
   }
 
+  @media (max-width: 768px) {
+    font-size: 16px; /* CRITICAL: Prevent zoom on iOS when focusing */
+    padding: 0.75rem 1rem;
+    margin: 0 0.25rem;
+  }
+
   @media (max-width: 480px) {
     font-size: 16px; /* Prevent zoom on iOS */
     padding: 0.875rem 1rem;
+    margin: 0;
   }
 `;
 
