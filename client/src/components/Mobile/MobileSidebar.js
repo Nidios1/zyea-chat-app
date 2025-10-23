@@ -418,14 +418,14 @@ const BottomNav = styled.div`
   /* Fill completely to bottom including safe area */
   padding-bottom: env(safe-area-inset-bottom);
   
-  /* CRITICAL: Extend white background to cover safe area at bottom */
-  &::before {
+  /* CRITICAL: Extend white background BEYOND bottom edge */
+  &::after {
     content: '';
-    position: absolute;
-    bottom: 0;
+    position: fixed;
+    bottom: calc(-1 * max(env(safe-area-inset-bottom), 34px));
     left: 0;
     right: 0;
-    height: env(safe-area-inset-bottom);
+    height: max(env(safe-area-inset-bottom), 34px);
     background: var(--bg-primary, white);
     z-index: -1;
   }
