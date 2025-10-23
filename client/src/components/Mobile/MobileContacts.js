@@ -21,6 +21,11 @@ const ContactsContainer = styled.div`
   height: 100vh;
   background: var(--bg-secondary, #f0f2f5);
   overflow: hidden;
+  
+  /* Add padding for mobile bottom nav */
+  @media (max-width: 768px) {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+  }
 `;
 
 const Header = styled.div`
@@ -29,6 +34,11 @@ const Header = styled.div`
   display: flex;
   align-items: center;
   gap: 12px;
+  
+  /* Safe area for iPhone notch/Dynamic Island */
+  @media (max-width: 768px) {
+    padding-top: calc(8px + env(safe-area-inset-top));
+  }
 `;
 
 const SearchContainer = styled.div`
@@ -110,6 +120,11 @@ const Content = styled.div`
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: var(--bg-secondary, #f0f2f5);
+  
+  /* Extra padding at bottom to avoid content being hidden */
+  @media (max-width: 768px) {
+    padding-bottom: 20px;
+  }
 `;
 
 const Section = styled.div`
