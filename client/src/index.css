@@ -139,17 +139,9 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Mobile: gradient background with theme support */
-  background: var(--primary-gradient, linear-gradient(135deg, #0084ff 0%, #00a651 100%));
+  /* Background will be set by index.html script based on device */
   color: var(--text-primary, #000);
   overflow-x: hidden;
-}
-
-/* Desktop: nền xám với theme support */
-@media (min-width: 769px) {
-  body {
-    background: var(--bg-secondary, #f0f2f5);
-  }
 }
 
 code {

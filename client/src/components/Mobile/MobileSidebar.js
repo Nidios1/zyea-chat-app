@@ -39,11 +39,17 @@ const MobileSidebarContainer = styled.div`
   height: 100dvh; /* Use dynamic viewport height on mobile */
   background: var(--bg-primary, white);
   width: 100vw;
+  width: 100%;
   position: fixed;
   top: 0;
   left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 1000;
   overflow: hidden;
+  /* Ensure no margins or padding */
+  margin: 0;
+  padding: 0;
 
   @media (max-width: 768px) {
     display: flex;

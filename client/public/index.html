@@ -100,14 +100,18 @@
     
     <!-- Set body and html background based on device -->
     <script>
-      if (window.innerWidth > 768) {
-        document.documentElement.style.background = '#f0f2f5';
-        document.body.style.background = '#f0f2f5';
-      } else {
-        // Mobile: use dark background to match app theme
-        document.documentElement.style.background = '#1a1a1c';
-        document.body.style.background = '#1a1a1c';
-      }
+      // Immediately set background to prevent flash
+      (function() {
+        if (window.innerWidth > 768) {
+          // Desktop: light gray
+          document.documentElement.style.background = '#f0f2f5';
+          document.body.style.background = '#f0f2f5';
+        } else {
+          // Mobile: pure dark for full screen dark mode
+          document.documentElement.style.background = '#000';
+          document.body.style.background = '#000';
+        }
+      })();
     </script>
   </body>
 </html>
