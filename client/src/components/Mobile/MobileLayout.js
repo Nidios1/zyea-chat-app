@@ -240,9 +240,11 @@ const UnreadBadge = styled.div`
 
 const BottomNav = styled.div`
   background: white;
-  border-top: 1px solid #e0e0e0;
+  /* Removed border-top for cleaner look */
   display: flex;
-  padding: 8px 0;
+  padding: 4px 0 env(safe-area-inset-bottom) 0;
+  /* Subtle shadow only */
+  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.05);
   position: sticky;
   bottom: 0;
   z-index: 100;
@@ -258,7 +260,7 @@ const NavItem = styled.button`
   border: none;
   color: ${props => props.active ? '#0084ff' : '#666'};
   cursor: pointer;
-  padding: 8px;
+  padding: 6px 4px;
   position: relative;
   transition: color 0.2s ease;
 `;

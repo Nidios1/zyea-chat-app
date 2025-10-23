@@ -17,6 +17,11 @@ const FriendsContainer = styled.div`
   background: var(--bg-secondary, #f5f5f5);
   overflow-y: auto;
   z-index: 1000;
+  
+  /* Add padding for mobile bottom nav */
+  @media (max-width: 768px) {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+  }
 `;
 
 const Header = styled.div`
@@ -87,6 +92,11 @@ const Content = styled.div`
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
+  
+  /* Extra padding for mobile to avoid bottom nav overlap */
+  @media (max-width: 768px) {
+    padding-bottom: 20px;
+  }
 `;
 
 const SearchSection = styled.div`

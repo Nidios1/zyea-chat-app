@@ -25,6 +25,11 @@ const NotificationContainer = styled.div`
   z-index: 1000;
   display: flex;
   flex-direction: column;
+  
+  /* Add padding for mobile bottom nav */
+  @media (max-width: 768px) {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+  }
 `;
 
 const Header = styled.div`

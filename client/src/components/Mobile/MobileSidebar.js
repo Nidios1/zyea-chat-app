@@ -399,10 +399,11 @@ const LastMessage = styled.div`
 
 const BottomNav = styled.div`
   background: var(--bg-primary, white);
-  border-top: 1px solid var(--border-color, #e1e5e9);
+  /* Removed border-top for cleaner look */
   display: flex;
-  padding: 8px 0 calc(12px + env(safe-area-inset-bottom)) 0;
-  box-shadow: 0 -2px 8px var(--shadow-color, rgba(0, 0, 0, 0.1));
+  padding: 4px 0 env(safe-area-inset-bottom) 0;
+  /* Subtle shadow only */
+  box-shadow: 0 -1px 3px var(--shadow-color, rgba(0, 0, 0, 0.05));
   position: fixed;
   bottom: 0;
   left: 0;
@@ -415,7 +416,7 @@ const NavItem = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px 4px;
+  padding: 6px 4px;
   cursor: pointer;
   transition: all 0.2s ease;
   color: ${props => props.active ? 'var(--primary-color, #0084ff)' : 'var(--text-secondary, #666)'};

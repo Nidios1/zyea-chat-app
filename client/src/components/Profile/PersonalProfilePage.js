@@ -41,6 +41,11 @@ const PersonalProfileContainer = styled.div`
   background: var(--bg-secondary, #f5f5f5);
   z-index: 1000;
   overflow: hidden;
+  
+  /* Add padding for mobile bottom nav */
+  @media (max-width: 768px) {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
+  }
 `;
 
 const Header = styled.div`
@@ -193,7 +198,7 @@ const MenuSection = styled.div`
   flex: 1;
   overflow-y: auto;
   background: var(--bg-secondary, #f5f5f5);
-  padding: 8px 16px 80px;
+  padding: 8px 16px 20px;
   -webkit-overflow-scrolling: touch;
   will-change: scroll-position;
   transform: translateZ(0);
