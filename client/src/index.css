@@ -2,6 +2,35 @@
 @import './styles/tailwind.css';
 @import './styles/pwa.css';
 
+/* CRITICAL: Disable iOS bounce/overscroll - Make app feel native */
+@media (max-width: 768px) {
+  html, body {
+    position: fixed;
+    overflow: hidden;
+    width: 100%;
+    height: 100%;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  #root {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+  }
+  
+  /* Allow scrolling only in specific containers */
+  [data-scrollable="true"],
+  .scrollable-container {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+}
+
 /* Theme Variables - Light Mode */
 :root[data-theme="light"] {
   --bg-primary: #ffffff;

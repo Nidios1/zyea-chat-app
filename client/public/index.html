@@ -21,11 +21,10 @@
       name="description"
       content="Zyea+ - A modern chat application"
     />
-    <link rel="apple-touch-icon" href="%PUBLIC_URL%/Zyea.jpg" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     
     <!-- Preload logo để hiển thị nhanh hơn -->
-    <link rel="preload" href="%PUBLIC_URL%/Zyea.jpg" as="image" />
+    <link rel="preload" href="%PUBLIC_URL%/apple-touch-icon.png" as="image" />
     
     <title>Zyea+</title>
     
@@ -58,18 +57,37 @@
         background: linear-gradient(135deg, #0084ff 0%, #00a651 100%);
         width: 100%;
         height: 100%;
+        /* DISABLE iOS bounce/overscroll */
+        position: fixed;
+        overflow: hidden;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: none;
+        touch-action: pan-y;
       }
       
       /* Chỉ desktop mới có background xám */
       @media (min-width: 769px) {
         html, body {
           background-color: #f0f2f5;
+          position: static;
+          overflow: visible;
         }
       }
       
       #root {
         min-height: 100vh;
+        max-height: 100vh;
         background: transparent;
+        overflow: hidden;
+        position: relative;
+      }
+      
+      /* Disable iOS bounce for mobile */
+      @media (max-width: 768px) {
+        #root {
+          height: 100vh;
+          overflow: hidden;
+        }
       }
     </style>
   </head>

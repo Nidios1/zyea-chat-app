@@ -199,6 +199,10 @@ const MessagesContainer = styled.div`
   scroll-behavior: smooth;
   display: flex;
   flex-direction: column;
+  
+  /* DISABLE iOS bounce/overscroll - Make app feel native */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 
   &::-webkit-scrollbar {
     width: 4px;

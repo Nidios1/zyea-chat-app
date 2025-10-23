@@ -123,6 +123,10 @@ const Content = styled.div`
   flex-direction: column;
   position: relative;
   
+  /* DISABLE iOS bounce/overscroll - Make app feel native */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  
   &::-webkit-scrollbar {
     width: 6px;
   }
