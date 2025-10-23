@@ -36,6 +36,7 @@
     "react-router-dom": "^6.15.0",
     "react-scripts": "5.0.1",
     "react-toastify": "^9.1.3",
+    "sharp": "^0.34.4",
     "socket.io-client": "^4.7.2",
     "styled-components": "^6.0.7",
     "zustand": "^4.4.6"
@@ -58,6 +59,7 @@
     "ios": "npm run cap:build && cap run ios"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^5.5.1",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.31",
