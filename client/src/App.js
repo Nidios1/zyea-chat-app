@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { Capacitor } from '@capacitor/core';
 
 import AuthContext from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -20,6 +21,7 @@ import { getToken, removeToken } from './utils/auth';
 import { initCopyProtection, preventDevTools } from './utils/copyProtection';
 import { useOfflineSync } from './hooks/useOfflineSync';
 import { useNativeFeatures } from './hooks/useNativeFeatures';
+import { isCapacitor, logPlatformInfo } from './utils/platformDetection';
 
 
 function App() {
@@ -41,18 +43,34 @@ function App() {
   const { requestNotificationPermission, showNotification } = useNativeFeatures();
 
   useEffect(() => {
+    // Log platform info for debugging
+    logPlatformInfo();
+    
     // Thêm class để hiển thị app ngay lập tức (ngăn flash)
     const rootElement = document.getElementById('root');
     if (rootElement) {
       rootElement.classList.add('app-ready');
+      
+      // Add platform-specific classes
+      if (isCapacitor()) {
+        rootElement.classList.add('capacitor-app');
+        if (Capacitor.getPlatform() === 'ios') {
+          rootElement.classList.add('ios-app');
+        } else if (Capacitor.getPlatform() === 'android') {
+          rootElement.classList.add('android-app');
+        }
+      } else {
+        rootElement.classList.add('web-app');
+      }
     }
     
     // Khởi tạo copy protection
     const cleanupCopyProtection = initCopyProtection();
     preventDevTools();
 
-    // Register service worker for PWA
-    if ('serviceWorker' in navigator) {
+    // Register service worker ONLY for PWA (not for Capacitor native apps)
+    if ('serviceWorker' in navigator && !isCapacitor()) {
+      console.log('📱 Running as PWA - Registering service worker...');
       navigator.serviceWorker.register('/sw.js')
         .then((registration) => {
           console.log('SW registered: ', registration);
@@ -73,41 +91,47 @@ function App() {
         .catch((registrationError) => {
           console.log('SW registration failed: ', registrationError);
         });
+    } else if (isCapacitor()) {
+      console.log('📱 Running as Capacitor native app - Skipping service worker');
     }
 
     // Request notification permission
     requestNotificationPermission();
 
-    // Listen for PWA install prompt (Android only)
-    const handleBeforeInstallPrompt = (e) => {
-      console.log('beforeinstallprompt event fired');
-      // Prevent the mini-infobar from appearing on mobile
-      e.preventDefault();
-      // Stash the event so it can be triggered later
-      window.deferredPrompt = e;
-      
-      // Auto-trigger install prompt only on Android
-      const isAndroid = /Android/i.test(navigator.userAgent);
-      if (isAndroid) {
-        setTimeout(() => {
-          if (window.deferredPrompt) {
-            console.log('Auto-triggering install prompt on Android');
-            window.deferredPrompt.prompt();
-            window.deferredPrompt.userChoice.then((choiceResult) => {
-              console.log('User choice:', choiceResult.outcome);
-              if (choiceResult.outcome === 'accepted') {
-                console.log('User accepted the install prompt');
-              } else {
-                console.log('User dismissed the install prompt');
-              }
-              window.deferredPrompt = null;
-            });
-          }
-        }, 2000); // 2 second delay
-      }
-    };
+    // Listen for PWA install prompt (Web/PWA only, not for Capacitor)
+    if (!isCapacitor()) {
+      const handleBeforeInstallPrompt = (e) => {
+        console.log('beforeinstallprompt event fired');
+        // Prevent the mini-infobar from appearing on mobile
+        e.preventDefault();
+        // Stash the event so it can be triggered later
+        window.deferredPrompt = e;
+        
+        // Auto-trigger install prompt only on Android web
+        const isAndroid = /Android/i.test(navigator.userAgent);
+        if (isAndroid) {
+          setTimeout(() => {
+            if (window.deferredPrompt) {
+              console.log('Auto-triggering install prompt on Android');
+              window.deferredPrompt.prompt();
+              window.deferredPrompt.userChoice.then((choiceResult) => {
+                console.log('User choice:', choiceResult.outcome);
+                if (choiceResult.outcome === 'accepted') {
+                  console.log('User accepted the install prompt');
+                } else {
+                  console.log('User dismissed the install prompt');
+                }
+                window.deferredPrompt = null;
+              });
+            }
+          }, 2000); // 2 second delay
+        }
+      };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    } else {
+      console.log('📱 Capacitor app - PWA install prompt disabled');
+    }
 
     const token = getToken();
     // CHỈ verify token khi app khởi động lần đầu, KHÔNG verify khi đang login
