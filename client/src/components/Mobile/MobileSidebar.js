@@ -211,11 +211,20 @@ const ConversationItem = styled.div`
   }
 
   @media (max-width: 768px) {
-    padding: 1rem 0.875rem;
+    padding: 0.95rem 0.875rem;
     gap: 0.875rem;
     
     &::after {
-      left: 5rem;
+      left: 4.75rem;
+    }
+  }
+
+  @media (max-width: 375px) {
+    padding: 0.85rem 0.75rem;
+    gap: 0.75rem;
+    
+    &::after {
+      left: 4.5rem;
     }
   }
 `;
@@ -289,9 +298,15 @@ const Avatar = styled.div`
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 
   @media (max-width: 768px) {
-    width: 56px;
-    height: 56px;
-    font-size: 22px;
+    width: 54px;
+    height: 54px;
+    font-size: 21px;
+  }
+
+  @media (max-width: 375px) {
+    width: 50px;
+    height: 50px;
+    font-size: 20px;
   }
 `;
 
@@ -318,7 +333,19 @@ const OnlineIndicator = styled.div`
 const ConversationInfo = styled.div`
   flex: 1;
   min-width: 0;
+  max-width: calc(100% - 80px);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  @media (max-width: 768px) {
+    max-width: calc(100% - 72px);
+  }
+
+  @media (max-width: 375px) {
+    max-width: calc(100% - 65px);
+  }
 `;
 
 const TimeStamp = styled.span`
@@ -385,9 +412,14 @@ const ConversationName = styled.div`
   overflow: hidden;
   text-overflow: ellipsis;
   letter-spacing: -0.2px;
+  max-width: 100%;
 
   @media (max-width: 768px) {
     font-size: 0.95rem;
+  }
+
+  @media (max-width: 375px) {
+    font-size: 0.9rem;
   }
 `;
 
@@ -401,9 +433,15 @@ const LastMessage = styled.div`
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-shadow: ${props => props.hasUnread ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'};
+  max-width: 100%;
 
   @media (max-width: 768px) {
     font-size: 0.85rem;
+  }
+
+  @media (max-width: 375px) {
+    font-size: 0.8rem;
+    -webkit-line-clamp: 1;
   }
 `;
 

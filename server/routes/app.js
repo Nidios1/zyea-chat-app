@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Version hiện tại của app
-const APP_VERSION = '1.0.1'; // Fix UI chat list overlapping
+const APP_VERSION = '1.0.2'; // Fix MobileSidebar responsive for iPhone
 
 /**
  * GET /api/app/version
@@ -18,10 +18,10 @@ router.get('/version', async (req, res) => {
       version: APP_VERSION,
       updateUrl: 'http://192.168.0.102:5000/api/app/download/latest',
       changeLog: `
-• Fix: Đã sửa lỗi đăng nhập
-• New: Thêm tính năng chat realtime
-• Improve: Tối ưu hiệu suất app
-• Fix: Sửa lỗi hiển thị avatar
+• Fix: Sửa lỗi UI bị đè lên nhau trên iPhone
+• Improve: Tối ưu responsive layout cho màn hình nhỏ
+• Improve: Giảm kích thước avatar và padding cho mobile
+• Fix: Text overflow trong danh sách chat
       `.trim(),
       mandatory: false, // true = bắt buộc update, false = có thể bỏ qua
       releaseDate: new Date().toISOString(),

@@ -226,6 +226,11 @@ const ConversationItem = styled.div`
     padding: 0.75rem;
     gap: 0.5rem;
   }
+
+  @media (max-width: 375px) {
+    padding: 0.65rem 0.5rem;
+    gap: 0.45rem;
+  }
 `;
 
 const Avatar = styled.div`
@@ -243,9 +248,15 @@ const Avatar = styled.div`
   flex-shrink: 0;
 
   @media (max-width: 768px) {
+    width: 44px;
+    height: 44px;
+    font-size: 1rem;
+  }
+
+  @media (max-width: 375px) {
     width: 40px;
     height: 40px;
-    font-size: 1rem;
+    font-size: 0.95rem;
   }
 `;
 
@@ -285,10 +296,19 @@ const AwayIndicator = styled.div`
 const ConversationInfo = styled.div`
   flex: 1;
   min-width: 0;
+  max-width: calc(100% - 60px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: center;
+
+  @media (max-width: 768px) {
+    max-width: calc(100% - 50px);
+  }
+
+  @media (max-width: 480px) {
+    max-width: calc(100% - 45px);
+  }
 `;
 
 const ConversationName = styled.h3`
@@ -299,6 +319,15 @@ const ConversationName = styled.h3`
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;
+  max-width: 100%;
+
+  @media (max-width: 768px) {
+    font-size: 14px;
+  }
+
+  @media (max-width: 480px) {
+    font-size: 13px;
+  }
 `;
 
 const LastMessage = styled.p`
@@ -309,6 +338,15 @@ const LastMessage = styled.p`
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.3;
+  max-width: 100%;
+
+  @media (max-width: 768px) {
+    font-size: 12px;
+  }
+
+  @media (max-width: 375px) {
+    font-size: 11px;
+  }
 `;
 
 const TimeStamp = styled.span`
