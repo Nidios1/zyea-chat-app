@@ -1,7 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.zyea.messenger',
+  appId: 'com.zyea.hieudev',
   appName: 'Zyea+',
   webDir: 'build',
   server: {
@@ -22,20 +22,14 @@ const config: CapacitorConfig = {
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000,
+      launchShowDuration: 0,
       launchAutoHide: true,
-      launchFadeOutDuration: 300,
+      showSpinner: false,
       backgroundColor: "#0084ff",
       androidSplashResourceName: "splash",
       androidScaleType: "CENTER_CROP",
-      showSpinner: true,
-      androidSpinnerStyle: "large",
-      iosSpinnerStyle: "small",
-      spinnerColor: "#ffffff",
       splashFullScreen: true,
       splashImmersive: true,
-      layoutName: "launch_screen",
-      useDialog: true,
     },
     StatusBar: {
       style: 'light',

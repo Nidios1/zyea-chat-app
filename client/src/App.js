@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Capacitor } from '@capacitor/core';
+import { SplashScreen as CapacitorSplash } from '@capacitor/splash-screen';
 
 import AuthContext from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -60,6 +61,12 @@ function App() {
         } else if (Capacitor.getPlatform() === 'android') {
           rootElement.classList.add('android-app');
         }
+        
+        // Ẩn Capacitor splash screen mặc định ngay lập tức
+        // Để sử dụng custom splash screen
+        CapacitorSplash.hide({
+          fadeOutDuration: 0
+        }).catch(err => console.log('Splash hide error:', err));
       } else {
         rootElement.classList.add('web-app');
       }
