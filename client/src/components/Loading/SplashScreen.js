@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
+import { getCurrentVersion } from '../../utils/liveUpdate';
 
 // Animation for loading
 const fadeIn = keyframes`
@@ -346,7 +347,7 @@ const SplashScreen = ({ onComplete, isVisible = true, loadingProgress = 0 }) => 
       <NetworkPattern />
       
       <VersionInfo>
-        Zyea+ v1.0.0 © 2025 Zyea+ Corporation.
+        Zyea+ v{getCurrentVersion()} © 2025 Zyea+ Corporation.
       </VersionInfo>
     </SplashContainer>
   );

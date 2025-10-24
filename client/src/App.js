@@ -18,6 +18,7 @@ import SplashScreen from './components/Loading/SplashScreen';
 import AppDownloadPrompt from './components/Loading/AppDownloadPrompt';
 import InstallPrompt from './components/Common/InstallPrompt';
 import UpdatePrompt from './components/Common/UpdatePrompt';
+import SuccessToast from './components/Common/SuccessToast';
 // import PerformanceMonitor from './components/Common/PerformanceMonitor';
 import { getToken, removeToken } from './utils/auth';
 import { initCopyProtection, preventDevTools } from './utils/copyProtection';
@@ -40,6 +41,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
   const [updateProgress, setUpdateProgress] = useState(0);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
   
   // Detect mobile once at initialization
   const [isMobile] = useState(() => {
@@ -92,10 +94,14 @@ function App() {
       clearInterval(progressInterval);
       setUpdateProgress(100);
       
-      // Apply update sau 1s
+      // Hiển thị thông báo thành công
+      setShowSuccessToast(true);
+      setIsDownloadingUpdate(false);
+      
+      // Apply update sau 2.5s (để user thấy toast)
       setTimeout(() => {
-        applyUpdate();
-      }, 1000);
+        applyUpdate(updateInfo.version); // Pass version mới
+      }, 2500);
     } catch (error) {
       console.error('Update failed:', error);
       setIsDownloadingUpdate(false);
@@ -478,6 +484,15 @@ function App() {
               isDownloading={isDownloadingUpdate}
               downloadProgress={updateProgress}
             />
+            
+            {/* Success Toast */}
+            {showSuccessToast && (
+              <SuccessToast
+                title="Cập nhật thành công!"
+                message="Ứng dụng sẽ được khởi động lại để áp dụng phiên bản mới."
+                onClose={() => setShowSuccessToast(false)}
+              />
+            )}
             
             <ToastContainer
               position="top-right"

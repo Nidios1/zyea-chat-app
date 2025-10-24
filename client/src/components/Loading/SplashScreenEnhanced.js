@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getCurrentVersion } from '../../utils/liveUpdate';
 
 /**
  * Enhanced Splash Screen với Framer Motion
@@ -231,7 +232,7 @@ const SplashScreenEnhanced = ({ onComplete, isVisible = true, loadingProgress = 
             transition={{ delay: 0.6 }}
             className="absolute bottom-5 left-0 right-0 text-center text-xs text-white/50 px-4"
           >
-            Zyea+ v1.0.0 © 2025 Zyea+ Corporation.
+            ZyeaChat V{getCurrentVersion()} © 2025 Zyea+ Corporation.
           </motion.div>
         </motion.div>
       )}

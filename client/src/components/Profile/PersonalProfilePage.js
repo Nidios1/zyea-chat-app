@@ -28,6 +28,7 @@ import { getInitials } from '../../utils/nameUtils';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 import { getApiBaseUrl } from '../../utils/platformConfig';
+import { getCurrentVersion } from '../../utils/liveUpdate';
 
 const PersonalProfileContainer = styled.div`
   position: fixed;
@@ -1083,7 +1084,7 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
           ))}
           
           <Footer>
-            Zyea v1.0 © 2025 Zyea+ Corporation
+            ZyeaChat V{getCurrentVersion()} © 2025 Zyea+ Corporation
           </Footer>
         </MenuSection>
       </PersonalProfileContainer>

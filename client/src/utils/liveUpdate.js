@@ -7,8 +7,19 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 // Version hiện tại của app (tăng mỗi khi có update)
-const CURRENT_VERSION = '0.9.0'; // Giảm xuống để test popup
+const BASE_VERSION = '0.9.0'; // Giảm xuống để test popup (server có v1.0.0)
 const UPDATE_CHECK_INTERVAL = 30000; // Check mỗi 30s
+
+// Lấy version từ localStorage (nếu đã update) hoặc dùng BASE_VERSION
+const getStoredVersion = () => {
+  try {
+    return localStorage.getItem('app_version') || BASE_VERSION;
+  } catch {
+    return BASE_VERSION;
+  }
+};
+
+const CURRENT_VERSION = getStoredVersion();
 
 /**
  * Check xem có version mới không
@@ -66,13 +77,17 @@ export const downloadUpdate = async (updateUrl, onProgress) => {
         try {
           const base64Data = reader.result.split(',')[1];
           
-          // Save to device
-          await Filesystem.writeFile({
-            path: 'updates/bundle.zip',
-            data: base64Data,
-            directory: Directory.Data
-          });
+          // Save to device (chỉ cho native app)
+          if (Capacitor.isNativePlatform()) {
+            await Filesystem.writeFile({
+              path: 'updates/bundle.zip',
+              data: base64Data,
+              directory: Directory.Data
+            });
+          }
           
+          // Cho PWA, chỉ cần download thành công là đủ để test
+          console.log('✅ Update downloaded successfully!');
           resolve(true);
         } catch (error) {
           reject(error);
@@ -90,11 +105,20 @@ export const downloadUpdate = async (updateUrl, onProgress) => {
 /**
  * Apply update (reload app với bundle mới)
  */
-export const applyUpdate = () => {
-  if (Capacitor.isNativePlatform()) {
-    // Reload app
-    window.location.reload();
+export const applyUpdate = (newVersion) => {
+  // Lưu version mới vào localStorage
+  if (newVersion) {
+    try {
+      localStorage.setItem('app_version', newVersion);
+      console.log(`✅ Saved new version: ${newVersion}`);
+    } catch (error) {
+      console.error('Error saving version:', error);
+    }
   }
+  
+  // Reload app để áp dụng update
+  console.log('🔄 Applying update...');
+  window.location.reload();
 };
 
 /**
