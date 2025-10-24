@@ -160,6 +160,7 @@ const ConversationList = styled.div`
   display: flex;
   flex-direction: column;
   position: relative;
+  padding-top: 8px;
 `;
 
 const SwipeContainer = styled.div`
@@ -518,7 +519,7 @@ const TabBar = styled.div`
   display: flex;
   background: var(--bg-primary, white);
   border-bottom: 1px solid var(--border-color, #e1e5e9);
-  padding: 8px 12px;
+  padding: 8px 12px 12px 12px;
   gap: 4px;
   overflow-x: auto;
   position: sticky;

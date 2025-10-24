@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Version hiện tại của app
-const APP_VERSION = '1.0.3'; // Fix iPhone notch safe-area
+const APP_VERSION = '1.0.4'; // Fix TabBar and list spacing
 
 /**
  * GET /api/app/version
@@ -18,10 +18,10 @@ router.get('/version', async (req, res) => {
       version: APP_VERSION,
       updateUrl: 'http://192.168.0.102:5000/api/app/download/latest',
       changeLog: `
-• Fix: Sửa lỗi UI bị đè vào tai thỏ (notch) iPhone
-• Fix: TopBar và Header bây giờ tránh notch/Dynamic Island
-• Improve: Safe area padding cho iPhone 11, 12, 13, 14, 15
-• Fix: UI responsive tốt hơn trên màn hình nhỏ
+• Fix: Thêm khoảng cách giữa các nút tab và danh sách tin nhắn
+• Fix: Các nút "Tất cả, Nhóm, Cá nhân, Chưa đọc" không còn dính sát danh sách
+• Improve: Spacing tốt hơn cho UI mobile
+• Fix: Layout tránh bị đè lên nhau
       `.trim(),
       mandatory: false, // true = bắt buộc update, false = có thể bỏ qua
       releaseDate: new Date().toISOString(),
