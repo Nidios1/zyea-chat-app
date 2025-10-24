@@ -1,0 +1,222 @@
+/**
+ * iPhone Optimization CSS - Variables & Utilities Only
+ * Provides CSS variables and utility classes without interfering with styled-components
+ */
+
+/* ==================== ROOT VARIABLES ==================== */
+:root {
+  /* iPhone-specific breakpoints */
+  --iphone-se-width: 375px;        /* iPhone SE (all gen), X, XS, 11 Pro, 12/13 Mini */
+  --iphone-regular-width: 390px;   /* iPhone 12/13/14/15 */
+  --iphone-pro-width: 393px;       /* iPhone 14/15 Pro */
+  --iphone-plus-width: 414px;      /* iPhone 11, XR, 11 Pro Max (old) */
+  --iphone-max-width: 428px;       /* iPhone 12/13/14 Pro Max */
+  --iphone-max-new-width: 430px;   /* iPhone 15 Pro Max */
+  
+  /* Optimized font sizes for iPhone - Base 16px */
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-base: 16px; /* CRITICAL: Prevents zoom on input focus */
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 30px;
+  
+  /* Spacing scale */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+  
+  /* Touch target sizes (Apple HIG) */
+  --touch-target-min: 44px;
+  --touch-target-comfortable: 48px;
+  
+  /* Content max-width */
+  --content-max-width: 600px;
+  --container-max-width: 1200px;
+}
+
+/* ==================== RESPONSIVE FONT SIZE VARIABLES ==================== */
+
+/* iPhone SE, X, XS, 11 Pro, 12/13 Mini (375px) */
+@media (max-width: 375px) {
+  :root {
+    --font-size-xs: 11px;
+    --font-size-sm: 13px;
+    --font-size-base: 15px;
+    --font-size-lg: 17px;
+    --font-size-xl: 19px;
+    --font-size-2xl: 22px;
+    --font-size-3xl: 28px;
+    --spacing-lg: 14px;
+    --spacing-xl: 20px;
+  }
+}
+
+/* iPhone 12/13/14/15 (390px - 393px) */
+@media (min-width: 376px) and (max-width: 393px) {
+  :root {
+    --font-size-xs: 12px;
+    --font-size-sm: 14px;
+    --font-size-base: 16px;
+    --font-size-lg: 18px;
+    --font-size-xl: 20px;
+    --font-size-2xl: 24px;
+    --font-size-3xl: 30px;
+    --spacing-lg: 16px;
+    --spacing-xl: 24px;
+  }
+}
+
+/* iPhone 11, XR, 8 Plus (414px) */
+@media (min-width: 394px) and (max-width: 414px) {
+  :root {
+    --font-size-xs: 12px;
+    --font-size-sm: 14px;
+    --font-size-base: 16px;
+    --font-size-lg: 18px;
+    --font-size-xl: 21px;
+    --font-size-2xl: 25px;
+    --font-size-3xl: 31px;
+    --spacing-lg: 17px;
+    --spacing-xl: 26px;
+  }
+}
+
+/* iPhone 12/13/14 Pro Max, 14 Plus (428px) */
+@media (min-width: 415px) and (max-width: 428px) {
+  :root {
+    --font-size-xs: 13px;
+    --font-size-sm: 15px;
+    --font-size-base: 17px;
+    --font-size-lg: 19px;
+    --font-size-xl: 22px;
+    --font-size-2xl: 26px;
+    --font-size-3xl: 32px;
+    --spacing-lg: 18px;
+    --spacing-xl: 28px;
+    --spacing-2xl: 36px;
+  }
+}
+
+/* iPhone 15 Pro Max, 15 Plus (430px+) */
+@media (min-width: 429px) and (max-width: 768px) {
+  :root {
+    --font-size-xs: 13px;
+    --font-size-sm: 15px;
+    --font-size-base: 17px;
+    --font-size-lg: 20px;
+    --font-size-xl: 23px;
+    --font-size-2xl: 27px;
+    --font-size-3xl: 33px;
+    --spacing-lg: 18px;
+    --spacing-xl: 28px;
+    --spacing-2xl: 36px;
+  }
+}
+
+/* ==================== LANDSCAPE ADJUSTMENTS ==================== */
+@media (max-width: 768px) and (orientation: landscape) {
+  :root {
+    --spacing-lg: 12px;
+    --spacing-xl: 20px;
+    --spacing-2xl: 24px;
+  }
+}
+
+/* ==================== CRITICAL: INPUT ZOOM PREVENTION ==================== */
+@media (max-width: 768px) {
+  /* Prevent zoom on input focus (iOS) - CRITICAL */
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+    -webkit-text-size-adjust: 100%;
+  }
+  
+  /* Allow text selection in inputs */
+  input,
+  textarea,
+  [contenteditable] {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+  }
+}
+
+/* ==================== UTILITY CLASSES ==================== */
+@media (max-width: 768px) {
+  /* Visibility utilities */
+  .hide-mobile {
+    display: none !important;
+  }
+  
+  .show-mobile {
+    display: block !important;
+  }
+  
+  /* Width utilities */
+  .mobile-full-width {
+    width: 100% !important;
+  }
+  
+  /* Centered container utility */
+  .responsive-container {
+    max-width: var(--content-max-width);
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+  
+  /* Scrollable container utility */
+  .scroll-container {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  
+  /* Touch-friendly utility */
+  .touchable {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+    touch-action: manipulation;
+    cursor: pointer;
+  }
+}
+
+/* ==================== ACCESSIBILITY ==================== */
+@media (max-width: 768px) {
+  /* Focus visible for keyboard navigation */
+  :focus-visible {
+    outline: 2px solid var(--primary-color, #0084ff);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  
+  /* Reduce motion for accessibility */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ==================== PRINT STYLES ==================== */
+@media print {
+  .no-print,
+  .mobile-bottom-nav,
+  button:not(.print-button) {
+    display: none !important;
+  }
+  
+  * {
+    background: white !important;
+    color: black !important;
+  }
+}

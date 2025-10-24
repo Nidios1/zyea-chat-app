@@ -2,6 +2,7 @@
 @import './styles/tailwind.css';
 @import './styles/pwa.css';
 @import './styles/safe-area.css';
+@import './styles/iphone-optimization.css';
 
 /* CRITICAL: iOS Safe Area Support for Notch/Dynamic Island */
 :root {

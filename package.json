@@ -22,10 +22,17 @@
     "update-config": "node update_client_config.js",
     "config-network": "node auto_config_network.js"
   },
-  "keywords": ["zalo", "clone", "chat", "social", "network"],
+  "keywords": [
+    "zalo",
+    "clone",
+    "chat",
+    "social",
+    "network"
+  ],
   "author": "Your Name",
   "license": "MIT",
   "devDependencies": {
-    "concurrently": "^7.6.0"
+    "concurrently": "^7.6.0",
+    "sharp": "^0.34.4"
   }
 }

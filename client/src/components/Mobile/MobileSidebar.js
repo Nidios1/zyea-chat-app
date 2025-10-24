@@ -1065,7 +1065,7 @@ const MobileSidebar = ({
     if (localConversations && Array.isArray(localConversations)) {
       // Only reset read status if there are actually new unread messages
       const hasNewUnreadMessages = previousConversations.length > 0 && 
-        conversations.some(conv => {
+        localConversations.some(conv => {
           const prevConv = previousConversations.find(p => p.id === conv.id);
           if (!prevConv) return false;
           const currentUnread = conv.unread_count || conv.unreadCount || 0;
@@ -1096,7 +1096,7 @@ const MobileSidebar = ({
       // Update previous conversations
       setPreviousConversations(localConversations);
     }
-  }, [localConversations, previousConversations]);
+  }, [localConversations]);
 
   // Listen for new messages via socket or polling
   useEffect(() => {
@@ -1162,7 +1162,7 @@ const MobileSidebar = ({
         return newReadConversations;
       });
     }
-  }, [selectedConversation, conversations]);
+  }, [selectedConversation, localConversations]);
 
   const formatTimestamp = (timestamp) => {
     try {

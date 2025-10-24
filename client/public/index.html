@@ -5,17 +5,32 @@
     <link rel="icon" href="%PUBLIC_URL%/favicon.png" type="image/png" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/apple-touch-icon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/apple-touch-icon.png" />
-    <!-- CRITICAL: viewport-fit=cover enables full screen edge-to-edge on all devices -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, shrink-to-fit=no" />
-    <meta name="theme-color" content="#000000" />
+    <!-- CRITICAL: Enhanced viewport for iPhone optimization -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, shrink-to-fit=no, interactive-widget=resizes-content" />
+    
+    <!-- Theme colors -->
+    <meta name="theme-color" content="#0084ff" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#0084ff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a1a1c" />
+    
+    <!-- iOS-specific meta tags -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Zyea+" />
+    
+    <!-- Android/Chrome -->
     <meta name="mobile-web-app-capable" content="yes" />
-    <!-- Copy Protection Meta Tags -->
-    <meta name="format-detection" content="telephone=no" />
-    <meta name="format-detection" content="address=no" />
-    <meta name="format-detection" content="email=no" />
+    
+    <!-- Disable auto-detection of possible phone numbers -->
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+    
+    <!-- Optimize for iPhone X and newer with notch/Dynamic Island -->
+    <meta name="apple-touch-fullscreen" content="yes" />
+    
+    <!-- Prerender/prefetch optimization -->
+    <meta http-equiv="x-dns-prefetch-control" content="on" />
+    
+    <!-- Copy Protection & SEO Meta Tags -->
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet" />
     <meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet" />
     <meta
