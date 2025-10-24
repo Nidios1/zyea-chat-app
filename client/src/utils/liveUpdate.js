@@ -7,7 +7,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 // Version hiện tại của app (tăng mỗi khi có update)
-const BASE_VERSION = '0.9.0'; // Giảm xuống để test popup (server có v1.0.0)
+const BASE_VERSION = '1.0.1'; // Giảm xuống để test popup (server có v1.0.0)
 const UPDATE_CHECK_INTERVAL = 30000; // Check mỗi 30s
 
 // Lấy version từ localStorage (nếu đã update) hoặc dùng BASE_VERSION
@@ -26,11 +26,7 @@ const CURRENT_VERSION = getStoredVersion();
  */
 export const checkForUpdates = async () => {
   try {
-    // Chỉ check update cho native app (mobile)
-    if (!Capacitor.isNativePlatform()) {
-      return null;
-    }
-
+    // Live Update hoạt động cả PWA và Native App
     const response = await fetch('http://192.168.0.102:5000/api/app/version');
     const data = await response.json();
     
@@ -60,11 +56,7 @@ export const checkForUpdates = async () => {
  */
 export const downloadUpdate = async (updateUrl, onProgress) => {
   try {
-    if (!Capacitor.isNativePlatform()) {
-      throw new Error('Updates only available on native platforms');
-    }
-
-    // Download update bundle
+    // Download update bundle (hoạt động cả PWA và Native)
     const response = await fetch(updateUrl);
     const blob = await response.blob();
     
