@@ -4,10 +4,9 @@
  */
 
 import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
 
 // Version hiện tại của app (tăng mỗi khi có update)
-const BASE_VERSION = '1.0.1'; // Giảm xuống để test popup (server có v1.0.0)
+const BASE_VERSION = '0.9.0'; // Set thấp để test popup (server có v1.0.1)
 const UPDATE_CHECK_INTERVAL = 30000; // Check mỗi 30s
 
 // Lấy version từ localStorage (nếu đã update) hoặc dùng BASE_VERSION
@@ -56,40 +55,24 @@ export const checkForUpdates = async () => {
  */
 export const downloadUpdate = async (updateUrl, onProgress) => {
   try {
+    console.log('📥 Downloading update from:', updateUrl);
+    
     // Download update bundle (hoạt động cả PWA và Native)
     const response = await fetch(updateUrl);
+    
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+    }
+    
     const blob = await response.blob();
+    console.log('✅ Download completed, size:', blob.size, 'bytes');
     
-    // Đọc file as base64
-    const reader = new FileReader();
-    reader.readAsDataURL(blob);
+    // Không cần save file, chỉ cần verify download thành công
+    // Version sẽ được lưu vào localStorage trong applyUpdate()
     
-    return new Promise((resolve, reject) => {
-      reader.onloadend = async () => {
-        try {
-          const base64Data = reader.result.split(',')[1];
-          
-          // Save to device (chỉ cho native app)
-          if (Capacitor.isNativePlatform()) {
-            await Filesystem.writeFile({
-              path: 'updates/bundle.zip',
-              data: base64Data,
-              directory: Directory.Data
-            });
-          }
-          
-          // Cho PWA, chỉ cần download thành công là đủ để test
-          console.log('✅ Update downloaded successfully!');
-          resolve(true);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      
-      reader.onerror = reject;
-    });
+    return true;
   } catch (error) {
-    console.error('Error downloading update:', error);
+    console.error('❌ Error downloading update:', error);
     throw error;
   }
 };
