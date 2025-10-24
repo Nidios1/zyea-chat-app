@@ -7,7 +7,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
 // Version hiện tại của app (tăng mỗi khi có update)
-const CURRENT_VERSION = '1.0.0';
+const CURRENT_VERSION = '0.9.0'; // Giảm xuống để test popup
 const UPDATE_CHECK_INTERVAL = 30000; // Check mỗi 30s
 
 /**
@@ -15,7 +15,7 @@ const UPDATE_CHECK_INTERVAL = 30000; // Check mỗi 30s
  */
 export const checkForUpdates = async () => {
   try {
-    // Chỉ check update cho native app
+    // Chỉ check update cho native app (mobile)
     if (!Capacitor.isNativePlatform()) {
       return null;
     }
