@@ -285,6 +285,10 @@ const AwayIndicator = styled.div`
 const ConversationInfo = styled.div`
   flex: 1;
   min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 `;
 
 const ConversationName = styled.h3`

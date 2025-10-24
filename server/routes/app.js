@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Version hiện tại của app
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.1'; // Fix UI chat list overlapping
 
 /**
  * GET /api/app/version
