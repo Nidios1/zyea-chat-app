@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Version hiện tại của app
-const APP_VERSION = '1.0.4'; // Fix TabBar and list spacing
+const APP_VERSION = '1.1.0'; // First IPA release with Live Update system
 
 /**
  * GET /api/app/version
@@ -18,10 +18,8 @@ router.get('/version', async (req, res) => {
       version: APP_VERSION,
       updateUrl: 'http://192.168.0.102:5000/api/app/download/latest',
       changeLog: `
-• Fix: Thêm khoảng cách giữa các nút tab và danh sách tin nhắn
-• Fix: Các nút "Tất cả, Nhóm, Cá nhân, Chưa đọc" không còn dính sát danh sách
-• Improve: Spacing tốt hơn cho UI mobile
-• Fix: Layout tránh bị đè lên nhau
+• Fix: hieukka v1.0.8
+
       `.trim(),
       mandatory: false, // true = bắt buộc update, false = có thể bỏ qua
       releaseDate: new Date().toISOString(),
@@ -53,7 +51,7 @@ router.get('/download/latest', async (req, res) => {
     }
     
     // Send file
-    res.download(bundlePath, 'app-update.zip', (err) => {
+    res.download(bundlePath, 'build.zip', (err) => {
       if (err) {
         console.error('Error sending update bundle:', err);
         res.status(500).json({ error: 'Failed to download update' });
@@ -86,6 +84,64 @@ router.post('/report-version', async (req, res) => {
   } catch (error) {
     console.error('Error reporting version:', error);
     res.status(500).json({ error: 'Failed to report version' });
+  }
+});
+
+/**
+ * POST /api/app/deploy-update
+ * Deploy build mới từ build.zip (chỉ dùng trong development)
+ * NOTE: Trong production, nên dùng CI/CD pipeline
+ */
+router.post('/deploy-update', async (req, res) => {
+  try {
+    const AdmZip = require('adm-zip');
+    const zipPath = path.join(__dirname, '../../client/build.zip');
+    const buildPath = path.join(__dirname, '../../client/build');
+    
+    // Check xem file zip có tồn tại không
+    if (!fs.existsSync(zipPath)) {
+      return res.status(404).json({ 
+        error: 'build.zip not found',
+        message: 'Vui lòng build app trước: cd client && npm run build'
+      });
+    }
+    
+    // Backup build cũ (nếu có)
+    if (fs.existsSync(buildPath)) {
+      const backupPath = path.join(__dirname, '../../client/build-backup');
+      if (fs.existsSync(backupPath)) {
+        fs.rmSync(backupPath, { recursive: true, force: true });
+      }
+      fs.renameSync(buildPath, backupPath);
+      console.log('✅ Backed up old build');
+    }
+    
+    // Extract build.zip
+    const zip = new AdmZip(zipPath);
+    zip.extractAllTo(path.join(__dirname, '../../client'), true);
+    console.log('✅ Extracted new build');
+    
+    res.json({ 
+      success: true,
+      message: 'Build deployed successfully',
+      version: APP_VERSION
+    });
+  } catch (error) {
+    console.error('Error deploying update:', error);
+    
+    // Rollback nếu có lỗi
+    const buildPath = path.join(__dirname, '../../client/build');
+    const backupPath = path.join(__dirname, '../../client/build-backup');
+    
+    if (fs.existsSync(backupPath)) {
+      if (fs.existsSync(buildPath)) {
+        fs.rmSync(buildPath, { recursive: true, force: true });
+      }
+      fs.renameSync(backupPath, buildPath);
+      console.log('🔄 Rolled back to previous build');
+    }
+    
+    res.status(500).json({ error: 'Failed to deploy update' });
   }
 });
 

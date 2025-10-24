@@ -6,7 +6,7 @@
 import { Capacitor } from '@capacitor/core';
 
 // Version hiện tại của app (tăng mỗi khi có update)
-const BASE_VERSION = '0.8.0'; // Set thấp để test popup (server có v1.0.2)
+const BASE_VERSION = '1.0.9'; // Synced with server version
 const UPDATE_CHECK_INTERVAL = 30000; // Check mỗi 30s
 
 // Lấy version từ localStorage (nếu đã update) hoặc dùng BASE_VERSION
@@ -80,7 +80,7 @@ export const downloadUpdate = async (updateUrl, onProgress) => {
 /**
  * Apply update (reload app với bundle mới)
  */
-export const applyUpdate = (newVersion) => {
+export const applyUpdate = async (newVersion) => {
   // Lưu version mới vào localStorage
   if (newVersion) {
     try {
@@ -91,9 +91,39 @@ export const applyUpdate = (newVersion) => {
     }
   }
   
-  // Reload app để áp dụng update
+  // Clear Service Worker cache để force reload resources mới
+  if ('serviceWorker' in navigator && 'caches' in window) {
+    try {
+      console.log('🗑️ Clearing Service Worker caches...');
+      
+      // Get all cache names
+      const cacheNames = await caches.keys();
+      console.log('Found caches:', cacheNames);
+      
+      // Delete all caches
+      await Promise.all(
+        cacheNames.map(cacheName => {
+          console.log('Deleting cache:', cacheName);
+          return caches.delete(cacheName);
+        })
+      );
+      
+      console.log('✅ All caches cleared');
+      
+      // Unregister service worker để force reinstall
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (const registration of registrations) {
+        await registration.unregister();
+        console.log('✅ Service Worker unregistered');
+      }
+    } catch (error) {
+      console.error('Error clearing caches:', error);
+    }
+  }
+  
+  // Hard reload app để áp dụng update (bypass cache)
   console.log('🔄 Applying update...');
-  window.location.reload();
+  window.location.reload(true); // true = hard reload, bypass cache
 };
 
 /**

@@ -888,7 +888,13 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
   }, [socket, conversation, currentUser.id]);
 
   useEffect(() => {
-    scrollToBottom();
+    // Scroll to bottom when messages change
+    // Use requestAnimationFrame to ensure DOM is updated first
+    if (messages.length > 0) {
+      requestAnimationFrame(() => {
+        scrollToBottom();
+      });
+    }
   }, [messages]);
 
   // Auto scroll when typing users change
@@ -900,13 +906,61 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
     }
   }, [typingUsers]);
 
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ 
-        behavior: 'smooth',
-        block: 'end',
-        inline: 'nearest'
+  // Scroll to bottom when loading finishes (messages loaded)
+  useEffect(() => {
+    if (!loading && conversation && messages.length > 0) {
+      // Use multiple attempts to ensure scroll works on mobile
+      const timeouts = [];
+      
+      // Attempt 1: Immediate after loading finishes
+      requestAnimationFrame(() => {
+        scrollToBottom(true);
       });
+      
+      // Attempt 2: After a short delay for DOM update
+      timeouts.push(setTimeout(() => {
+        scrollToBottom(true);
+      }, 50));
+      
+      // Attempt 3: After DOM is fully rendered
+      timeouts.push(setTimeout(() => {
+        scrollToBottom(true);
+      }, 150));
+      
+      // Attempt 4: Final check after animation frames
+      timeouts.push(setTimeout(() => {
+        scrollToBottom(true);
+      }, 300));
+      
+      // Cleanup timeouts on unmount or when dependencies change
+      return () => {
+        timeouts.forEach(timeout => clearTimeout(timeout));
+      };
+    }
+  }, [loading, conversation?.id]);
+
+  const scrollToBottom = (instant = false) => {
+    if (messagesEndRef.current) {
+      try {
+        // Get parent container
+        const messagesContainer = messagesEndRef.current.parentElement;
+        
+        if (messagesContainer) {
+          if (instant) {
+            // For instant scroll, use scrollTop directly (more reliable on mobile)
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          } else {
+            // For smooth scroll, use scrollIntoView
+            messagesEndRef.current.scrollIntoView({ 
+              behavior: 'smooth',
+              block: 'end',
+              inline: 'nearest'
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error scrolling to bottom:', error);
+      }
     }
   };
 
@@ -924,11 +978,6 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
       }));
       
       setMessages(processedMessages);
-      
-      // Auto scroll to bottom when loading messages
-      setTimeout(() => {
-        scrollToBottom();
-      }, 100);
       
       // Mark all messages as read in database immediately
       await markAllMessagesAsRead();

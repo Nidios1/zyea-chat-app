@@ -1,8 +1,12 @@
 // Enhanced service worker for PWA with advanced caching strategies
-const CACHE_NAME = 'zyea-v2';
-const STATIC_CACHE = 'zyea-static-v2';
-const DYNAMIC_CACHE = 'zyea-dynamic-v2';
-const API_CACHE = 'zyea-api-v2';
+// Version sẽ tự động tăng khi có update
+const CACHE_VERSION = Date.now(); // Dùng timestamp để đảm bảo cache mới mỗi lần build
+const CACHE_NAME = `zyea-v${CACHE_VERSION}`;
+const STATIC_CACHE = `zyea-static-v${CACHE_VERSION}`;
+const DYNAMIC_CACHE = `zyea-dynamic-v${CACHE_VERSION}`;
+const API_CACHE = `zyea-api-v${CACHE_VERSION}`;
+
+console.log('🚀 Service Worker version:', CACHE_VERSION);
 
 const STATIC_URLS = [
   '/',
