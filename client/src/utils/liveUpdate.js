@@ -6,7 +6,7 @@
 import { Capacitor } from '@capacitor/core';
 
 // Version hiện tại của app (tăng mỗi khi có update)
-const BASE_VERSION = '0.9.0'; // Set thấp để test popup (server có v1.0.1)
+const BASE_VERSION = '0.8.0'; // Set thấp để test popup (server có v1.0.2)
 const UPDATE_CHECK_INTERVAL = 30000; // Check mỗi 30s
 
 // Lấy version từ localStorage (nếu đã update) hoặc dùng BASE_VERSION

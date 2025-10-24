@@ -28,6 +28,7 @@ const MobileContainer = styled.div`
 const TopBar = styled.div`
   background: linear-gradient(135deg, #0084ff 0%, #00a651 100%);
   padding: 12px 16px;
+  padding-top: calc(env(safe-area-inset-top, 12px) + 12px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -35,6 +36,8 @@ const TopBar = styled.div`
   position: sticky;
   top: 0;
   z-index: 100;
+  /* Extend background into notch area */
+  margin-top: calc(-1 * env(safe-area-inset-top, 0px));
 `;
 
 const SearchSection = styled.div`

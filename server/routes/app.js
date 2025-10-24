@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Version hiện tại của app
-const APP_VERSION = '1.0.2'; // Fix MobileSidebar responsive for iPhone
+const APP_VERSION = '1.0.3'; // Fix iPhone notch safe-area
 
 /**
  * GET /api/app/version
@@ -18,10 +18,10 @@ router.get('/version', async (req, res) => {
       version: APP_VERSION,
       updateUrl: 'http://192.168.0.102:5000/api/app/download/latest',
       changeLog: `
-• Fix: Sửa lỗi UI bị đè lên nhau trên iPhone
-• Improve: Tối ưu responsive layout cho màn hình nhỏ
-• Improve: Giảm kích thước avatar và padding cho mobile
-• Fix: Text overflow trong danh sách chat
+• Fix: Sửa lỗi UI bị đè vào tai thỏ (notch) iPhone
+• Fix: TopBar và Header bây giờ tránh notch/Dynamic Island
+• Improve: Safe area padding cho iPhone 11, 12, 13, 14, 15
+• Fix: UI responsive tốt hơn trên màn hình nhỏ
       `.trim(),
       mandatory: false, // true = bắt buộc update, false = có thể bỏ qua
       releaseDate: new Date().toISOString(),

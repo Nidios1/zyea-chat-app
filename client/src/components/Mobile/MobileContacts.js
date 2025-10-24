@@ -37,7 +37,8 @@ const Header = styled.div`
   
   /* Safe area for iPhone notch/Dynamic Island */
   @media (max-width: 768px) {
-    padding-top: calc(8px + env(safe-area-inset-top));
+    padding-top: calc(8px + env(safe-area-inset-top, 0px));
+    margin-top: calc(-1 * env(safe-area-inset-top, 0px));
   }
 `;
 

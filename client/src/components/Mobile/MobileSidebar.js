@@ -58,9 +58,8 @@ const MobileSidebarContainer = styled.div`
 
 const TopBar = styled.div`
   background: var(--header-bg, #0084ff);
-  /* Safe area padding - seamless with body background */
   padding: 8px 12px;
-  padding-top: max(env(safe-area-inset-top), 8px);
+  padding-top: calc(env(safe-area-inset-top, 8px) + 8px);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -68,9 +67,8 @@ const TopBar = styled.div`
   position: sticky;
   top: 0;
   z-index: 100;
-  /* CRITICAL: Extend blue background into safe area */
-  margin-top: calc(-1 * env(safe-area-inset-top, 0));
-  padding-top: calc(env(safe-area-inset-top, 0) + 8px);
+  /* Extend background into safe area (notch) */
+  margin-top: calc(-1 * env(safe-area-inset-top, 0px));
 `;
 
 const SearchSection = styled.div`
@@ -524,8 +522,8 @@ const TabBar = styled.div`
   gap: 4px;
   overflow-x: auto;
   position: sticky;
-  /* Dynamic top based on TopBar height + safe area */
-  top: calc(45px + env(safe-area-inset-top, 0px));
+  /* Dynamic top: TopBar padding (8px) + content (~40px) + safe-area */
+  top: calc(48px + env(safe-area-inset-top, 0px));
   z-index: 99;
   
   &::-webkit-scrollbar {
