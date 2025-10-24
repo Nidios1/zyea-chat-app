@@ -14,6 +14,11 @@
     "build": "cd client && npm run build",
     "setup": "cd server && npm run setup-db",
     "get-ip": "cd server && npm run get-ip",
+    "update-ip": "node update-ip.js",
+    "sync-ip": "node sync-ip.js",
+    "restart-dev": "node restart-dev.js",
+    "check": "node check-system.js",
+    "config": "node network-config.js",
     "update-config": "node update_client_config.js",
     "config-network": "node auto_config_network.js"
   },

@@ -30,7 +30,7 @@ export const getApiBaseUrl = () => {
   }
 
   // Always use full URL (proxy has issues)
-  const defaultApiUrl = 'http://192.168.0.103:5000/api';
+  const defaultApiUrl = 'http://192.168.0.102:5000/api';
   
   if (isNativeApp()) {
     console.log('📱 Running on native app, platform:', getPlatform());
@@ -60,7 +60,7 @@ export const getSocketUrl = () => {
   }
 
   // Native app or production
-  const defaultSocketUrl = 'http://192.168.0.103:5000';
+  const defaultSocketUrl = 'http://192.168.0.102:5000';
   
   if (isNativeApp()) {
     console.log('📱 Native app - Socket URL:', defaultSocketUrl);

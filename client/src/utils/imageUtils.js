@@ -10,7 +10,7 @@ import { Capacitor } from '@capacitor/core';
 export const getServerURL = () => {
   // For Capacitor native apps, always use full server URL
   if (Capacitor.isNativePlatform()) {
-    return process.env.REACT_APP_SERVER_URL || 'http://192.168.0.103:5000';
+    return process.env.REACT_APP_SERVER_URL || 'http://192.168.0.102:5000';
   }
   
   // For web, can use relative URLs (handled by proxy) or full URL
@@ -69,7 +69,7 @@ export const getUploadedImageURL = (imagePath) => {
  */
 export const getAPIURL = () => {
   if (Capacitor.isNativePlatform()) {
-    return process.env.REACT_APP_API_URL || 'http://192.168.0.103:5000/api';
+    return process.env.REACT_APP_API_URL || 'http://192.168.0.102:5000/api';
   }
   
   if (process.env.NODE_ENV === 'production') {
