@@ -17,6 +17,7 @@ import Chat from './components/Chat/Chat';
 import SplashScreen from './components/Loading/SplashScreen';
 import AppDownloadPrompt from './components/Loading/AppDownloadPrompt';
 import InstallPrompt from './components/Common/InstallPrompt';
+import UpdatePrompt from './components/Common/UpdatePrompt';
 // import PerformanceMonitor from './components/Common/PerformanceMonitor';
 import { getToken, removeToken } from './utils/auth';
 import { initCopyProtection, preventDevTools } from './utils/copyProtection';
@@ -24,6 +25,7 @@ import { useOfflineSync } from './hooks/useOfflineSync';
 import { useNativeFeatures } from './hooks/useNativeFeatures';
 import { isCapacitor, logPlatformInfo } from './utils/platformDetection';
 import { getApiBaseUrl } from './utils/platformConfig';
+import { checkForUpdates, downloadUpdate, applyUpdate, startAutoUpdateCheck } from './utils/liveUpdate';
 
 
 function App() {
@@ -34,6 +36,11 @@ function App() {
   const [dataLoadingProgress, setDataLoadingProgress] = useState(0);
   const [appStartTime] = useState(Date.now()); // Track khi app bắt đầu
   
+  // Live Update states
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState(0);
+  
   // Detect mobile once at initialization
   const [isMobile] = useState(() => {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
@@ -43,6 +50,63 @@ function App() {
   // PWA features
   const { isOnline, pendingCount, syncPendingData } = useOfflineSync();
   const { requestNotificationPermission, showNotification } = useNativeFeatures();
+
+  // Check for updates khi app load
+  useEffect(() => {
+    const checkUpdate = async () => {
+      const update = await checkForUpdates();
+      if (update && update.hasUpdate) {
+        setUpdateInfo(update);
+      }
+    };
+    
+    // Check ngay khi app start
+    checkUpdate();
+    
+    // Auto check mỗi 30s
+    const cleanup = startAutoUpdateCheck((update) => {
+      setUpdateInfo(update);
+    });
+    
+    return cleanup;
+  }, []);
+
+  // Handle update
+  const handleUpdate = async () => {
+    if (!updateInfo) return;
+    
+    try {
+      setIsDownloadingUpdate(true);
+      setUpdateProgress(0);
+      
+      // Simulate progress (trong thực tế sẽ track download progress)
+      const progressInterval = setInterval(() => {
+        setUpdateProgress(prev => {
+          if (prev >= 90) return prev;
+          return prev + 10;
+        });
+      }, 300);
+      
+      await downloadUpdate(updateInfo.updateUrl);
+      
+      clearInterval(progressInterval);
+      setUpdateProgress(100);
+      
+      // Apply update sau 1s
+      setTimeout(() => {
+        applyUpdate();
+      }, 1000);
+    } catch (error) {
+      console.error('Update failed:', error);
+      setIsDownloadingUpdate(false);
+      setUpdateProgress(0);
+      alert('Cập nhật thất bại. Vui lòng thử lại sau.');
+    }
+  };
+
+  const handleSkipUpdate = () => {
+    setUpdateInfo(null);
+  };
 
   useEffect(() => {
     // Log platform info for debugging
@@ -405,6 +469,15 @@ function App() {
             
             {/* PWA Components */}
             <InstallPrompt />
+            
+            {/* Live Update Prompt */}
+            <UpdatePrompt
+              updateInfo={updateInfo}
+              onUpdate={handleUpdate}
+              onSkip={handleSkipUpdate}
+              isDownloading={isDownloadingUpdate}
+              downloadProgress={updateProgress}
+            />
             
             <ToastContainer
               position="top-right"

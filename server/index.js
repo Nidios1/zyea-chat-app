@@ -12,6 +12,7 @@ const uploadRoutes = require('./routes/upload');
 const profileRoutes = require('./routes/profile');
 const newsfeedRoutes = require('./routes/newsfeed');
 const friendsRoutes = require('./routes/friends');
+const appRoutes = require('./routes/app');
 const { router: notificationRoutes } = require('./routes/notifications');
 const { connectDB } = require('./config/database');
 const { authenticateToken } = require('./middleware/auth');
@@ -114,6 +115,7 @@ app.use('/api/newsfeed', authenticateToken, newsfeedRoutes);
 app.use('/api/test-newsfeed', newsfeedRoutes); // Test route without auth
 app.use('/api/friends', authenticateToken, friendsRoutes);
 app.use('/api/notifications', authenticateToken, notificationRoutes);
+app.use('/api/app', appRoutes); // Live update endpoints
 app.use('/api', uploadRoutes);
 
 // Socket.io connection handling
