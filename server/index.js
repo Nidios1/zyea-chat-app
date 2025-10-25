@@ -3,6 +3,9 @@ const cors = require('cors');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
+const compression = require('compression');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config({ path: './config.env' });
 
 const authRoutes = require('./routes/auth');
@@ -19,6 +22,23 @@ const { authenticateToken } = require('./middleware/auth');
 
 const app = express();
 const server = http.createServer(app);
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Stricter rate limit for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // 10 requests per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many authentication attempts, please try again later.'
+});
 const io = socketIo(server, {
   cors: {
     origin: function (origin, callback) {
@@ -118,9 +138,58 @@ app.use('/api/notifications', authenticateToken, notificationRoutes);
 app.use('/api/app', appRoutes); // Live update endpoints
 app.use('/api', uploadRoutes);
 
+// ✅ Tối ưu: Tạo helper function để tránh lặp code get connection
+const { getConnection } = require('./config/database');
+
+// ✅ Tối ưu: Helper function update last_seen để tránh duplicate code
+const updateLastSeen = async (userId) => {
+  try {
+    if (!userId) return;
+    const connection = getConnection();
+    await connection.execute(
+      'UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?',
+      [userId]
+    );
+  } catch (error) {
+    console.error('❌ Error updating last_seen:', error);
+  }
+};
+
+// ✅ Helper function to update user activity status
+const updateUserActivity = async (userId, status = 'online') => {
+  try {
+    if (!userId) return false;
+    const connection = getConnection();
+    await connection.execute(
+      'UPDATE users SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?',
+      [status, userId]
+    );
+    return true;
+  } catch (error) {
+    console.error('❌ Error updating user activity:', error);
+    return false;
+  }
+};
+
+// ✅ Tối ưu: Throttle update last_seen để giảm DB load
+const lastSeenUpdates = new Map();
+const LAST_SEEN_THROTTLE = 5000; // 5 giây
+
+const throttledUpdateLastSeen = async (userId) => {
+  if (!userId) return;
+  
+  const now = Date.now();
+  const lastUpdate = lastSeenUpdates.get(userId);
+  
+  if (!lastUpdate || now - lastUpdate > LAST_SEEN_THROTTLE) {
+    lastSeenUpdates.set(userId, now);
+    await updateLastSeen(userId);
+  }
+};
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
+  console.log('✅ User connected:', socket.id);
 
   // Join user to their personal room
   socket.on('join', async (userId) => {
@@ -131,7 +200,6 @@ io.on('connection', (socket) => {
     
     // Update user status to online when they join
     try {
-      const { getConnection } = require('./config/database');
       const connection = getConnection();
       
       await connection.execute(
@@ -140,22 +208,25 @@ io.on('connection', (socket) => {
       );
       console.log(`User ${userId} status updated to online`);
       
-      // Notify all friends that this user is now online
+      // ✅ Tối ưu: Query friends một lần và emit batch
       const [friends] = await connection.execute(`
         SELECT f.user_id FROM friends f 
         WHERE f.friend_id = ? AND f.status = 'accepted'
       `, [userId]);
       
+      // ✅ Tối ưu: Prepare status change data một lần
+      const statusData = {
+        userId: userId,
+        status: 'online',
+        lastSeen: new Date()
+      };
+      
       // Emit online status to all friends
       friends.forEach(friend => {
-        socket.to(friend.user_id.toString()).emit('userStatusChanged', {
-          userId: userId,
-          status: 'online',
-          lastSeen: new Date()
-        });
+        socket.to(friend.user_id.toString()).emit('userStatusChanged', statusData);
       });
     } catch (error) {
-      console.error('Error updating user status on join:', error);
+      console.error('❌ Error updating user status on join:', error);
     }
   });
 
@@ -164,19 +235,9 @@ io.on('connection', (socket) => {
     console.log('Received sendMessage:', data);
     const { receiverId, message, senderId, conversationId } = data;
     
-    // Update sender's activity and last_seen when they send a message
+    // ✅ Tối ưu: Update activity với throttle
     socket.lastActivity = Date.now();
-    try {
-      const { getConnection } = require('./config/database');
-      const connection = getConnection();
-      
-      await connection.execute(
-        'UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?',
-        [senderId]
-      );
-    } catch (error) {
-      console.error('Error updating last_seen on sendMessage:', error);
-    }
+    throttledUpdateLastSeen(senderId);
     
     // Send message to receiver
     socket.to(receiverId).emit('receiveMessage', {
@@ -206,45 +267,15 @@ io.on('connection', (socket) => {
     console.log('Sent conversationUpdated to current socket');
   });
 
-  // Handle typing indicators
-  socket.on('typing', async (data) => {
-    // Update sender's activity and last_seen when they are typing
-    socket.lastActivity = Date.now();
-    try {
-      const { getConnection } = require('./config/database');
-      const connection = getConnection();
-      
-      await connection.execute(
-        'UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?',
-        [data.senderId]
-      );
-    } catch (error) {
-      console.error('Error updating last_seen on typing indicator:', error);
-    }
-    
-    socket.to(data.receiverId).emit('userTyping', {
-      senderId: data.senderId,
-      isTyping: data.isTyping
-    });
-  });
+  // ✅ Tối ưu: Xóa duplicate typing handler - handler đầy đủ hơn ở dưới (line 340)
 
   // Handle user viewing conversation (read receipts)
   socket.on('viewingConversation', async (data) => {
     console.log('User viewing conversation:', data);
     
-    // Update user's activity and last_seen when they view a conversation
+    // ✅ Tối ưu: Update với throttle
     socket.lastActivity = Date.now();
-    try {
-      const { getConnection } = require('./config/database');
-      const connection = getConnection();
-      
-      await connection.execute(
-        'UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?',
-        [data.userId]
-      );
-    } catch (error) {
-      console.error('Error updating last_seen on viewingConversation:', error);
-    }
+    throttledUpdateLastSeen(data.userId);
     
     // Join user to conversation room
     socket.join(data.conversationId);
@@ -260,19 +291,9 @@ io.on('connection', (socket) => {
   socket.on('leftConversation', async (data) => {
     console.log('User left conversation:', data);
     
-    // Update user's activity and last_seen when they leave a conversation
+    // ✅ Tối ưu: Update với throttle
     socket.lastActivity = Date.now();
-    try {
-      const { getConnection } = require('./config/database');
-      const connection = getConnection();
-      
-      await connection.execute(
-        'UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?',
-        [data.userId]
-      );
-    } catch (error) {
-      console.error('Error updating last_seen on leftConversation:', error);
-    }
+    throttledUpdateLastSeen(data.userId);
     
     // Leave conversation room
     socket.leave(data.conversationId);
@@ -288,19 +309,9 @@ io.on('connection', (socket) => {
   socket.on('messageRead', async (data) => {
     console.log('Message read status:', data);
     
-    // Update user's activity and last_seen when they read a message
+    // ✅ Tối ưu: Update với throttle
     socket.lastActivity = Date.now();
-    try {
-      const { getConnection } = require('./config/database');
-      const connection = getConnection();
-      
-      await connection.execute(
-        'UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?',
-        [data.readBy]
-      );
-    } catch (error) {
-      console.error('Error updating last_seen on messageRead:', error);
-    }
+    throttledUpdateLastSeen(data.readBy);
     
     // Emit to sender that their message was read
     socket.to(data.senderId).emit('messageRead', {
@@ -314,19 +325,9 @@ io.on('connection', (socket) => {
   socket.on('markMessagesAsRead', async (data) => {
     console.log('Marking messages as read:', data);
     
-    // Update user's activity and last_seen when they mark messages as read
+    // ✅ Tối ưu: Update với throttle
     socket.lastActivity = Date.now();
-    try {
-      const { getConnection } = require('./config/database');
-      const connection = getConnection();
-      
-      await connection.execute(
-        'UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?',
-        [data.userId]
-      );
-    } catch (error) {
-      console.error('Error updating last_seen on markMessagesAsRead:', error);
-    }
+    throttledUpdateLastSeen(data.userId);
     
     // Emit to other users in conversation that messages were read
     socket.to(data.conversationId).emit('messagesMarkedAsRead', {
@@ -341,19 +342,9 @@ io.on('connection', (socket) => {
   socket.on('typing', async (data) => {
     console.log('User typing status:', data);
     
-    // Update user's activity and last_seen when they are typing
+    // ✅ Tối ưu: Update với throttle
     socket.lastActivity = Date.now();
-    try {
-      const { getConnection } = require('./config/database');
-      const connection = getConnection();
-      
-      await connection.execute(
-        'UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?',
-        [data.userId]
-      );
-    } catch (error) {
-      console.error('Error updating last_seen on typing:', error);
-    }
+    throttledUpdateLastSeen(data.userId);
     
     // Emit to other users in conversation
     socket.to(data.conversationId).emit('userTyping', {
@@ -369,19 +360,9 @@ io.on('connection', (socket) => {
   socket.on('stopTyping', async (data) => {
     console.log('User stopped typing:', data);
     
-    // Update user's activity and last_seen when they stop typing
+    // ✅ Tối ưu: Update với throttle
     socket.lastActivity = Date.now();
-    try {
-      const { getConnection } = require('./config/database');
-      const connection = getConnection();
-      
-      await connection.execute(
-        'UPDATE users SET last_seen = CURRENT_TIMESTAMP WHERE id = ?',
-        [data.userId]
-      );
-    } catch (error) {
-      console.error('Error updating last_seen on stopTyping:', error);
-    }
+    throttledUpdateLastSeen(data.userId);
     
     // Emit to other users in conversation
     socket.to(data.conversationId).emit('userStoppedTyping', {
@@ -398,17 +379,9 @@ io.on('connection', (socket) => {
     
     // Update user's activity and last_seen
     socket.lastActivity = Date.now();
-    try {
-      const { getConnection } = require('./config/database');
-      const connection = getConnection();
-      
-      await connection.execute(
-        'UPDATE users SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?',
-        ['online', data.userId]
-      );
+    const updated = await updateUserActivity(data.userId, 'online');
+    if (updated) {
       console.log(`User ${data.userId} activity updated, status set to online`);
-    } catch (error) {
-      console.error('Error updating user activity:', error);
     }
   });
 
@@ -456,36 +429,13 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
     
     // Update user status to offline when they disconnect
-    try {
-      const { getConnection } = require('./config/database');
-      const connection = getConnection();
-      
-      // Get user ID from socket data if stored
-      const userId = socket.userId;
-      if (userId) {
-        await connection.execute(
-          'UPDATE users SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?',
-          ['offline', userId]
-        );
+    const userId = socket.userId;
+    if (userId) {
+      const updated = await updateUserActivity(userId, 'offline');
+      if (updated) {
         console.log(`User ${userId} status updated to offline`);
-        
-        // Notify all friends that this user is now offline
-        const [friends] = await connection.execute(`
-          SELECT f.user_id FROM friends f 
-          WHERE f.friend_id = ? AND f.status = 'accepted'
-        `, [userId]);
-        
-        // Emit offline status to all friends
-        friends.forEach(friend => {
-          socket.to(friend.user_id.toString()).emit('userStatusChanged', {
-            userId: userId,
-            status: 'offline',
-            lastSeen: new Date()
-          });
-        });
+        await notifyFriendsStatusChange(socket, userId, 'offline');
       }
-    } catch (error) {
-      console.error('Error updating user status on disconnect:', error);
     }
   });
 });
@@ -618,3 +568,6 @@ server.listen(PORT, HOST, () => {
   console.log(`   Windows: ipconfig`);
   console.log(`   Mac/Linux: ifconfig`);
 });
+
+
+

@@ -9,38 +9,52 @@ import {
   FiCheck,
   FiX,
   FiSearch,
-  FiPlus
+  FiPlus,
+  FiMessageSquare,
+  FiUser,
+  FiUsers
 } from 'react-icons/fi';
 import { BsQrCodeScan } from 'react-icons/bs';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 import VideoCall from '../Chat/VideoCall';
 import PermissionRequest from '../Chat/PermissionRequest';
+import MobileUserProfile from './MobileUserProfile';
 
 const ContactsContainer = styled.div`
   display: flex;
   flex-direction: column;
-  /* Use dynamic viewport height */
-  height: calc(var(--vh, 1vh) * 100);
-  min-height: 100vh;
+  /* Fill parent container */
+  flex: 1;
+  height: 100%;
   background: var(--bg-secondary, #f0f2f5);
   overflow: hidden;
-  
-  /* REMOVED: Don't add padding here to prevent large empty space */
-  /* Let child components handle bottom spacing */
+  position: relative;
+  width: 100%;
 `;
 
 const Header = styled.div`
   background: var(--header-bg, #0084ff);
-  padding: 8px 12px;
+  padding: clamp(8px, 2vw, 12px) clamp(10px, 3vw, 12px);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: clamp(8px, 2.5vw, 12px);
   
   /* Safe area for iPhone notch/Dynamic Island */
-  @media (max-width: 768px) {
-    padding-top: calc(8px + env(safe-area-inset-top, 0px));
-    margin-top: calc(-1 * env(safe-area-inset-top, 0px));
+  padding-top: max(clamp(8px, 2vw, 12px), env(safe-area-inset-top, 8px));
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    padding: 4px 8px;
+    padding-top: max(4px, env(safe-area-inset-top, 4px));
+    gap: 6px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    padding: 8px;
+    padding-top: max(8px, env(safe-area-inset-top, 8px));
+    gap: 8px;
   }
 `;
 
@@ -49,9 +63,10 @@ const SearchContainer = styled.div`
   display: flex;
   align-items: center;
   background: rgba(255, 255, 255, 0.2);
-  border-radius: 20px;
-  padding: 6px 12px;
-  gap: 8px;
+  border-radius: clamp(16px, 5vw, 20px);
+  padding: clamp(4px, 1.5vw, 6px) clamp(8px, 3vw, 12px);
+  gap: clamp(6px, 2vw, 8px);
+  min-height: var(--touch-min, 36px);
 
   input {
     flex: 1;
@@ -59,7 +74,8 @@ const SearchContainer = styled.div`
     background: none;
     outline: none;
     color: white;
-    font-size: 14px;
+    font-size: clamp(13px, 3.5vw, 14px);
+    min-width: 0;
 
     &::placeholder {
       color: rgba(255, 255, 255, 0.7);
@@ -69,13 +85,31 @@ const SearchContainer = styled.div`
   svg {
     color: rgba(255, 255, 255, 0.9);
     flex-shrink: 0;
+    font-size: clamp(16px, 4vw, 18px);
+  }
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    padding: 4px 8px;
+    min-height: 28px;
+    border-radius: 14px;
+    
+    input {
+      font-size: 12px;
+    }
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    padding: 4px 8px;
+    gap: 6px;
   }
 `;
 
 const HeaderButton = styled.button`
   background: none;
   border: none;
-  padding: 6px;
+  padding: clamp(4px, 1.5vw, 6px);
   color: white;
   cursor: pointer;
   display: flex;
@@ -83,10 +117,36 @@ const HeaderButton = styled.button`
   justify-content: center;
   border-radius: 50%;
   transition: background 0.2s;
+  min-width: var(--touch-min, 40px);
+  min-height: var(--touch-min, 40px);
+  -webkit-tap-highlight-color: transparent;
+
+  svg {
+    font-size: clamp(18px, 5vw, 20px);
+  }
 
   &:active {
     background: rgba(255, 255, 255, 0.2);
     opacity: 0.7;
+    transform: scale(0.95);
+  }
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    min-width: 32px;
+    min-height: 32px;
+    padding: 4px;
+    
+    svg {
+      font-size: 16px;
+    }
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    min-width: 36px;
+    min-height: 36px;
+    padding: 4px;
   }
 `;
 
@@ -101,20 +161,45 @@ const Tabs = styled.div`
 
 const Tab = styled.button`
   flex: 1;
-  padding: 12px 16px;
+  padding: clamp(10px, 3vw, 12px) clamp(8px, 3vw, 16px);
   border: none;
   background: none;
   color: ${props => props.active ? 'var(--primary-color, #0084ff)' : 'var(--text-secondary, #65676b)'};
-  font-size: 15px;
+  font-size: clamp(13px, 3.5vw, 15px);
   font-weight: 500;
   cursor: pointer;
   position: relative;
   border-bottom: 2px solid ${props => props.active ? 'var(--primary-color, #0084ff)' : 'transparent'};
   transition: all 0.2s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: var(--touch-min, 44px);
+  -webkit-tap-highlight-color: transparent;
 
   &:active {
     background: var(--bg-secondary, #f0f2f5);
     opacity: 0.7;
+    transform: scale(0.98);
+  }
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    padding: 8px 6px;
+    font-size: 12px;
+    min-height: 36px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+  
+  /* Extra small text for very long tabs on small screens */
+  @media (max-width: 320px) {
+    font-size: 11px;
+    padding: 8px 4px;
   }
 `;
 
@@ -141,90 +226,233 @@ const Section = styled.div`
 `;
 
 const SectionHeader = styled.div`
-  padding: 12px 16px;
+  padding: clamp(10px, 3vw, 12px) clamp(12px, 4vw, 16px);
   display: flex;
   align-items: center;
   justify-content: space-between;
   background: ${props => props.highlight ? '#fff4e6' : 'var(--bg-primary, white)'};
   border-bottom: 1px solid var(--border-color, #e4e6eb);
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    padding: 8px 12px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    padding: 10px 12px;
+  }
 `;
 
 const SectionTitle = styled.div`
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 15px;
+  gap: clamp(6px, 2vw, 8px);
+  font-size: clamp(14px, 3.5vw, 15px);
   font-weight: 500;
   color: var(--text-primary, #050505);
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    font-size: 13px;
+    gap: 6px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    font-size: 13px;
+  }
+`;
+
+const SectionIconWrapper = styled.div`
+  width: clamp(32px, 9vw, 36px);
+  height: clamp(32px, 9vw, 36px);
+  border-radius: 50%;
+  background: ${props => props.bgColor || '#0084ff'};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  svg {
+    font-size: clamp(16px, 4.5vw, 18px);
+  }
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    width: 30px;
+    height: 30px;
+    
+    svg {
+      font-size: 16px;
+    }
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    width: 32px;
+    height: 32px;
+    
+    svg {
+      font-size: 16px;
+    }
+  }
+`;
+
+const SectionHeaderContent = styled.div`
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 3vw, 12px);
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    gap: 8px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    gap: 8px;
+  }
 `;
 
 const Badge = styled.span`
   background: #ff4444;
   color: white;
-  font-size: 12px;
+  font-size: clamp(10px, 2.5vw, 12px);
   font-weight: 600;
-  padding: 2px 6px;
+  padding: clamp(2px, 0.5vw, 3px) clamp(5px, 1.5vw, 6px);
   border-radius: 10px;
-  min-width: 18px;
+  min-width: clamp(16px, 4vw, 18px);
   text-align: center;
+  line-height: 1.2;
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    font-size: 10px;
+    padding: 2px 5px;
+    min-width: 16px;
+  }
 `;
 
 const SectionSubtitle = styled.p`
   margin: 4px 0 0 0;
-  font-size: 13px;
+  font-size: clamp(12px, 3vw, 13px);
   color: var(--text-secondary, #65676b);
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    font-size: 11px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    font-size: 12px;
+  }
 `;
 
 const Stats = styled.div`
-  padding: 12px 16px;
+  padding: 0;
   display: flex;
   align-items: center;
-  gap: 24px;
   background: var(--bg-primary, white);
   border-bottom: 1px solid var(--border-color, #e4e6eb);
 `;
 
 const StatItem = styled.div`
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text-secondary, #65676b);
+  justify-content: center;
+  gap: clamp(4px, 1.5vw, 6px);
+  font-size: clamp(13px, 3.2vw, 14px);
+  color: ${props => props.active ? 'var(--text-primary, #050505)' : 'var(--text-secondary, #65676b)'};
+  padding: clamp(12px, 3vw, 14px) clamp(10px, 3vw, 12px);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 2px solid ${props => props.active ? 'var(--primary-color, #0084ff)' : 'transparent'};
+  font-weight: ${props => props.active ? '600' : '400'};
 
   strong {
     color: var(--text-primary, #050505);
     font-weight: 600;
+    margin-right: 2px;
+  }
+  
+  &:active {
+    background: var(--bg-secondary, #f0f2f5);
+  }
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    font-size: 12px;
+    gap: 3px;
+    padding: 10px 8px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    font-size: 12px;
+    padding: 10px 8px;
   }
 `;
 
 const AlphabetDivider = styled.div`
-  padding: 8px 16px;
+  padding: clamp(6px, 2vw, 8px) clamp(12px, 4vw, 16px);
   background: var(--bg-secondary, #f0f2f5);
-  font-size: 14px;
+  font-size: clamp(13px, 3.5vw, 14px);
   font-weight: 600;
   color: var(--primary-color, #0084ff);
   position: sticky;
   top: 0;
   z-index: 5;
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    padding: 5px 12px;
+    font-size: 12px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    padding: 6px 12px;
+    font-size: 12px;
+  }
 `;
 
 const ContactItem = styled.div`
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  padding: clamp(10px, 3vw, 12px) clamp(12px, 4vw, 16px);
   background: var(--bg-primary, white);
   border-bottom: 1px solid var(--border-color, #e4e6eb);
   cursor: pointer;
   transition: background 0.2s;
+  min-height: var(--touch-min, 60px);
+  gap: clamp(8px, 2.5vw, 12px);
+  -webkit-tap-highlight-color: transparent;
 
   &:active {
     background: var(--bg-secondary, #f0f2f5);
+    opacity: 0.9;
+  }
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    padding: 8px 12px;
+    min-height: 52px;
+    gap: 8px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    padding: 10px 12px;
+    min-height: 56px;
   }
 `;
 
 const Avatar = styled.div`
-  width: 48px;
-  height: 48px;
+  width: clamp(40px, 11vw, 48px);
+  height: clamp(40px, 11vw, 48px);
   border-radius: 50%;
   background: ${props => props.color || '#0084ff'};
   display: flex;
@@ -232,21 +460,54 @@ const Avatar = styled.div`
   justify-content: center;
   font-weight: 600;
   color: white;
-  font-size: 18px;
+  font-size: clamp(16px, 4.5vw, 18px);
   flex-shrink: 0;
   position: relative;
-  margin-right: 12px;
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    width: 42px;
+    height: 42px;
+    font-size: 16px;
+  }
+  
+  /* Extra small screens */
+  @media (max-width: 320px) {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+  }
 `;
 
 const OnlineIndicator = styled.div`
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 14px;
-  height: 14px;
+  width: clamp(12px, 3vw, 14px);
+  height: clamp(12px, 3vw, 14px);
   background: #31a24c;
   border: 2px solid var(--bg-primary, white);
   border-radius: 50%;
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    width: 12px;
+    height: 12px;
+    border-width: 2px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    width: 12px;
+    height: 12px;
+  }
 `;
 
 const ContactInfo = styled.div`
@@ -256,55 +517,119 @@ const ContactInfo = styled.div`
 
 const ContactName = styled.h3`
   margin: 0;
-  font-size: 16px;
+  font-size: clamp(14px, 4vw, 16px);
   font-weight: 500;
   color: var(--text-primary, #050505);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.3;
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    font-size: 14px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    font-size: 14px;
+  }
 `;
 
 const ContactStatus = styled.p`
   margin: 2px 0 0 0;
-  font-size: 13px;
+  font-size: clamp(12px, 3vw, 13px);
   color: var(--text-secondary, #65676b);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.3;
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    font-size: 11px;
+    margin-top: 1px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    font-size: 12px;
+  }
 `;
 
 const ContactActions = styled.div`
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-left: 8px;
+  gap: clamp(6px, 2vw, 8px);
+  flex-shrink: 0;
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    gap: 6px;
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    gap: 6px;
+  }
 `;
 
 const ActionButton = styled.button`
   background: none;
   border: none;
-  padding: 8px;
+  padding: clamp(6px, 2vw, 8px);
   color: var(--text-secondary, #65676b);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  transition: background 0.2s;
+  transition: all 0.2s;
+  min-width: var(--touch-min, 40px);
+  min-height: var(--touch-min, 40px);
+  -webkit-tap-highlight-color: transparent;
+
+  svg {
+    font-size: clamp(18px, 5vw, 20px);
+  }
 
   &:active {
     background: var(--bg-secondary, #f0f2f5);
     opacity: 0.7;
+    transform: scale(0.95);
+  }
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    padding: 6px;
+    min-width: 36px;
+    min-height: 36px;
+    
+    svg {
+      font-size: 18px;
+    }
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    padding: 6px;
+    min-width: 36px;
+    min-height: 36px;
+    
+    svg {
+      font-size: 18px;
+    }
   }
 `;
 
 const EmptyState = styled.div`
-  padding: 60px 20px;
+  padding: clamp(40px, 12vw, 60px) clamp(16px, 5vw, 20px);
   text-align: center;
   color: var(--text-secondary, #65676b);
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
+  align-items: center;
   /* Changed from center to flex-start */
 
   /* Only add extra padding on mobile */
@@ -313,16 +638,253 @@ const EmptyState = styled.div`
   }
 
   h3 {
-    margin: 0 0 8px 0;
-    font-size: 18px;
+    margin: 0 0 clamp(6px, 2vw, 8px) 0;
+    font-size: clamp(16px, 4.5vw, 18px);
+    font-weight: 600;
     color: var(--text-primary, #050505);
   }
 
   p {
     margin: 0;
-    font-size: 14px;
+    font-size: clamp(13px, 3.5vw, 14px);
     color: var(--text-secondary, #65676b);
+    line-height: 1.5;
+    max-width: 300px;
   }
+  
+  /* Landscape mode */
+  @media (max-width: 768px) and (orientation: landscape) {
+    padding: 30px 16px;
+    
+    h3 {
+      font-size: 16px;
+      margin-bottom: 6px;
+    }
+    
+    p {
+      font-size: 13px;
+    }
+  }
+  
+  /* Very small screens */
+  @media (max-width: 360px) {
+    padding: 40px 16px;
+    
+    h3 {
+      font-size: 16px;
+    }
+    
+    p {
+      font-size: 13px;
+    }
+  }
+`;
+
+const AddFriendContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 100%;
+  background: var(--bg-secondary, #f0f2f5);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+`;
+
+const AddFriendHeader = styled.div`
+  background: var(--bg-primary, white);
+  padding: clamp(12px, 3vw, 16px);
+  padding-top: max(clamp(12px, 3vw, 16px), env(safe-area-inset-top, 12px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-color, #e4e6eb);
+`;
+
+const BackButton = styled.button`
+  background: none;
+  border: none;
+  color: var(--text-primary, #050505);
+  font-size: clamp(20px, 5vw, 24px);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+
+  &:active {
+    opacity: 0.6;
+  }
+`;
+
+const AddFriendTitle = styled.h2`
+  margin: 0;
+  font-size: clamp(16px, 4vw, 18px);
+  font-weight: 600;
+  color: var(--text-primary, #050505);
+`;
+
+const QRSection = styled.div`
+  background: var(--bg-primary, white);
+  padding: clamp(20px, 5vw, 24px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 8px;
+`;
+
+const QRCard = styled.div`
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  padding: clamp(20px, 5vw, 24px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 280px;
+`;
+
+const QRUserName = styled.h3`
+  margin: 0;
+  color: white;
+  font-size: clamp(16px, 4vw, 18px);
+  font-weight: 600;
+`;
+
+const QRCodeBox = styled.div`
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(150px, 40vw, 180px);
+  height: clamp(150px, 40vw, 180px);
+`;
+
+const QRPlaceholder = styled.div`
+  width: 100%;
+  height: 100%;
+  background: #f0f0f0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+`;
+
+const QRText = styled.p`
+  margin: 0;
+  color: white;
+  font-size: clamp(12px, 3vw, 13px);
+  text-align: center;
+  opacity: 0.9;
+`;
+
+const PhoneInputSection = styled.div`
+  background: var(--bg-primary, white);
+  padding: clamp(16px, 4vw, 20px);
+  margin-bottom: 8px;
+`;
+
+const PhoneInputWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const CountryCodeSelect = styled.select`
+  padding: clamp(10px, 2.5vw, 12px);
+  border: 1px solid var(--border-color, #e4e6eb);
+  border-radius: 8px;
+  font-size: clamp(14px, 3.5vw, 15px);
+  color: var(--text-primary, #050505);
+  background: var(--bg-primary, white);
+  cursor: pointer;
+  min-width: 70px;
+`;
+
+const PhoneInput = styled.input`
+  flex: 1;
+  padding: clamp(10px, 2.5vw, 12px);
+  border: 1px solid var(--border-color, #e4e6eb);
+  border-radius: 8px;
+  font-size: clamp(14px, 3.5vw, 15px);
+  color: var(--text-primary, #050505);
+  outline: none;
+
+  &:focus {
+    border-color: var(--primary-color, #0084ff);
+  }
+
+  &::placeholder {
+    color: var(--text-tertiary, #999);
+  }
+`;
+
+const SearchButton = styled.button`
+  background: var(--bg-secondary, #f0f2f5);
+  border: none;
+  width: clamp(40px, 10vw, 44px);
+  height: clamp(40px, 10vw, 44px);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary, #65676b);
+  -webkit-tap-highlight-color: transparent;
+
+  &:active {
+    background: var(--border-color, #e4e6eb);
+  }
+`;
+
+const OptionButton = styled.button`
+  background: var(--bg-primary, white);
+  border: none;
+  padding: clamp(14px, 3.5vw, 16px) clamp(16px, 4vw, 20px);
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 3vw, 16px);
+  width: 100%;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-color, #e4e6eb);
+  -webkit-tap-highlight-color: transparent;
+
+  &:active {
+    background: var(--bg-secondary, #f0f2f5);
+  }
+`;
+
+const OptionIcon = styled.div`
+  width: clamp(36px, 9vw, 40px);
+  height: clamp(36px, 9vw, 40px);
+  border-radius: 50%;
+  background: var(--primary-color, #0084ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: clamp(18px, 4.5vw, 20px);
+`;
+
+const OptionContent = styled.div`
+  flex: 1;
+  text-align: left;
+`;
+
+const OptionTitle = styled.div`
+  font-size: clamp(15px, 3.75vw, 16px);
+  font-weight: 500;
+  color: var(--text-primary, #050505);
+  margin-bottom: 2px;
+`;
+
+const OptionSubtitle = styled.div`
+  font-size: clamp(12px, 3vw, 13px);
+  color: var(--text-secondary, #65676b);
 `;
 
 const getAvatarColor = (name) => {
@@ -331,8 +893,13 @@ const getAvatarColor = (name) => {
   return colors[index];
 };
 
-const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) => {
+const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket, user, onHideBottomNav, onStartChat }) => {
   const [activeTab, setActiveTab] = useState('friends');
+  const [showPendingView, setShowPendingView] = useState(false); // For viewing pending requests
+  const [showAddFriendView, setShowAddFriendView] = useState(false); // For add friend screen
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [countryCode, setCountryCode] = useState('+84');
+  const [statsFilter, setStatsFilter] = useState('all'); // 'all' or 'recent'
   const [searchQuery, setSearchQuery] = useState('');
   const [friends, setFriends] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -342,16 +909,36 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
   const [isVideoCall, setIsVideoCall] = useState(true);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [showPermissionRequest, setShowPermissionRequest] = useState(false);
+  const [showUserProfile, setShowUserProfile] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
 
   useEffect(() => {
     if (activeTab === 'friends') {
       loadFriends();
       loadPendingRequests(); // Always load pending requests to show badge
       loadBirthdays();
-    } else if (activeTab === 'pending') {
-      loadPendingRequests();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (showPendingView) {
+      loadPendingRequests();
+    }
+  }, [showPendingView]);
+
+  // Hide/show bottom nav based on Add Friend view
+  useEffect(() => {
+    if (onHideBottomNav) {
+      onHideBottomNav(showAddFriendView);
+    }
+    
+    // Cleanup: show bottom nav when component unmounts
+    return () => {
+      if (onHideBottomNav) {
+        onHideBottomNav(false);
+      }
+    };
+  }, [showAddFriendView, onHideBottomNav]);
 
   const loadFriends = async () => {
     try {
@@ -401,14 +988,25 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
     return grouped;
   };
 
-  const filteredFriends = searchQuery
-    ? friends.filter(friend =>
+  // Filter friends based on search and stats filter
+  let filteredFriends = friends;
+  
+  // Apply search filter
+  if (searchQuery) {
+    filteredFriends = filteredFriends.filter(friend =>
         friend.full_name?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : friends;
+    );
+  }
+  
+  // Apply stats filter (recent = online or recently active)
+  if (statsFilter === 'recent') {
+    filteredFriends = filteredFriends.filter(friend => 
+      friend.is_online || friend.recently_active
+    );
+  }
 
   const groupedFriends = groupFriendsByAlphabet(filteredFriends);
-  const recentlyActiveCount = Math.floor(friends.length * 0.16); // Mock: 16% recently active
+  const recentlyActiveCount = friends.filter(f => f.is_online || f.recently_active).length;
 
   const handleCall = (friend, type) => {
     setSelectedFriend(friend);
@@ -434,8 +1032,12 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
   const handleAcceptRequest = async (friendId) => {
     try {
       await friendsAPI.acceptFriendRequest(friendId);
-      loadPendingRequests();
-      loadFriends();
+      await loadPendingRequests();
+      await loadFriends();
+      // Close pending view if no more requests
+      if (pendingRequests.length <= 1) {
+        setShowPendingView(false);
+      }
     } catch (error) {
       console.error('Error accepting friend request:', error);
       alert('Có lỗi xảy ra khi chấp nhận lời mời kết bạn');
@@ -445,12 +1047,106 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
   const handleRejectRequest = async (friendId) => {
     try {
       await friendsAPI.rejectFriendRequest(friendId);
-      loadPendingRequests();
+      await loadPendingRequests();
+      // Close pending view if no more requests
+      if (pendingRequests.length <= 1) {
+        setShowPendingView(false);
+      }
     } catch (error) {
       console.error('Error rejecting friend request:', error);
       alert('Có lỗi xảy ra khi từ chối lời mời kết bạn');
     }
   };
+
+  const handleUserClick = (friend) => {
+    // Open chat with friend instead of profile
+    if (onStartChat) {
+      onStartChat(friend);
+    }
+  };
+
+  const handleViewProfile = (friend) => {
+    // Open user profile
+    setSelectedUser(friend);
+    setShowUserProfile(true);
+  };
+
+  const handleStartChatFromProfile = (user) => {
+    // Close profile and open chat
+    setShowUserProfile(false);
+    setSelectedUser(null);
+    if (onStartChat) {
+      onStartChat(user);
+    }
+  };
+
+  // Render Add Friend View
+  if (showAddFriendView) {
+    return (
+      <AddFriendContainer>
+        <AddFriendHeader>
+          <BackButton onClick={() => setShowAddFriendView(false)}>
+            ←
+          </BackButton>
+          <AddFriendTitle>Thêm bạn</AddFriendTitle>
+        </AddFriendHeader>
+
+        <QRSection>
+          <QRCard>
+            <QRUserName>{user?.full_name || 'Hoàng Minh Hiếu'}</QRUserName>
+            <QRCodeBox>
+              <QRPlaceholder>
+                <BsQrCodeScan />
+              </QRPlaceholder>
+            </QRCodeBox>
+            <QRText>Quét mã để thêm bạn Zalo với tôi</QRText>
+          </QRCard>
+        </QRSection>
+
+        <PhoneInputSection>
+          <PhoneInputWrapper>
+            <CountryCodeSelect 
+              value={countryCode}
+              onChange={(e) => setCountryCode(e.target.value)}
+            >
+              <option value="+84">+84</option>
+              <option value="+1">+1</option>
+              <option value="+86">+86</option>
+              <option value="+82">+82</option>
+            </CountryCodeSelect>
+            <PhoneInput
+              type="tel"
+              placeholder="Nhập số điện thoại"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+            />
+            <SearchButton>
+              <FiSearch size={20} />
+            </SearchButton>
+          </PhoneInputWrapper>
+        </PhoneInputSection>
+
+        <OptionButton>
+          <OptionIcon>
+            <BsQrCodeScan />
+          </OptionIcon>
+          <OptionContent>
+            <OptionTitle>Quét mã QR</OptionTitle>
+          </OptionContent>
+        </OptionButton>
+
+        <OptionButton>
+          <OptionIcon>
+            <FiUsers />
+          </OptionIcon>
+          <OptionContent>
+            <OptionTitle>Bạn bè có thể quen</OptionTitle>
+            <OptionSubtitle>Xem lời mời kết bạn đã gửi tại trang Danh bạ Zalo</OptionSubtitle>
+          </OptionContent>
+        </OptionButton>
+      </AddFriendContainer>
+    );
+  }
 
   return (
     <ContactsContainer>
@@ -464,11 +1160,8 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </SearchContainer>
-        <HeaderButton onClick={onAddFriend} title="Thêm bạn">
-          <FiPlus size={20} />
-        </HeaderButton>
-        <HeaderButton title="Quét QR">
-          <BsQrCodeScan size={20} />
+        <HeaderButton onClick={() => setShowAddFriendView(true)} title="Thêm bạn">
+          <FiUser size={20} />
         </HeaderButton>
       </Header>
 
@@ -482,11 +1175,6 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
         <Tab active={activeTab === 'oa'} onClick={() => setActiveTab('oa')}>
           OA
         </Tab>
-        {pendingRequests.length > 0 && (
-          <Tab active={activeTab === 'pending'} onClick={() => setActiveTab('pending')}>
-            Lời mời ({pendingRequests.length})
-          </Tab>
-        )}
       </Tabs>
 
       <Content>
@@ -494,24 +1182,16 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
           <>
             {/* Friend Requests Section */}
             {pendingRequests.length > 0 && (
-              <Section onClick={() => setActiveTab('pending')} style={{ cursor: 'pointer' }}>
+              <Section onClick={() => setShowPendingView(true)} style={{ cursor: 'pointer' }}>
                 <SectionHeader>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
-                      background: '#0084ff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}>
+                  <SectionHeaderContent>
+                    <SectionIconWrapper bgColor="#0084ff">
                       <FiUserPlus size={18} color="white" />
-                    </div>
+                    </SectionIconWrapper>
                     <SectionTitle>
-                      Lời mời kết bạn <Badge style={{ marginLeft: '4px' }}>{pendingRequests.length}</Badge>
+                      Lời mời kết bạn ({pendingRequests.length})
                     </SectionTitle>
-                  </div>
+                  </SectionHeaderContent>
                 </SectionHeader>
               </Section>
             )}
@@ -520,38 +1200,36 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
             {birthdays.length > 0 && (
               <Section>
                 <SectionHeader highlight>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
-                      background: '#ff6b6b',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}>
+                  <SectionHeaderContent>
+                    <SectionIconWrapper bgColor="#ff6b6b">
                       <FiGift size={18} color="white" />
-                    </div>
+                    </SectionIconWrapper>
                     <div>
                       <SectionTitle>
-                        Sinh nhật <span style={{ color: '#ff4444', fontSize: '18px', marginLeft: '4px' }}>•</span>
+                        Sinh nhật 🎂
                       </SectionTitle>
                       <SectionSubtitle>
-                        Hôm nay là sinh nhật của {birthdays[0]?.full_name || 'Như'}
+                        Hôm nay là sinh nhật của {birthdays[0]?.full_name || 'Bùi Ngọc Nhi'}
                       </SectionSubtitle>
                     </div>
-                  </div>
+                  </SectionHeaderContent>
                 </SectionHeader>
               </Section>
             )}
 
             {/* Stats Section */}
             <Stats>
-              <StatItem>
-                <strong>Tất cả</strong> {friends.length}
+              <StatItem 
+                active={statsFilter === 'all'}
+                onClick={() => setStatsFilter('all')}
+              >
+                Tất cả <strong>{friends.length}</strong>
               </StatItem>
-              <StatItem>
-                <strong>Mới truy cập</strong> {recentlyActiveCount}
+              <StatItem 
+                active={statsFilter === 'recent'}
+                onClick={() => setStatsFilter('recent')}
+              >
+                Mới truy cập
               </StatItem>
             </Stats>
 
@@ -571,7 +1249,7 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
                   <div key={letter}>
                     <AlphabetDivider>{letter}</AlphabetDivider>
                     {groupedFriends[letter].map(friend => (
-                      <ContactItem key={friend.id}>
+                      <ContactItem key={friend.id} onClick={() => handleUserClick(friend)}>
                         <Avatar color={getAvatarColor(friend.full_name)}>
                           {friend.avatar_url ? (
                             <img src={getAvatarURL(friend.avatar_url)} alt={friend.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
@@ -599,11 +1277,11 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
                           <ActionButton
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleCall(friend, 'video');
+                              handleUserClick(friend);
                             }}
-                            title="Gọi video"
+                            title="Nhắn tin"
                           >
-                            <FiVideo size={20} />
+                            <FiMessageSquare size={20} />
                           </ActionButton>
                         </ContactActions>
                       </ContactItem>
@@ -615,7 +1293,15 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
           </>
         )}
 
-        {activeTab === 'pending' && (
+        {showPendingView && (
+          <>
+            <Section style={{ paddingTop: '8px' }}>
+              <SectionHeader style={{ background: 'var(--bg-secondary, #f0f2f5)', cursor: 'pointer' }} onClick={() => setShowPendingView(false)}>
+                <SectionTitle style={{ color: 'var(--primary-color, #0084ff)' }}>
+                  ← Quay lại
+                </SectionTitle>
+              </SectionHeader>
+            </Section>
           <Section>
             {loading ? (
               <EmptyState>
@@ -628,7 +1314,7 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
               </EmptyState>
             ) : (
               pendingRequests.map(request => (
-                <ContactItem key={request.id}>
+                <ContactItem key={request.id} onClick={() => handleUserClick(request)}>
                   <Avatar color={getAvatarColor(request.full_name)}>
                     {request.avatar_url ? (
                       <img src={getAvatarURL(request.avatar_url)} alt={request.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
@@ -668,6 +1354,7 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
               ))
             )}
           </Section>
+          </>
         )}
 
         {activeTab === 'groups' && (
@@ -704,6 +1391,18 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) =>
             setShowVideoCall(false);
             setSelectedFriend(null);
           }}
+        />
+      )}
+
+      {showUserProfile && selectedUser && (
+        <MobileUserProfile
+          user={selectedUser}
+          currentUserId={user?.id}
+          onClose={() => {
+            setShowUserProfile(false);
+            setSelectedUser(null);
+          }}
+          onStartChat={handleStartChatFromProfile}
         />
       )}
     </ContactsContainer>

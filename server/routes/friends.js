@@ -455,6 +455,40 @@ router.get('/following', async (req, res) => {
   }
 });
 
+// Get mutual friends with a specific user
+router.get('/mutual/:userId', async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const targetUserId = req.params.userId;
+    
+    // Find mutual friends - friends that both users have in common
+    const [mutualFriends] = await getConnection().execute(`
+      SELECT DISTINCT
+        u.id,
+        u.username,
+        u.full_name,
+        u.avatar_url,
+        u.status
+      FROM users u
+      INNER JOIN friends f1 ON u.id = f1.friend_id
+      INNER JOIN friends f2 ON u.id = f2.friend_id
+      WHERE f1.user_id = ? 
+        AND f1.status = 'accepted'
+        AND f2.user_id = ?
+        AND f2.status = 'accepted'
+        AND u.id != ?
+        AND u.id != ?
+      ORDER BY u.full_name ASC
+      LIMIT 20
+    `, [currentUserId, targetUserId, currentUserId, targetUserId]);
+    
+    res.json(mutualFriends);
+  } catch (error) {
+    console.error('Error fetching mutual friends:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Check friendship status with specific user
 router.get('/check-status/:userId', async (req, res) => {
   try {
@@ -494,9 +528,15 @@ router.get('/check-status/:userId', async (req, res) => {
     `, [currentUserId, targetUserId]);
     
     if (friendship.length > 0) {
+      // Check if following
+      const [follow] = await getConnection().execute(`
+        SELECT 1 FROM follows 
+        WHERE follower_id = ? AND following_id = ?
+      `, [currentUserId, targetUserId]);
+      
       return res.json({ 
         friendship_status: 'friend',
-        isFollowing: false // Will be checked separately if needed
+        isFollowing: follow.length > 0
       });
     }
     
@@ -508,7 +548,7 @@ router.get('/check-status/:userId', async (req, res) => {
     
     if (sentRequest.length > 0) {
       return res.json({ 
-        friendship_status: 'request_sent',
+        friendship_status: 'pending_sent',
         isFollowing: false
       });
     }
@@ -521,7 +561,7 @@ router.get('/check-status/:userId', async (req, res) => {
     
     if (receivedRequest.length > 0) {
       return res.json({ 
-        friendship_status: 'request_received',
+        friendship_status: 'pending_received',
         isFollowing: false
       });
     }

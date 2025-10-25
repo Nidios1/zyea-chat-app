@@ -146,6 +146,7 @@ const MessageList = ({ messages, currentUserId }) => {
         );
       })}
     </MessagesList>
+
   );
 };
 

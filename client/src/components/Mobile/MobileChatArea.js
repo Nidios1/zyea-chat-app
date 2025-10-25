@@ -6,7 +6,7 @@ import TypingIndicator from '../Shared/Chat/TypingIndicator';
 import ImageUpload from '../Shared/Chat/ImageUpload';
 import EmojiPicker, { EmojiToggleButton } from '../Shared/Chat/EmojiPicker';
 import ChatOptionsMenu from '../Shared/Chat/ChatOptionsMenu';
-import ProfilePage from '../Shared/Profile/ProfilePage';
+import MobileUserProfile from './MobileUserProfile';
 import VideoCall from '../Shared/Chat/VideoCall';
 import PermissionRequest from '../Shared/Chat/PermissionRequest';
 import { chatAPI } from '../../utils/api';
@@ -815,12 +815,22 @@ const MobileChatArea = ({
         onShowProfile={() => setShowProfile(true)}
       />
 
-      {showProfile && (
-        <ProfilePage
-          user={conversation}
-          onBack={() => setShowProfile(false)}
-          onLogout={() => console.log('Logout from profile')}
-          isOwnProfile={false}
+      {showProfile && conversation && (
+        <MobileUserProfile
+          user={{
+            id: conversation.other_user_id || conversation.participant_id || conversation.id,
+            username: conversation.username || conversation.participant_username,
+            full_name: conversation.full_name || conversation.participant_name || conversation.name,
+            avatar_url: conversation.avatar_url || conversation.participant_avatar,
+            bio: conversation.bio,
+            status: conversation.status || conversation.participant_status
+          }}
+          currentUserId={currentUser?.id || currentUser?.user_id}
+          onClose={() => setShowProfile(false)}
+          onStartChat={(user) => {
+            setShowProfile(false);
+            // Already in chat, no need to do anything
+          }}
         />
       )}
 

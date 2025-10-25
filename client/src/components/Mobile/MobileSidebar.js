@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import MobileChatArea from './MobileChatArea';
-import NewsFeed from '../Shared/NewsFeed/NewsFeed';
 import Friends from '../Shared/Friends/Friends';
 import MobileContacts from './MobileContacts';
 import PersonalProfilePage from '../Shared/Profile/PersonalProfilePage';
@@ -145,12 +144,12 @@ const MobileSidebar = ({
   const [unreadCount, setUnreadCount] = useState(0);
   const [currentView, setCurrentView] = useState('messages');
   const [activeTab, setActiveTab] = useState('all');
-  const [showNewsFeed, setShowNewsFeed] = useState(false);
   const [showFriends, setShowFriends] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const [showUserSearch, setShowUserSearch] = useState(false);
   const [showFriendsList, setShowFriendsList] = useState(false);
+  const [hideBottomNav, setHideBottomNav] = useState(false);
   const [conversationSettings, setConversationSettings] = useState({});
   const [readConversations, setReadConversations] = useState(() => {
     try {
@@ -405,7 +404,6 @@ const MobileSidebar = ({
     setCurrentView(view);
     switch (view) {
       case 'messages':
-        setShowNewsFeed(false);
         setShowFriends(false);
         setShowProfile(false);
         setShowNotificationCenter(false);
@@ -414,15 +412,6 @@ const MobileSidebar = ({
         break;
       case 'contacts':
         setShowFriends(true);
-        setShowNewsFeed(false);
-        setShowProfile(false);
-        setShowNotificationCenter(false);
-        setShowUserSearch(false);
-        setShowFriendsList(false);
-        break;
-      case 'newsfeed':
-        setShowNewsFeed(true);
-        setShowFriends(false);
         setShowProfile(false);
         setShowNotificationCenter(false);
         setShowUserSearch(false);
@@ -430,7 +419,6 @@ const MobileSidebar = ({
         break;
       case 'profile':
         setShowProfile(true);
-        setShowNewsFeed(false);
         setShowFriends(false);
         setShowNotificationCenter(false);
         setShowUserSearch(false);
@@ -443,7 +431,7 @@ const MobileSidebar = ({
 
   return (
     <MobileSidebarContainer>
-      {!selectedConversation && !showNewsFeed && !showFriends && !showProfile && !showNotificationCenter && !showUserSearch && !showFriendsList && (
+      {!selectedConversation && !showFriends && !showProfile && !showNotificationCenter && !showUserSearch && !showFriendsList && (
         <>
           <MobileTopBar 
             searchTerm={searchTerm}
@@ -461,29 +449,10 @@ const MobileSidebar = ({
       )}
 
       <Content>
-        {showNewsFeed ? (
-          <ViewWrapper>
-            <NewsFeed 
-              currentUser={user}
-              onBack={() => setShowNewsFeed(false)}
-              onGoToMessages={() => {
-                setShowNewsFeed(false);
-                setCurrentView('messages');
-              }}
-              onNavigateToContacts={() => {
-                setShowNewsFeed(false);
-                setShowFriends(true);
-              }}
-              onNavigateToProfile={() => {
-                setShowNewsFeed(false);
-                setShowProfile(true);
-              }}
-              showBottomNav={false}
-            />
-          </ViewWrapper>
-        ) : showFriends ? (
+        {showFriends ? (
           <ViewWrapper>
             <MobileContacts 
+              user={user}
               socket={socket}
               onBack={() => setShowFriends(false)}
               onCall={(friend) => console.log('Calling friend:', friend)}
@@ -491,6 +460,56 @@ const MobileSidebar = ({
               onAddFriend={() => {
                 setShowFriends(false);
                 setShowUserSearch(true);
+              }}
+              onHideBottomNav={setHideBottomNav}
+              onStartChat={async (friend) => {
+                setShowFriends(false);
+                
+                // Try to find existing conversation with this friend
+                const existingConv = localConversations.find(conv => 
+                  conv.participant_id === friend.id || 
+                  conv.other_user_id === friend.id ||
+                  conv.userId === friend.id
+                );
+                
+                if (existingConv) {
+                  // Use existing conversation
+                  onConversationSelect?.(existingConv);
+                } else {
+                  // Create or get conversation
+                  try {
+                    const response = await chatAPI.createConversation(friend.id);
+                    if (response && response.conversationId) {
+                      // Reload conversations to get the new/updated one
+                      const updatedConversations = await chatAPI.getConversations();
+                      if (updatedConversations && Array.isArray(updatedConversations)) {
+                        setLocalConversations(updatedConversations);
+                        // Find the conversation we just created/got
+                        const newConv = updatedConversations.find(conv => 
+                          conv.id === response.conversationId ||
+                          conv.participant_id === friend.id || 
+                          conv.other_user_id === friend.id ||
+                          conv.userId === friend.id
+                        );
+                        if (newConv) {
+                          onConversationSelect?.(newConv);
+                        } else {
+                          // Fallback: pass friend object
+                          onConversationSelect?.(friend);
+                        }
+                      } else {
+                        onConversationSelect?.(friend);
+                      }
+                    } else {
+                      // Fallback: pass friend object if API doesn't return conversationId
+                      onConversationSelect?.(friend);
+                    }
+                  } catch (error) {
+                    console.error('Error creating conversation:', error);
+                    // Fallback: pass friend object
+                    onConversationSelect?.(friend);
+                  }
+                }
               }}
             />
           </ViewWrapper>
@@ -509,9 +528,6 @@ const MobileSidebar = ({
                 switch (tabId) {
                   case 'contacts':
                     setShowFriends(true);
-                    break;
-                  case 'wall':
-                    setShowNewsFeed(true);
                     break;
                   default:
                     break;
@@ -610,7 +626,7 @@ const MobileSidebar = ({
         )}
       </Content>
 
-      {!selectedConversation && !showProfile && (
+      {!selectedConversation && !showProfile && !hideBottomNav && (
         <MobileBottomNav 
           currentView={currentView}
           onViewChange={handleNavClick}

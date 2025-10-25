@@ -169,10 +169,6 @@ const MobileChat = () => {
           // Handle show friends
           console.log('Show friends');
         }}
-        onShowNewsFeed={() => {
-          // Handle show newsfeed
-          console.log('Show newsfeed');
-        }}
         onShowProfile={() => {
           // Handle show profile
           console.log('Show profile');

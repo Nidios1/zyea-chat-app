@@ -4,7 +4,6 @@ import {
   FiMessageCircle, 
   FiUsers, 
   FiGrid, 
-  FiHome, 
   FiUser,
   FiSearch,
   FiSquare,
@@ -435,7 +434,6 @@ const MobileLayout = ({
   onNewChat,
   onAddFriend,
   onShowFriends,
-  onShowNewsFeed,
   onShowProfile,
   user,
   socket
@@ -449,7 +447,6 @@ const MobileLayout = ({
     { id: 'messages', icon: FiMessageCircle, label: 'Tin nhắn', badge: unreadCount },
     { id: 'contacts', icon: FiUsers, label: 'Danh bạ', badge: null },
     { id: 'discover', icon: FiGrid, label: 'Khám phá', badge: 'dot' },
-    { id: 'wall', icon: FiHome, label: 'Tường nhà', badge: 'N' },
     { id: 'profile', icon: FiUser, label: 'Cá nhân', badge: null }
   ];
 
@@ -545,9 +542,6 @@ const MobileLayout = ({
         break;
       case 'discover':
         // Handle discover
-        break;
-      case 'wall':
-        onShowNewsFeed?.();
         break;
       case 'profile':
         onShowProfile?.();

@@ -200,7 +200,8 @@ export const friendsAPI = {
   getFollowers: () => api.get('/friends/followers'),
   getFollowing: () => api.get('/friends/following'),
   block: (blockedUserId) => api.post('/friends/block', { blockedUserId }),
-  unblock: (blockedUserId) => api.delete(`/friends/block/${blockedUserId}`)
+  unblock: (blockedUserId) => api.delete(`/friends/block/${blockedUserId}`),
+  getMutualFriends: (userId) => api.get(`/friends/mutual/${userId}`)
 };
 
 export const notificationAPI = {

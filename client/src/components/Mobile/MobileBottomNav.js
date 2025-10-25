@@ -1,6 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
-import { FiMessageCircle, FiUsers, FiGrid, FiHome, FiUser } from 'react-icons/fi';
+import { FiMessageCircle, FiUsers, FiGrid, FiUser } from 'react-icons/fi';
 
 const BottomNav = styled.div`
   background: var(--bg-primary, white);
@@ -98,7 +98,6 @@ const MobileBottomNav = ({ currentView, onViewChange, unreadCount }) => {
     { id: 'messages', label: 'Tin nhắn', icon: FiMessageCircle, badge: unreadCount > 0 ? unreadCount : null },
     { id: 'contacts', label: 'Danh bạ', icon: FiUsers },
     { id: 'discover', label: 'Khám phá', icon: FiGrid },
-    { id: 'newsfeed', label: 'Tường nhà', icon: FiHome },
     { id: 'profile', label: 'Cá nhân', icon: FiUser }
   ];
 

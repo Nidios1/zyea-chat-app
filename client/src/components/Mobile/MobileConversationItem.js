@@ -291,6 +291,7 @@ const MobileConversationItem = ({
   hasUnread, 
   onClick, 
   onSwipeAction,
+  onAvatarClick,
   nickname 
 }) => {
   const [swipeOffset, setSwipeOffset] = useState(0);
@@ -393,7 +394,16 @@ const MobileConversationItem = ({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <Avatar color={getAvatarColor(name)}>
+        <Avatar 
+          color={getAvatarColor(name)}
+          onClick={(e) => {
+            if (onAvatarClick) {
+              e.stopPropagation();
+              onAvatarClick(e);
+            }
+          }}
+          style={{ cursor: onAvatarClick ? 'pointer' : 'default' }}
+        >
           {conversation.avatar_url ? (
             <img 
               src={getAvatarURL(conversation.avatar_url)} 

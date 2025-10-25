@@ -1,0 +1,471 @@
+/**
+ * ============================================
+ * MOBILE RESPONSIVE MASTER - DUY NHẤT CHO TẤT CẢ
+ * ============================================
+ * 
+ * File CSS DUY NHẤT cho toàn bộ responsive trên mobile iOS native
+ * Gộp tất cả: viewport, safe area, keyboard, breakpoints
+ * 
+ * KHÔNG CẦN file khác - CHỈ DÙNG FILE NÀY!
+ */
+
+/* ==================== RESET & FOUNDATION ==================== */
+
+html {
+  /* Dynamic viewport height - set by JS */
+  height: calc(var(--vh, 1vh) * 100);
+  -webkit-text-size-adjust: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: calc(var(--vh, 1vh) * 100);
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  /* Disable text selection by default */
+  -webkit-user-select: none;
+  user-select: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+/* Enable text selection for text content */
+input, textarea, p, span[class*="Message"], div[class*="Text"] {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
+#root {
+  min-height: calc(var(--vh, 1vh) * 100);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ==================== CSS VARIABLES ==================== */
+
+:root {
+  /* ===== Viewport (set by JS) ===== */
+  --vh: 1vh;
+  --keyboard-height: 0px;
+  
+  /* ===== Safe Area (iPhone notch, home indicator) ===== */
+  --safe-top: env(safe-area-inset-top, 0);
+  --safe-bottom: env(safe-area-inset-bottom, 0);
+  --safe-left: env(safe-area-inset-left, 0);
+  --safe-right: env(safe-area-inset-right, 0);
+  
+  /* ===== Spacing ===== */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  
+  /* ===== Typography ===== */
+  --font-xs: 12px;
+  --font-sm: 14px;
+  --font-base: 16px;  /* CRITICAL: ≥16px to prevent iOS zoom */
+  --font-md: 18px;
+  --font-lg: 20px;
+  --font-xl: 24px;
+  
+  /* ===== Touch Targets ===== */
+  --touch-min: 44px;  /* Apple minimum */
+  
+  /* ===== Heights ===== */
+  --header-height: 56px;
+  --bottom-nav-height: 68px;
+  
+  /* ===== Z-index ===== */
+  --z-base: 1;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal: 500;
+  
+  /* ===== Animation ===== */
+  --transition-fast: 0.15s;
+  --transition-normal: 0.3s;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==================== BREAKPOINTS ==================== */
+
+/* iPhone SE - Màn hình nhỏ (≤375px) */
+@media (max-width: 375px) {
+  :root {
+    --font-sm: 13px;
+    --font-base: 15px;
+    --font-md: 16px;
+    --font-lg: 18px;
+    --space-md: 10px;
+    --space-lg: 14px;
+  }
+}
+
+/* iPhone 12/13/14/15 Pro Max - Màn hình lớn (≥428px) */
+@media (min-width: 428px) {
+  :root {
+    --font-base: 17px;
+    --font-md: 19px;
+    --font-lg: 21px;
+    --space-lg: 18px;
+    --space-xl: 28px;
+  }
+}
+
+/* Landscape - Ngang */
+@media (max-width: 768px) and (orientation: landscape) {
+  :root {
+    --space-sm: 6px;
+    --space-md: 8px;
+    --space-lg: 10px;
+    --header-height: 48px;
+    --bottom-nav-height: 56px;
+  }
+}
+
+/* ==================== LAYOUT PATTERNS ==================== */
+
+/* Pattern 1: Fixed Header (TopBar, AppBar) */
+.mobile-header,
+[class*="TopBar"],
+[class*="Header"][class*="Mobile"] {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-fixed);
+  /* Account for notch/Dynamic Island */
+  padding-top: calc(var(--safe-top) + var(--space-md)) !important;
+  /* Extend background into notch */
+  margin-top: calc(-1 * var(--safe-top));
+}
+
+/* Pattern 2: Fixed Bottom Nav */
+.mobile-bottom-nav,
+[class*="BottomNav"],
+[class*="TabBar"] {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-fixed);
+  /* Account for home indicator */
+  padding-bottom: max(var(--safe-bottom), var(--space-sm)) !important;
+}
+
+/* Pattern 3: Content Area (giữa header và bottom nav) */
+.mobile-content,
+[class*="ContentArea"],
+[class*="MainContent"] {
+  /* Full viewport height */
+  min-height: calc(var(--vh, 1vh) * 100);
+  /* Space for header */
+  padding-top: calc(var(--header-height) + var(--safe-top));
+  /* Space for bottom nav */
+  padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom));
+  /* Scrollable */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Pattern 4: Message Input (keyboard-aware) */
+.keyboard-aware-input,
+[class*="MessageInput"],
+[class*="ChatInput"] {
+  position: fixed;
+  bottom: var(--keyboard-height) !important;
+  left: 0;
+  right: 0;
+  z-index: var(--z-fixed);
+  /* Smooth transition when keyboard appears */
+  transition: bottom var(--transition-normal) var(--ease) !important;
+  /* Safe area when no keyboard */
+  padding-bottom: max(var(--safe-bottom), var(--space-sm)) !important;
+}
+
+/* Pattern 5: Messages Container (adjust for keyboard) */
+[class*="MessagesContainer"],
+[class*="ChatMessages"] {
+  /* Extra padding when keyboard shows */
+  padding-bottom: calc(85px + var(--keyboard-height) + var(--safe-bottom)) !important;
+  transition: padding-bottom var(--transition-normal) var(--ease) !important;
+}
+
+/* ==================== MOBILE-ONLY STYLES ==================== */
+
+@media (max-width: 768px) {
+  /* All inputs: Prevent iOS zoom */
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+    -webkit-appearance: none;
+    appearance: none;
+    -webkit-text-size-adjust: 100%;
+  }
+  
+  /* All buttons: Touch targets */
+  button,
+  [role="button"],
+  a[class*="Button"] {
+    min-height: var(--touch-min);
+    min-width: var(--touch-min);
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Better scrolling */
+  .scrollable,
+  [data-scrollable="true"] {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  
+  /* Hide scrollbar (cleaner look) */
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ==================== SAFE AREA UTILITIES ==================== */
+
+.safe-top {
+  padding-top: var(--safe-top);
+}
+
+.safe-bottom {
+  padding-bottom: var(--safe-bottom);
+}
+
+.safe-left {
+  padding-left: var(--safe-left);
+}
+
+.safe-right {
+  padding-right: var(--safe-right);
+}
+
+.safe-all {
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+/* ==================== SPACING UTILITIES ==================== */
+
+.p-xs { padding: var(--space-xs); }
+.p-sm { padding: var(--space-sm); }
+.p-md { padding: var(--space-md); }
+.p-lg { padding: var(--space-lg); }
+.p-xl { padding: var(--space-xl); }
+
+.m-xs { margin: var(--space-xs); }
+.m-sm { margin: var(--space-sm); }
+.m-md { margin: var(--space-md); }
+.m-lg { margin: var(--space-lg); }
+.m-xl { margin: var(--space-xl); }
+
+/* ==================== TYPOGRAPHY UTILITIES ==================== */
+
+.text-xs { font-size: var(--font-xs); }
+.text-sm { font-size: var(--font-sm); }
+.text-base { font-size: var(--font-base); }
+.text-md { font-size: var(--font-md); }
+.text-lg { font-size: var(--font-lg); }
+.text-xl { font-size: var(--font-xl); }
+
+/* ==================== TOUCH UTILITIES ==================== */
+
+.touch-target {
+  min-height: var(--touch-min);
+  min-width: var(--touch-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.no-tap-highlight {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ==================== PERFORMANCE ==================== */
+
+.hardware-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.smooth-transition {
+  transition: all var(--transition-normal) var(--ease);
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==================== SPECIFIC COMPONENT FIXES ==================== */
+
+/* Chat Area */
+@media (max-width: 768px) {
+  /* Message bubbles - better spacing */
+  [class*="MessageBubble"],
+  [class*="ChatBubble"] {
+    margin-bottom: var(--space-sm);
+    max-width: 85%;
+  }
+  
+  /* Avatar - consistent size */
+  [class*="Avatar"] {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  
+  /* NewsFeed posts */
+  [class*="PostCard"],
+  [class*="FeedItem"] {
+    margin-bottom: var(--space-md);
+  }
+  
+  /* Friend items - adequate height */
+  [class*="FriendItem"],
+  [class*="ContactItem"] {
+    min-height: 68px;
+    padding: var(--space-md);
+  }
+  
+  /* Search inputs */
+  [class*="SearchInput"],
+  input[type="search"] {
+    font-size: 16px !important;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: 24px;
+  }
+  
+  /* Action buttons */
+  [class*="ActionButton"],
+  button[class*="Primary"],
+  button[class*="Send"] {
+    min-height: var(--touch-min);
+    padding: var(--space-sm) var(--space-lg);
+    border-radius: 24px;
+  }
+}
+
+/* ==================== MODALS & OVERLAYS ==================== */
+
+@media (max-width: 768px) {
+  [class*="Modal"],
+  [class*="Dialog"],
+  [class*="Overlay"] {
+    /* Full viewport */
+    height: calc(var(--vh, 1vh) * 100) !important;
+  }
+  
+  [class*="ModalContent"],
+  [class*="DialogContent"] {
+    /* Account for safe areas */
+    margin: var(--safe-top) var(--space-lg) var(--safe-bottom);
+    max-height: calc(calc(var(--vh, 1vh) * 100) - var(--safe-top) - var(--safe-bottom) - 32px);
+    border-radius: 16px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ==================== LANDSCAPE SPECIFIC ==================== */
+
+@media (max-width: 768px) and (orientation: landscape) {
+  /* Compact headers */
+  .mobile-header,
+  [class*="TopBar"] {
+    padding-top: calc(var(--safe-top) + 4px) !important;
+    padding-bottom: 4px !important;
+  }
+  
+  /* Compact footers */
+  .mobile-bottom-nav,
+  [class*="BottomNav"] {
+    padding-top: 4px !important;
+    padding-bottom: max(var(--safe-bottom), 4px) !important;
+  }
+  
+  /* Hide non-essential in landscape */
+  .hide-landscape {
+    display: none !important;
+  }
+}
+
+/* ==================== DEBUG MODE (comment out in production) ==================== */
+
+/*
+@media (max-width: 768px) {
+  body::before {
+    content: 'TOP: ' attr(data-safe-top);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--safe-top);
+    background: rgba(255, 0, 0, 0.2);
+    z-index: 9999;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: red;
+  }
+  
+  body::after {
+    content: 'BOTTOM: ' attr(data-safe-bottom);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--safe-bottom);
+    background: rgba(0, 255, 0, 0.2);
+    z-index: 9999;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: green;
+  }
+}
+*/
+
+/* ==================== PRINT ==================== */
+
+@media print {
+  .mobile-bottom-nav,
+  .mobile-header,
+  [class*="BottomNav"],
+  button:not(.print-button) {
+    display: none !important;
+  }
+}
+
+/* ==================== END ==================== */
+
