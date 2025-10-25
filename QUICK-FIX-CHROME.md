@@ -1,9 +1,9 @@
-# 🚀 Quick Fix - Camera/Mic Permission (Chrome, Safari, Firefox)
+# 🚀 Quick Fix - Chrome Camera/Mic với IP Local
 
 ## ⚠️ Vấn Đề
-Khi truy cập qua IP local (192.168.0.102:3000), trình duyệt block camera/microphone vì lý do bảo mật.
+Khi truy cập qua IP local (192.168.0.102:3000), Chrome block camera/microphone vì lý do bảo mật.
 
-## ✅ Giải Pháp - Chọn theo trình duyệt:
+## ✅ Giải Pháp - Chọn 1 trong 3 cách:
 
 ---
 
@@ -96,103 +96,6 @@ https://192.168.0.102:3000
 
 ---
 
-## **🍎 Safari (macOS & iOS)**
-
-Safari có chính sách bảo mật nghiêm ngặt hơn Chrome!
-
-### **Trên macOS:**
-
-#### Bước 1: Cấp quyền System
-1. Mở **System Preferences** (System Settings trên macOS 13+)
-2. Vào **Privacy & Security** → **Camera**
-3. Đảm bảo **Safari** được check ✅
-4. Vào **Privacy & Security** → **Microphone**
-5. Đảm bảo **Safari** được check ✅
-
-#### Bước 2: Safari Settings
-1. Mở Safari
-2. Vào **Safari** → **Settings** (hoặc **Preferences**)
-3. Tab **Websites**
-4. Chọn **Camera** bên trái
-5. Tìm website của bạn và chọn **Allow**
-6. Chọn **Microphone** bên trái
-7. Tìm website của bạn và chọn **Allow**
-
-#### Bước 3: Để Safari chấp nhận HTTP Local
-Safari **BẮT BUỘC phải dùng localhost**, không chấp nhận IP local!
-
-**✅ Hoạt động:**
-```
-http://localhost:3000
-https://localhost:3000
-```
-
-**❌ KHÔNG hoạt động:**
-```
-http://192.168.0.102:3000  (Safari sẽ block)
-```
-
-**Giải pháp:** Nếu cần test nhiều máy macOS:
-1. Dùng HTTPS với self-signed certificate
-2. Hoặc mỗi máy truy cập localhost riêng
-
-### **Trên iOS (iPhone/iPad):**
-
-#### Bước 1: iOS Settings
-1. Mở **Settings** → **Safari**
-2. Tìm **Camera & Microphone Access**
-3. Chọn **Allow** (hoặc **Ask**)
-
-#### Bước 2: Trong Safari
-Khi vào website:
-1. Safari sẽ hiện popup: **"Allow [website] to access camera and microphone?"**
-2. Click **Allow**
-
-#### Lưu ý iOS:
-- ⚠️ **BẮT BUỘC HTTPS** (không chấp nhận HTTP)
-- ⚠️ Không hoạt động với IP local qua HTTP
-- ⚠️ Phải là domain thật hoặc localhost với certificate
-
-**Giải pháp cho iOS:**
-```bash
-# Setup mDNS (Bonjour) để dùng .local domain
-# Thay vì 192.168.0.102:3000
-# Dùng: http://mycomputer.local:3000
-
-# Hoặc setup HTTPS với Let's Encrypt
-```
-
----
-
-## **🦊 Firefox**
-
-Firefox linh hoạt hơn Chrome và Safari!
-
-### Bước 1: Firefox Settings
-1. Click vào **menu** (☰) góc phải
-2. Chọn **Settings**
-3. Tab **Privacy & Security**
-4. Scroll xuống **Permissions** → **Camera** và **Microphone**
-5. Click **Settings** bên cạnh mỗi cái
-6. Đảm bảo không block website của bạn
-
-### Bước 2: Khi truy cập website
-1. Firefox sẽ hỏi cho phép camera/mic
-2. Click **Allow**
-3. ✅ Check **"Remember this decision"** để không hỏi lại
-
-### Firefox với IP Local:
-Firefox chấp nhận HTTP qua IP local tốt hơn Safari!
-
-**✅ Hoạt động tốt:**
-```
-http://localhost:3000
-http://127.0.0.1:3000
-http://192.168.0.102:3000  ✅ Firefox OK!
-```
-
----
-
 ## 🎯 Kiểm Tra Nhanh
 
 ### Test xem camera/mic có hoạt động không:
@@ -222,24 +125,13 @@ Audio tracks: 1
 
 ---
 
-## 📊 So Sánh Trình Duyệt
+## 📊 So Sánh Các Cách
 
-| Trình Duyệt | localhost | HTTP + IP Local | HTTPS + IP | Khuyến Nghị |
-|-------------|-----------|-----------------|------------|-------------|
-| **Chrome** | ✅ OK | ⚠️ Cần flag | ✅ OK | ⭐⭐⭐⭐⭐ |
-| **Firefox** | ✅ OK | ✅ OK | ✅ OK | ⭐⭐⭐⭐⭐ |
-| **Safari macOS** | ✅ OK | ❌ Block | ✅ OK | ⭐⭐⭐⭐ |
-| **Safari iOS** | ⚠️ Khó | ❌ Block | ✅ OK | ⭐⭐⭐ |
-| **Edge** | ✅ OK | ⚠️ Cần flag | ✅ OK | ⭐⭐⭐⭐ |
-
-### Giải pháp cho từng trường hợp:
-
-| Tình huống | Chrome | Safari | Firefox |
-|------------|--------|--------|---------|
-| **Test 1 máy** | localhost | localhost | localhost |
-| **Test 2 máy PC** | Chrome flag | HTTPS | IP trực tiếp |
-| **Test PC → Mobile** | HTTPS | HTTPS | HTTPS |
-| **Production** | HTTPS | HTTPS | HTTPS |
+| Cách | Độ Khó | Bảo Mật | Test 2 Máy | Khuyến Nghị |
+|------|--------|---------|------------|-------------|
+| **1. localhost** | ⭐ Dễ | ✅ Tốt | ❌ Không | ⭐⭐⭐⭐⭐ |
+| **2. Chrome Flag** | ⭐⭐ Trung bình | ⚠️ Thấp | ✅ Được | ⭐⭐⭐⭐ |
+| **3. HTTPS** | ⭐⭐⭐⭐ Khó | ✅ Tốt nhất | ✅ Được | ⭐⭐⭐ |
 
 ---
 
@@ -320,9 +212,9 @@ Audio tracks: 1
    - Copy lỗi để debug
 
 2. **Thử trình duyệt khác:**
-   - **Firefox** (Dễ nhất, chấp nhận IP local)
-   - **Edge** (Giống Chrome)
-   - **Brave** (Giống Chrome)
+   - Firefox
+   - Edge
+   - Brave
 
 3. **Kiểm tra camera/mic:**
    - Vào Windows Settings → Privacy → Camera/Microphone

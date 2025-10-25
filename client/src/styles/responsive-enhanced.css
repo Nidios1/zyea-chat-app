@@ -1,0 +1,663 @@
+/**
+ * Enhanced Responsive CSS
+ * Optimized for all screen sizes with fluid typography and proper touch targets
+ */
+
+/* ==================== CSS CUSTOM PROPERTIES ==================== */
+:root {
+  /* Dynamic viewport units (set by JS) */
+  --vh: 1vh;
+  --vw: 1vw;
+  
+  /* Keyboard height (set by JS when keyboard opens) */
+  --keyboard-height: 0px;
+  
+  /* Base spacing scale - fluid */
+  --space-xs: clamp(4px, 1vw, 6px);
+  --space-sm: clamp(8px, 2vw, 12px);
+  --space-md: clamp(12px, 3vw, 16px);
+  --space-lg: clamp(16px, 4vw, 24px);
+  --space-xl: clamp(24px, 6vw, 32px);
+  --space-2xl: clamp(32px, 8vw, 48px);
+  
+  /* Fluid typography - responsive font sizes */
+  --font-xs: clamp(11px, 2.5vw, 12px);
+  --font-sm: clamp(13px, 3vw, 14px);
+  --font-base: clamp(15px, 3.5vw, 16px);
+  --font-md: clamp(16px, 4vw, 18px);
+  --font-lg: clamp(18px, 4.5vw, 20px);
+  --font-xl: clamp(20px, 5vw, 24px);
+  --font-2xl: clamp(24px, 6vw, 32px);
+  --font-3xl: clamp(30px, 7.5vw, 40px);
+  
+  /* Touch target sizes */
+  --touch-min: 44px; /* Apple HIG minimum */
+  --touch-comfortable: 48px; /* Android Material Design */
+  --touch-large: 56px;
+  
+  /* Border radius scale */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+  
+  /* Container widths */
+  --container-mobile: 100%;
+  --container-tablet: 768px;
+  --container-desktop: 1024px;
+  --container-wide: 1280px;
+  
+  /* Z-index scale */
+  --z-base: 1;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal-backdrop: 400;
+  --z-modal: 500;
+  --z-popover: 600;
+  --z-tooltip: 700;
+  --z-notification: 800;
+  
+  /* Animation durations */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 350ms;
+  
+  /* Easing functions */
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.0, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* ==================== RESPONSIVE BREAKPOINTS ==================== */
+
+/* Extra Small - iPhone SE, Mini (320px - 375px) */
+@media (max-width: 375px) {
+  :root {
+    --font-xs: 11px;
+    --font-sm: 13px;
+    --font-base: 15px;
+    --font-md: 16px;
+    --font-lg: 17px;
+    --font-xl: 19px;
+    --font-2xl: 22px;
+    --font-3xl: 28px;
+    
+    --space-lg: 14px;
+    --space-xl: 20px;
+    --space-2xl: 28px;
+    
+    --touch-min: 44px; /* iOS minimum */
+  }
+  
+  /* Tighter spacing for smaller screens */
+  .container,
+  .container-fluid {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+
+/* Small - iPhone 12/13/14/15, 12 Mini (376px - 430px) */
+@media (min-width: 376px) and (max-width: 430px) {
+  :root {
+    --font-xs: 12px;
+    --font-sm: 14px;
+    --font-base: 16px;
+    --font-md: 17px;
+    --font-lg: 18px;
+    --font-xl: 20px;
+    --font-2xl: 24px;
+    --font-3xl: 30px;
+    
+    --touch-min: 44px;
+  }
+}
+
+/* iPhone 14 Pro Max, 15 Pro Max (430px) - Specific optimizations */
+@media (min-width: 428px) and (max-width: 430px) {
+  :root {
+    /* Slightly larger fonts for Pro Max models */
+    --font-base: 16px;
+    --font-md: 18px;
+    --font-lg: 19px;
+    --font-xl: 21px;
+  }
+}
+
+/* Medium - Tablets (431px - 768px) */
+@media (min-width: 431px) and (max-width: 768px) {
+  :root {
+    --font-xs: 12px;
+    --font-sm: 14px;
+    --font-base: 16px;
+    --font-md: 18px;
+    --font-lg: 20px;
+    --font-xl: 22px;
+    --font-2xl: 28px;
+    --font-3xl: 36px;
+    
+    --touch-min: 48px;
+  }
+}
+
+/* Large - Desktop (769px - 1024px) */
+@media (min-width: 769px) and (max-width: 1024px) {
+  :root {
+    --font-xs: 13px;
+    --font-sm: 14px;
+    --font-base: 16px;
+    --font-md: 18px;
+    --font-lg: 20px;
+    --font-xl: 24px;
+    --font-2xl: 32px;
+    --font-3xl: 40px;
+  }
+}
+
+/* Extra Large - Large Desktop (1025px+) */
+@media (min-width: 1025px) {
+  :root {
+    --font-xs: 13px;
+    --font-sm: 15px;
+    --font-base: 16px;
+    --font-md: 18px;
+    --font-lg: 22px;
+    --font-xl: 26px;
+    --font-2xl: 36px;
+    --font-3xl: 48px;
+  }
+}
+
+/* ==================== LANDSCAPE OPTIMIZATIONS ==================== */
+@media (max-width: 768px) and (orientation: landscape) {
+  :root {
+    /* Reduce vertical spacing in landscape */
+    --space-xs: 3px;
+    --space-sm: 6px;
+    --space-md: 9px;
+    --space-lg: 12px;
+    --space-xl: 18px;
+    --space-2xl: 24px;
+    
+    /* Slightly smaller fonts in landscape */
+    --font-base: clamp(14px, 3vw, 15px);
+    --font-md: clamp(15px, 3.5vw, 16px);
+    --font-lg: clamp(16px, 4vw, 18px);
+    
+    /* Smaller touch targets in landscape to save space */
+    --touch-min: 40px;
+  }
+  
+  /* Make containers use horizontal space better */
+  .container,
+  .content-wrapper {
+    padding-left: max(env(safe-area-inset-left, 0), 16px);
+    padding-right: max(env(safe-area-inset-right, 0), 16px);
+  }
+  
+  /* Compact header/footer in landscape */
+  .mobile-header,
+  .mobile-footer,
+  .bottom-nav {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  
+  /* Hide unnecessary elements in landscape */
+  .hide-landscape {
+    display: none !important;
+  }
+}
+
+/* ==================== UTILITY CLASSES ==================== */
+
+/* Typography utilities */
+.text-xs { font-size: var(--font-xs); }
+.text-sm { font-size: var(--font-sm); }
+.text-base { font-size: var(--font-base); }
+.text-md { font-size: var(--font-md); }
+.text-lg { font-size: var(--font-lg); }
+.text-xl { font-size: var(--font-xl); }
+.text-2xl { font-size: var(--font-2xl); }
+.text-3xl { font-size: var(--font-3xl); }
+
+/* Spacing utilities */
+.space-xs { gap: var(--space-xs); }
+.space-sm { gap: var(--space-sm); }
+.space-md { gap: var(--space-md); }
+.space-lg { gap: var(--space-lg); }
+.space-xl { gap: var(--space-xl); }
+.space-2xl { gap: var(--space-2xl); }
+
+.p-xs { padding: var(--space-xs); }
+.p-sm { padding: var(--space-sm); }
+.p-md { padding: var(--space-md); }
+.p-lg { padding: var(--space-lg); }
+.p-xl { padding: var(--space-xl); }
+.p-2xl { padding: var(--space-2xl); }
+
+.m-xs { margin: var(--space-xs); }
+.m-sm { margin: var(--space-sm); }
+.m-md { margin: var(--space-md); }
+.m-lg { margin: var(--space-lg); }
+.m-xl { margin: var(--space-xl); }
+.m-2xl { margin: var(--space-2xl); }
+
+/* Touch target utilities */
+.touch-target {
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.touch-target-lg {
+  min-width: var(--touch-comfortable);
+  min-height: var(--touch-comfortable);
+}
+
+/* Container utilities */
+.container {
+  width: 100%;
+  max-width: var(--container-desktop);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: var(--space-lg);
+  padding-right: var(--space-lg);
+}
+
+.container-fluid {
+  width: 100%;
+  padding-left: var(--space-lg);
+  padding-right: var(--space-lg);
+}
+
+/* Responsive visibility */
+.hide-mobile { display: block; }
+.show-mobile { display: none; }
+.hide-tablet { display: block; }
+.show-tablet { display: none; }
+.hide-desktop { display: block; }
+.show-desktop { display: none; }
+
+@media (max-width: 768px) {
+  .hide-mobile { display: none !important; }
+  .show-mobile { display: block !important; }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .hide-tablet { display: none !important; }
+  .show-tablet { display: block !important; }
+}
+
+@media (min-width: 1025px) {
+  .hide-desktop { display: none !important; }
+  .show-desktop { display: block !important; }
+}
+
+/* ==================== DYNAMIC HEIGHT (for keyboard) ==================== */
+
+/* Use --vh instead of vh for accurate height */
+.full-height {
+  height: calc(var(--vh, 1vh) * 100);
+}
+
+.min-full-height {
+  min-height: calc(var(--vh, 1vh) * 100);
+}
+
+/* Adjust content when keyboard is visible */
+.keyboard-visible .adjust-for-keyboard {
+  height: calc(calc(var(--vh, 1vh) * 100) - var(--keyboard-height, 0px));
+}
+
+/* ==================== IMPROVED SCROLLING ==================== */
+
+.smooth-scroll {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* Custom scrollbar for desktop */
+@media (min-width: 769px) {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+  }
+}
+
+/* ==================== SAFE AREA HANDLING ==================== */
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-area-left {
+  padding-left: env(safe-area-inset-left, 0);
+}
+
+.safe-area-right {
+  padding-right: env(safe-area-inset-right, 0);
+}
+
+.safe-area-all {
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+}
+
+/* ==================== TOUCH-FRIENDLY INTERACTIONS ==================== */
+
+/* Remove tap highlight on mobile */
+.no-tap-highlight {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* Add touch feedback */
+.touch-feedback {
+  position: relative;
+  overflow: hidden;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.touch-feedback:active {
+  transform: scale(0.97);
+}
+
+/* Ripple effect container */
+.ripple {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  transform: translate(-50%, -50%);
+  transition: width var(--duration-normal) var(--ease-out),
+              height var(--duration-normal) var(--ease-out);
+}
+
+.ripple:active::after {
+  width: 200%;
+  height: 200%;
+}
+
+/* ==================== OPTIMIZED IMAGES ==================== */
+
+.responsive-img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.responsive-img-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.responsive-img-contain {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Lazy loading optimization */
+img[loading="lazy"] {
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+img[loading="lazy"].loaded {
+  opacity: 1;
+}
+
+/* ==================== PERFORMANCE OPTIMIZATIONS ==================== */
+
+/* Hardware acceleration for smooth animations */
+.hardware-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.will-change-opacity {
+  will-change: opacity;
+}
+
+.will-change-transform {
+  will-change: transform;
+}
+
+/* Disable animations for low-power mode */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  .will-change-opacity,
+  .will-change-transform {
+    will-change: auto;
+  }
+}
+
+/* ==================== DARK MODE SUPPORT ==================== */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Update colors for dark mode if needed */
+    color-scheme: dark;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #2a2a2a;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #4a4a4a;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #5a5a5a;
+  }
+}
+
+/* ==================== PRINT STYLES ==================== */
+
+@media print {
+  .no-print,
+  .mobile-nav,
+  .sidebar,
+  button:not(.print-button) {
+    display: none !important;
+  }
+  
+  * {
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+  }
+  
+  body {
+    font-size: 12pt;
+    line-height: 1.5;
+  }
+}
+
+/* ==================== ACCESSIBILITY ==================== */
+
+/* Focus visible for keyboard navigation */
+:focus-visible {
+  outline: 2px solid #0084ff;
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Skip to main content link */
+.skip-to-main {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: #0084ff;
+  color: white;
+  padding: var(--space-md);
+  z-index: 999999;
+}
+
+.skip-to-main:focus {
+  top: 0;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  * {
+    border-color: currentColor !important;
+  }
+  
+  button,
+  .button {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Screen reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ==================== INPUT OPTIMIZATIONS (MOBILE) ==================== */
+
+@media (max-width: 768px) {
+  /* CRITICAL: Prevent zoom on input focus (iOS) */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="number"],
+  textarea,
+  select {
+    font-size: 16px !important; /* Must be 16px+ to prevent iOS zoom */
+    -webkit-text-size-adjust: 100%;
+    -webkit-appearance: none; /* Remove iOS default styling */
+    appearance: none;
+  }
+  
+  /* Better touch targets for form elements */
+  input,
+  textarea,
+  select,
+  button {
+    min-height: var(--touch-min);
+    padding: var(--space-sm) var(--space-md);
+  }
+  
+  /* Larger checkboxes and radio buttons for easier tapping */
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 22px;
+    height: 22px;
+    margin: var(--space-xs);
+  }
+  
+  /* Remove iOS input shadows */
+  input,
+  textarea,
+  select {
+    box-shadow: none;
+    -webkit-box-shadow: none;
+  }
+  
+  /* Style autofill to match app theme */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: inherit;
+    -webkit-box-shadow: 0 0 0px 1000px white inset;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+}
+
+/* ==================== SPECIFIC iPhone MODEL OPTIMIZATIONS ==================== */
+
+/* iPhone 14 Pro / 15 Pro - Dynamic Island */
+@media (min-width: 393px) and (max-width: 393px) and (min-height: 852px) {
+  :root {
+    /* Extra top padding for Dynamic Island */
+    --safe-area-extra-top: 10px;
+  }
+  
+  .mobile-header,
+  .top-bar {
+    padding-top: calc(env(safe-area-inset-top) + var(--safe-area-extra-top, 10px));
+  }
+}
+
+/* iPhone SE (2nd/3rd gen) - Smaller screen optimization */
+@media (max-width: 375px) and (max-height: 667px) {
+  :root {
+    /* Compact spacing for smaller screens */
+    --space-sm: 6px;
+    --space-md: 10px;
+    --space-lg: 12px;
+  }
+  
+  /* Smaller font sizes */
+  .text-lg { font-size: 16px; }
+  .text-xl { font-size: 18px; }
+}
+
+/* iPhone 12 Mini, 13 Mini - Compact optimization */
+@media (min-width: 360px) and (max-width: 375px) and (min-height: 780px) {
+  :root {
+    /* Balance between readable and space-efficient */
+    --font-base: 15px;
+    --font-md: 16px;
+    --space-md: 10px;
+  }
+}
+

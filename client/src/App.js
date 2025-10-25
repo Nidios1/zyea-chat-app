@@ -7,13 +7,15 @@ import { SplashScreen as CapacitorSplash } from '@capacitor/splash-screen';
 
 import AuthContext from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import ResponsiveWrapper from './components/Common/ResponsiveWrapper';
 import Login from './components/Auth/Login';
 import MobileLogin from './components/Mobile/MobileLogin';
 import MobileRegister from './components/Mobile/MobileRegister';
 import MobileForgotPassword from './components/Mobile/MobileForgotPassword';
 import Register from './components/Auth/Register';
 import ForgotPassword from './components/Auth/ForgotPassword';
-import Chat from './components/Chat/Chat';
+import DesktopChat from './components/Desktop/DesktopChat';
+import MobileChat from './components/Mobile/MobileChat';
 import SplashScreen from './components/Loading/SplashScreen';
 import AppDownloadPrompt from './components/Loading/AppDownloadPrompt';
 import InstallPrompt from './components/Common/InstallPrompt';
@@ -418,10 +420,11 @@ function App() {
   // (SplashScreen gây animation và delay không cần thiết)
 
   return (
-    <ThemeProvider>
-      <AuthContext.Provider value={{ user, login, logout, clearUserState, preloadedData }}>
-        <Router>
-          <div className="App">
+    <ResponsiveWrapper>
+      <ThemeProvider>
+        <AuthContext.Provider value={{ user, login, logout, clearUserState, preloadedData }}>
+          <Router>
+            <div className="App">
             {/* Offline indicator */}
             {!isOnline && (
               <div style={{
@@ -443,6 +446,7 @@ function App() {
             )}
             
             <Routes>
+              {/* Mobile Auth Routes - Tách biệt hoàn toàn cho Mobile */}
               <Route 
                 path="/m/login" 
                 element={!user ? <MobileLogin /> : <Navigate to="/" />} 
@@ -455,21 +459,25 @@ function App() {
                 path="/m/forgot-password" 
                 element={!user ? <MobileForgotPassword /> : <Navigate to="/" />} 
               />
+              
+              {/* PC Auth Routes - Tách biệt hoàn toàn cho PC */}
               <Route 
                 path="/login" 
                 element={!user ? (isMobile ? <Navigate to="/m/login" /> : <Login />) : <Navigate to="/" />} 
               />
               <Route 
                 path="/register" 
-                element={!user ? <Register /> : <Navigate to="/" />} 
+                element={!user ? (isMobile ? <Navigate to="/m/register" /> : <Register />) : <Navigate to="/" />} 
               />
               <Route 
                 path="/forgot-password" 
-                element={!user ? <ForgotPassword /> : <Navigate to="/" />} 
+                element={!user ? (isMobile ? <Navigate to="/m/forgot-password" /> : <ForgotPassword />) : <Navigate to="/" />} 
               />
+              
+              {/* Main Route - Auto detect device */}
               <Route 
                 path="/" 
-                element={user ? <Chat /> : (isMobile ? <MobileLogin /> : <Navigate to="/login" />)} 
+                element={user ? (isMobile ? <MobileChat /> : <DesktopChat />) : (isMobile ? <Navigate to="/m/login" /> : <Navigate to="/login" />)} 
               />
             </Routes>
             
@@ -505,10 +513,11 @@ function App() {
               draggable
               pauseOnHover
             />
-          </div>
-        </Router>
-      </AuthContext.Provider>
-    </ThemeProvider>
+            </div>
+          </Router>
+        </AuthContext.Provider>
+      </ThemeProvider>
+    </ResponsiveWrapper>
   );
 }
 

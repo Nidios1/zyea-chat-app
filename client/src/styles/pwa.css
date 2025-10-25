@@ -1,5 +1,20 @@
 /* PWA-specific styles for smooth app-like experience */
 
+/* CRITICAL: 60fps Performance Optimization */
+:root {
+  /* Animation timing functions (iOS-like) */
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+  --ease-in-out-expo: cubic-bezier(0.87, 0, 0.13, 1);
+  --ease-out-quint: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-spring: cubic-bezier(0.4, 0.0, 0.2, 1);
+  
+  /* Duration (match iOS) */
+  --duration-instant: 100ms;
+  --duration-fast: 200ms;
+  --duration-normal: 300ms;
+  --duration-slow: 500ms;
+}
+
 /* Smooth transitions and animations */
 * {
   -webkit-tap-highlight-color: transparent;
@@ -8,6 +23,13 @@
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
+  /* Force GPU acceleration for all elements */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-perspective: 1000px;
+  perspective: 1000px;
 }
 
 /* Allow text selection in input fields */
@@ -18,10 +40,13 @@ input, textarea, [contenteditable] {
   user-select: text;
 }
 
-/* Smooth scrolling */
+/* Smooth scrolling with 60fps optimization */
 html {
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
+  /* Force GPU compositing */
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
 }
 
 /* Prevent zoom on double tap */
@@ -29,7 +54,7 @@ html {
   touch-action: manipulation;
 }
 
-/* App-like fullscreen experience */
+/* App-like fullscreen experience with 60fps optimization */
 body {
   margin: 0;
   padding: 0;
@@ -40,6 +65,10 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Force GPU layer for body */
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  will-change: scroll-position;
 }
 
 /* PWA safe area handling */
@@ -154,22 +183,35 @@ body {
   }
 }
 
-/* Touch feedback */
+/* Touch feedback with iOS-like feel */
 .touchable {
-  transition: all 0.2s ease;
+  transition: transform var(--duration-fast, 200ms) var(--ease-spring, cubic-bezier(0.4, 0.0, 0.2, 1)),
+              opacity var(--duration-fast, 200ms) var(--ease-spring, cubic-bezier(0.4, 0.0, 0.2, 1));
   cursor: pointer;
+  /* Force GPU acceleration */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: transform, opacity;
 }
 
 .touchable:active {
-  transform: scale(0.95);
+  /* iOS-like bounce */
+  transform: scale(0.92) translateZ(0);
   opacity: 0.8;
+  transition: transform var(--duration-instant, 100ms) cubic-bezier(0.4, 0.0, 1, 1),
+              opacity var(--duration-instant, 100ms) ease;
 }
 
-/* Smooth button animations */
+/* Smooth button animations with 60fps optimization */
 .btn {
   position: relative;
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: transform var(--duration-normal, 300ms) var(--ease-spring, cubic-bezier(0.4, 0.0, 0.2, 1)),
+              background-color var(--duration-normal, 300ms) var(--ease-spring, cubic-bezier(0.4, 0.0, 0.2, 1));
+  /* Force GPU layer */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .btn::before {
@@ -181,8 +223,11 @@ body {
   height: 0;
   background: rgba(255, 255, 255, 0.3);
   border-radius: 50%;
-  transform: translate(-50%, -50%);
-  transition: width 0.6s, height 0.6s;
+  transform: translate(-50%, -50%) translateZ(0);
+  transition: width 0.6s var(--ease-out-expo, cubic-bezier(0.19, 1, 0.22, 1)),
+              height 0.6s var(--ease-out-expo, cubic-bezier(0.19, 1, 0.22, 1));
+  /* Force GPU acceleration for ripple effect */
+  will-change: width, height;
 }
 
 .btn:active::before {
@@ -190,27 +235,49 @@ body {
   height: 300px;
 }
 
-/* Card animations */
+.btn:active {
+  /* iOS-like subtle scale on press */
+  transform: scale(0.96) translateZ(0);
+  transition: transform var(--duration-instant, 100ms) cubic-bezier(0.4, 0.0, 1, 1);
+}
+
+/* Card animations with 60fps optimization */
 .card {
-  transition: all 0.3s ease;
+  transition: transform var(--duration-normal, 300ms) var(--ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1)),
+              box-shadow var(--duration-normal, 300ms) var(--ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1));
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  /* Force GPU acceleration */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: transform, box-shadow;
+  /* Prevent layer repainting */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 .card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-2px) translateZ(0);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
-/* Message animations */
+.card:active {
+  /* iOS-like subtle press feedback */
+  transform: translateY(-1px) scale(0.98) translateZ(0);
+  transition: transform var(--duration-instant, 100ms) cubic-bezier(0.4, 0.0, 1, 1);
+}
+
+/* Message animations with 60fps optimization */
 .message-enter {
   opacity: 0;
-  transform: translateY(20px) scale(0.9);
+  transform: translateY(20px) scale(0.9) translateZ(0);
+  will-change: transform, opacity;
 }
 
 .message-enter-active {
   opacity: 1;
-  transform: translateY(0) scale(1);
-  transition: all 0.3s ease;
+  transform: translateY(0) scale(1) translateZ(0);
+  transition: transform var(--duration-normal, 300ms) var(--ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1)),
+              opacity var(--duration-normal, 300ms) var(--ease-out-quint, cubic-bezier(0.23, 1, 0.32, 1));
 }
 
 /* Pull to refresh */
@@ -278,25 +345,40 @@ body {
   animation: slideInUp 0.3s ease;
 }
 
-/* Performance optimizations */
+/* Performance optimizations for 60fps */
 .will-change-transform {
   will-change: transform;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
 .will-change-opacity {
   will-change: opacity;
-}
-
-/* Hardware acceleration */
-.hardware-accelerated {
-  transform: translateZ(0);
   -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
-/* Smooth scrolling containers */
+/* Hardware acceleration - Force GPU layer */
+.hardware-accelerated {
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-perspective: 1000px;
+  perspective: 1000px;
+}
+
+/* Smooth scrolling containers with momentum */
 .smooth-scroll {
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
+  /* Force GPU acceleration for scrolling */
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  /* Contain repaints */
+  contain: layout style paint;
+  /* Enable momentum scrolling */
+  overscroll-behavior: contain;
 }
 
 /* Focus styles for accessibility */

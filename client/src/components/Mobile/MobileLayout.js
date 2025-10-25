@@ -13,31 +13,48 @@ import {
 } from 'react-icons/fi';
 import Sidebar from '../Chat/Sidebar';
 import ChatArea from '../Chat/ChatArea';
+import { useResponsive } from '../../hooks/useResponsive';
 
 const MobileContainer = styled.div`
   display: none;
   flex-direction: column;
-  height: 100vh;
+  /* Use dynamic viewport height */
+  height: calc(var(--vh, 1vh) * 100);
   background: #f8f9fa;
+  overflow: hidden;
 
   @media (max-width: 768px) {
     display: flex;
+  }
+  
+  /* Landscape optimization */
+  @media (max-width: 768px) and (orientation: landscape) {
+    /* Compact layout in landscape */
   }
 `;
 
 const TopBar = styled.div`
   background: linear-gradient(135deg, #0084ff 0%, #00a651 100%);
-  padding: 12px 16px;
-  padding-top: calc(env(safe-area-inset-top, 12px) + 12px);
+  padding: clamp(8px, 2vw, 12px) clamp(12px, 3vw, 16px);
+  padding-top: calc(env(safe-area-inset-top, 12px) + clamp(8px, 2vw, 12px));
   display: flex;
   align-items: center;
   justify-content: space-between;
   color: white;
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: var(--z-sticky, 200);
   /* Extend background into notch area */
   margin-top: calc(-1 * env(safe-area-inset-top, 0px));
+  /* Optimize for performance */
+  will-change: transform;
+  backface-visibility: hidden;
+  
+  /* Landscape - reduce height */
+  @media (max-width: 768px) and (orientation: landscape) {
+    padding: clamp(6px, 1.5vw, 8px) clamp(12px, 3vw, 16px);
+    padding-top: calc(env(safe-area-inset-top, 8px) + 6px);
+  }
 `;
 
 const SearchSection = styled.div`
@@ -52,36 +69,69 @@ const SearchInput = styled.input`
   background: rgba(255, 255, 255, 0.2);
   border: none;
   border-radius: 20px;
-  padding: 8px 16px;
+  padding: clamp(6px, 1.5vw, 8px) clamp(12px, 3vw, 16px);
   color: white;
-  font-size: 14px;
+  /* CRITICAL: 16px minimum to prevent iOS zoom */
+  font-size: clamp(15px, 3.5vw, 16px);
   outline: none;
+  -webkit-appearance: none;
+  -webkit-text-size-adjust: 100%;
   
   &::placeholder {
     color: rgba(255, 255, 255, 0.7);
+  }
+  
+  /* Landscape - smaller padding */
+  @media (max-width: 768px) and (orientation: landscape) {
+    padding: 4px 12px;
+    font-size: 14px;
   }
 `;
 
 const ActionButtons = styled.div`
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: clamp(8px, 2vw, 12px);
 `;
 
 const ActionButton = styled.button`
   background: none;
   border: none;
   color: white;
-  padding: 8px;
+  padding: clamp(6px, 1.5vw, 8px);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.2s ease;
+  /* iOS-like smooth transition */
+  transition: background 0.25s cubic-bezier(0.4, 0.0, 0.2, 1),
+              transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  /* Touch target minimum */
+  min-width: var(--touch-min, 44px);
+  min-height: var(--touch-min, 44px);
+  -webkit-tap-highlight-color: transparent;
+  /* Hardware acceleration */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform, background-color;
   
   &:hover {
     background: rgba(255, 255, 255, 0.2);
+  }
+  
+  &:active {
+    /* iOS-like bounce on tap */
+    transform: scale(0.92) translateZ(0);
+    background: rgba(255, 255, 255, 0.3);
+    transition: background 0.1s ease, transform 0.1s cubic-bezier(0.4, 0.0, 1, 1);
+  }
+  
+  /* Landscape - smaller */
+  @media (max-width: 768px) and (orientation: landscape) {
+    min-width: 36px;
+    min-height: 36px;
+    padding: 4px;
   }
 `;
 
@@ -108,18 +158,29 @@ const Tab = styled.button`
   padding: 8px 0;
   position: relative;
   cursor: pointer;
+  /* iOS-like smooth transition */
+  transition: color 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
+  -webkit-tap-highlight-color: transparent;
   
-  ${props => props.active && `
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: -12px;
-      left: 0;
-      right: 0;
-      height: 2px;
-      background: #0084ff;
-    }
-  `}
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -12px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #0084ff;
+    /* Smooth slide-in animation like iOS */
+    transform: scaleX(${props => props.active ? '1' : '0'});
+    transform-origin: center;
+    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+  }
+  
+  &:active {
+    /* Subtle tap feedback */
+    opacity: 0.7;
+    transition: opacity 0.1s ease;
+  }
 `;
 
 const FilterButton = styled.button`
@@ -163,12 +224,25 @@ const ConversationItem = styled.div`
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  transition: all 0.2s ease;
+  /* iOS-like smooth transition */
+  transition: background-color 0.25s cubic-bezier(0.4, 0.0, 0.2, 1),
+              transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
   background: ${props => props.selected ? '#e3f2fd' : 'white'};
   border-bottom: 1px solid #f0f0f0;
+  /* Hardware acceleration */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: background-color, transform;
 
   &:hover {
     background: ${props => props.selected ? '#e3f2fd' : '#f5f5f5'};
+  }
+  
+  &:active {
+    /* iOS-like subtle tap feedback */
+    transform: scale(0.98) translateZ(0);
+    background: ${props => props.selected ? '#d1e8ff' : '#ebebeb'};
+    transition: all 0.1s cubic-bezier(0.4, 0.0, 1, 1);
   }
 `;
 
@@ -250,16 +324,29 @@ const BottomNav = styled.div`
   box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.05);
   position: sticky;
   bottom: 0;
-  z-index: 100;
+  z-index: var(--z-sticky, 200);
   /* SIMPLE: Let padding-bottom auto fill safe area */
-  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-bottom: max(env(safe-area-inset-bottom, 0), 8px);
   /* Body background is white, so safe area automatically matches! */
+  /* Performance optimization */
+  will-change: transform;
+  backface-visibility: hidden;
+  
+  /* Landscape - reduce height */
+  @media (max-width: 768px) and (orientation: landscape) {
+    padding-bottom: max(env(safe-area-inset-bottom, 0), 4px);
+  }
 `;
 
 const NavItemsContainer = styled.div`
   display: flex;
-  padding: 2px 0;
+  padding: clamp(2px, 0.5vw, 4px) 0;
   /* Reduce padding to move items closer to bottom */
+  
+  /* Landscape - even tighter */
+  @media (max-width: 768px) and (orientation: landscape) {
+    padding: 1px 0;
+  }
 `;
 
 const NavItem = styled.button`
@@ -267,26 +354,62 @@ const NavItem = styled.button`
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: clamp(1px, 0.25vw, 2px);
   /* Reduced gap for tighter spacing */
   background: none;
   border: none;
   color: ${props => props.active ? '#0084ff' : '#666'};
   cursor: pointer;
-  padding: 4px 4px 2px 4px;
+  padding: clamp(3px, 0.75vw, 4px) clamp(2px, 0.5vw, 4px);
   /* Reduced padding to move items closer to bottom */
   position: relative;
-  transition: color 0.2s ease;
+  /* iOS-like smooth transition with cubic-bezier */
+  transition: color 0.25s cubic-bezier(0.4, 0.0, 0.2, 1),
+              transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  -webkit-tap-highlight-color: transparent;
+  /* Ensure minimum touch target */
+  min-height: var(--touch-min, 44px);
+  /* Hardware acceleration for smooth animations */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  
+  &:active {
+    /* iOS-like bounce effect on tap */
+    transform: scale(0.92) translateZ(0);
+    transition: transform 0.1s cubic-bezier(0.4, 0.0, 1, 1);
+  }
+  
+  /* Landscape - smaller */
+  @media (max-width: 768px) and (orientation: landscape) {
+    min-height: 36px;
+    padding: 2px;
+    gap: 1px;
+  }
 `;
 
 const NavIcon = styled.div`
-  font-size: 20px;
+  font-size: clamp(19px, 4.5vw, 20px);
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* Landscape - slightly smaller */
+  @media (max-width: 768px) and (orientation: landscape) {
+    font-size: 18px;
+  }
 `;
 
 const NavLabel = styled.div`
-  font-size: 12px;
+  font-size: clamp(11px, 2.5vw, 12px);
   font-weight: 500;
+  white-space: nowrap;
+  
+  /* Landscape - hide labels to save space */
+  @media (max-width: 768px) and (orientation: landscape) {
+    font-size: 10px;
+  }
 `;
 
 const NotificationBadge = styled.div`

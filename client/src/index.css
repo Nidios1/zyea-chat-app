@@ -3,6 +3,7 @@
 @import './styles/pwa.css';
 @import './styles/safe-area.css';
 @import './styles/iphone-optimization.css';
+@import './styles/responsive-enhanced.css';
 
 /* CRITICAL: iOS Safe Area Support for Notch/Dynamic Island */
 :root {
@@ -202,6 +203,7 @@ code {
     -ms-user-select: text;
     user-select: text;
   }
+}
   
 /* PWA specific styles */
 @media (display-mode: standalone) {
@@ -245,7 +247,6 @@ code {
     scroll-snap-type: none;
     overscroll-behavior: contain;
   }
-}
 }
 
 /* Mobile landscape orientation */

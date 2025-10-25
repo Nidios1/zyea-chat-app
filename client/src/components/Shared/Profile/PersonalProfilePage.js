@@ -22,13 +22,13 @@ import {
   FiCheck
 } from 'react-icons/fi';
 import { BiQrScan } from 'react-icons/bi';
-import AuthContext from '../../contexts/AuthContext';
-import { chatAPI } from '../../utils/api';
-import { getInitials } from '../../utils/nameUtils';
-import { useTheme } from '../../contexts/ThemeContext';
-import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
-import { getApiBaseUrl } from '../../utils/platformConfig';
-import { getCurrentVersion } from '../../utils/liveUpdate';
+import AuthContext from '../../../contexts/AuthContext';
+import { chatAPI } from '../../../utils/api';
+import { getInitials } from '../../../utils/nameUtils';
+import { useTheme } from '../../../contexts/ThemeContext';
+import { getAvatarURL, getUploadedImageURL } from '../../../utils/imageUtils';
+import { getApiBaseUrl } from '../../../utils/platformConfig';
+import { getCurrentVersion } from '../../../utils/liveUpdate';
 
 const PersonalProfileContainer = styled.div`
   position: fixed;

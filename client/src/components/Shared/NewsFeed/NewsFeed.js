@@ -25,9 +25,9 @@ import PostCreator from './PostCreator';
 import Post from './Post';
 import PostCreatorModal from './PostCreatorModal';
 import PullToRefresh from '../Common/PullToRefresh';
-import { newsfeedAPI } from '../../utils/api';
-import { getInitials } from '../../utils/nameUtils';
-import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
+import { newsfeedAPI } from '../../../utils/api';
+import { getInitials } from '../../../utils/nameUtils';
+import { getAvatarURL, getUploadedImageURL } from '../../../utils/imageUtils';
 
 const NewsFeedContainer = styled.div`
   position: fixed;

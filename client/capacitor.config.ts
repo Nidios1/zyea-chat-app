@@ -67,7 +67,14 @@ const config: CapacitorConfig = {
     allowsInlineMediaPlayback: true,
     mediaTypesRequiringUserActionForPlayback: 'none',
     // Enable camera and microphone
-    webViewMediaCaptureEnabled: true
+    webViewMediaCaptureEnabled: true,
+    // iOS appearance config
+    backgroundColor: '#0084ff',
+    overrideUserInterfaceStyle: 'Light',
+    // Disable long press context menu
+    suppressesIncrementalRendering: false,
+    // Animation config for smooth iOS-like experience
+    allowsBackForwardNavigationGestures: true
   },
   // Android specific config
   android: {

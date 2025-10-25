@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styled, { keyframes } from 'styled-components';
 
-// Animation đơn giản và mượt
+// Animations đơn giản
 const rotate = keyframes`
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
@@ -19,30 +19,27 @@ const scaleIn = keyframes`
 
 const PullToRefreshContainer = styled.div`
   position: relative;
-  flex: 1;
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  min-height: 100vh;
 `;
 
 const PullIndicator = styled.div`
   position: absolute;
-  top: -60px;
+  top: 0;
   left: 0;
   right: 0;
-  height: 60px;
+  height: ${props => Math.min(props.pullDistance, 60)}px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg-primary, #ffffff);
-  transform: translateY(${props => Math.min(props.pullDistance, 60)}px);
+  transform: translateY(-${props => Math.min(props.pullDistance, 60)}px);
   transition: ${props => props.isPulling ? 'none' : 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)'};
-  z-index: 999;
+  z-index: 1000;
   box-shadow: ${props => props.pullDistance > 5 
     ? '0 2px 4px var(--shadow-color, rgba(0, 0, 0, 0.08))' 
     : 'none'
   };
+  border-bottom: 1px solid var(--border-color, #e4e6eb);
 `;
 
 const LoaderWrapper = styled.div`
@@ -53,7 +50,6 @@ const LoaderWrapper = styled.div`
   animation: ${scaleIn} 0.3s ease-out;
 `;
 
-// Spinner giống Zalo/Facebook
 const Spinner = styled.div`
   width: 24px;
   height: 24px;
@@ -69,7 +65,6 @@ const Spinner = styled.div`
   transition: ${props => props.isRefreshing ? 'none' : 'transform 0.2s ease-out'};
 `;
 
-// Text đơn giản
 const RefreshText = styled.div`
   font-size: 14px;
   color: var(--text-secondary, #65676b);
@@ -80,90 +75,66 @@ const RefreshText = styled.div`
 `;
 
 const ContentWrapper = styled.div`
-  flex: 1;
   transform: translateY(${props => Math.min(props.pullDistance, 60)}px);
   transition: ${props => props.isPulling ? 'none' : 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)'};
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  display: flex;
-  flex-direction: column;
 `;
 
-const PullToRefresh = ({ 
-  children, 
-  onRefresh, 
-  threshold = 60,
-  disabled = false
-}) => {
+const PullToRefresh = ({ onRefresh, children, threshold = 60, disabled = false }) => {
+  const [isPulling, setIsPulling] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isPulling, setIsPulling] = useState(false);
   const [startY, setStartY] = useState(0);
+  
   const containerRef = useRef(null);
-  const contentRef = useRef(null);
 
   useEffect(() => {
-    const contentElement = contentRef.current;
-    if (!contentElement) return;
+    const container = containerRef.current;
+    if (!container || disabled) return;
 
     const handleTouchStart = (e) => {
-      if (disabled || isRefreshing) return;
-      
-      const touch = e.touches[0];
-      
-      if (contentElement.scrollTop === 0) {
-        setStartY(touch.clientY);
+      if (window.scrollY === 0) {
+        setStartY(e.touches[0].clientY);
       }
     };
 
     const handleTouchMove = (e) => {
-      if (disabled || isRefreshing || startY === 0) return;
+      if (isRefreshing || startY === 0) return;
 
-      const touch = e.touches[0];
-      const deltaY = touch.clientY - startY;
+      const currentTouchY = e.touches[0].clientY;
+      const deltaY = currentTouchY - startY;
       
-      if (contentElement.scrollTop === 0 && deltaY > 0) {
-        e.preventDefault();
-        setIsPulling(true);
-        
-        // Resistance effect như iOS
+      if (window.scrollY === 0 && deltaY > 0) {
         const resistance = 0.4;
-        const maxDistance = 80;
-        const distance = Math.min(deltaY * resistance, maxDistance);
+        const distance = Math.min(deltaY * resistance, 80);
         
         setPullDistance(distance);
+        setIsPulling(true);
+        
+        if (distance > 10) {
+          e.preventDefault();
+        }
       }
     };
 
-    const handleTouchEnd = () => {
-      if (disabled || isRefreshing || !isPulling) return;
+    const handleTouchEnd = async () => {
+      if (isRefreshing || !isPulling) return;
 
       if (pullDistance >= threshold) {
         setIsRefreshing(true);
         setPullDistance(60);
         
-        if (onRefresh) {
-          Promise.resolve(onRefresh())
-            .then(() => {
-              console.log('✅ Refresh done');
-            })
-            .catch((error) => {
-              console.error('❌ Refresh error:', error);
-            })
-            .finally(() => {
-              setTimeout(() => {
-                setIsRefreshing(false);
-                setPullDistance(0);
-                setIsPulling(false);
-              }, 500);
-            });
-        } else {
+        try {
+          console.log('🔄 Refreshing...');
+          await Promise.resolve(onRefresh());
+          console.log('✅ Done');
+        } catch (error) {
+          console.error('❌ Error:', error);
+        } finally {
           setTimeout(() => {
             setIsRefreshing(false);
             setPullDistance(0);
             setIsPulling(false);
-          }, 1000);
+          }, 500);
         }
       } else {
         setPullDistance(0);
@@ -173,16 +144,16 @@ const PullToRefresh = ({
       setStartY(0);
     };
 
-    contentElement.addEventListener('touchstart', handleTouchStart, { passive: true });
-    contentElement.addEventListener('touchmove', handleTouchMove, { passive: false });
-    contentElement.addEventListener('touchend', handleTouchEnd, { passive: true });
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
 
     return () => {
-      contentElement.removeEventListener('touchstart', handleTouchStart);
-      contentElement.removeEventListener('touchmove', handleTouchMove);
-      contentElement.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [disabled, isRefreshing, isPulling, pullDistance, threshold, startY, onRefresh]);
+  }, [isPulling, pullDistance, startY, isRefreshing, onRefresh, threshold, disabled]);
 
   const pullProgress = Math.min(pullDistance / threshold, 1);
 
@@ -194,7 +165,7 @@ const PullToRefresh = ({
 
   return (
     <PullToRefreshContainer ref={containerRef}>
-      <PullIndicator 
+      <PullIndicator
         pullDistance={pullDistance}
         isPulling={isPulling}
       >
@@ -210,12 +181,10 @@ const PullToRefresh = ({
           </LoaderWrapper>
         )}
       </PullIndicator>
-      
-      <ContentWrapper 
-        ref={contentRef}
+
+      <ContentWrapper
         pullDistance={pullDistance}
         isPulling={isPulling}
-        style={{ touchAction: 'pan-y' }}
       >
         {children}
       </ContentWrapper>

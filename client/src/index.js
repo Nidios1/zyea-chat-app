@@ -3,6 +3,21 @@ import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 
+// Fix iOS viewport height - CRITICAL for fullscreen on iPhone
+function setVH() {
+  const vh = window.innerHeight * 0.01;
+  document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+
+// Set on load
+setVH();
+
+// Update on resize and orientation change
+window.addEventListener('resize', setVH);
+window.addEventListener('orientationchange', () => {
+  setTimeout(setVH, 100); // Delay for iOS
+});
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);
 

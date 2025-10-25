@@ -20,14 +20,14 @@ import PermissionRequest from '../Chat/PermissionRequest';
 const ContactsContainer = styled.div`
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  /* Use dynamic viewport height */
+  height: calc(var(--vh, 1vh) * 100);
+  min-height: 100vh;
   background: var(--bg-secondary, #f0f2f5);
   overflow: hidden;
   
-  /* Add padding for mobile bottom nav */
-  @media (max-width: 768px) {
-    padding-bottom: calc(45px + env(safe-area-inset-bottom));
-  }
+  /* REMOVED: Don't add padding here to prevent large empty space */
+  /* Let child components handle bottom spacing */
 `;
 
 const Header = styled.div`
@@ -123,16 +123,21 @@ const Content = styled.div`
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: var(--bg-secondary, #f0f2f5);
+  overscroll-behavior: contain;
   
-  /* Extra padding at bottom to avoid content being hidden */
-  @media (max-width: 768px) {
-    padding-bottom: 20px;
-  }
+  /* REMOVED: Don't add padding here, let child components handle it */
+  /* This prevents large empty space when content is short */
 `;
 
 const Section = styled.div`
   background: var(--bg-primary, white);
   margin-bottom: 8px;
+  
+  /* Add padding-bottom to last section to prevent BottomNav overlap */
+  &:last-child {
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0));
+    margin-bottom: 0;
+  }
 `;
 
 const SectionHeader = styled.div`
@@ -297,6 +302,15 @@ const EmptyState = styled.div`
   padding: 60px 20px;
   text-align: center;
   color: var(--text-secondary, #65676b);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  /* Changed from center to flex-start */
+
+  /* Only add extra padding on mobile */
+  @media (max-width: 768px) {
+    padding-bottom: calc(68px + env(safe-area-inset-bottom, 0));
+  }
 
   h3 {
     margin: 0 0 8px 0;
