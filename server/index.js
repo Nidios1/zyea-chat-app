@@ -412,6 +412,46 @@ io.on('connection', (socket) => {
     }
   });
 
+  // WebRTC Signaling for Video/Audio Calls
+  socket.on('call-offer', (data) => {
+    console.log('Call offer from:', data.from, 'to:', data.to);
+    socket.to(data.to.toString()).emit('call-offer', {
+      offer: data.offer,
+      from: data.from,
+      isVideo: data.isVideo
+    });
+  });
+
+  socket.on('call-answer', (data) => {
+    console.log('Call answer from:', data.from, 'to:', data.to);
+    socket.to(data.to.toString()).emit('call-answer', {
+      answer: data.answer,
+      from: data.from
+    });
+  });
+
+  socket.on('ice-candidate', (data) => {
+    console.log('ICE candidate from:', socket.userId, 'to:', data.to);
+    socket.to(data.to.toString()).emit('ice-candidate', {
+      candidate: data.candidate,
+      from: socket.userId
+    });
+  });
+
+  socket.on('end-call', (data) => {
+    console.log('Call ended by:', socket.userId, 'to:', data.to);
+    socket.to(data.to.toString()).emit('call-ended', {
+      from: socket.userId
+    });
+  });
+
+  socket.on('call-rejected', (data) => {
+    console.log('Call rejected by:', socket.userId, 'to:', data.to);
+    socket.to(data.to.toString()).emit('call-rejected', {
+      from: socket.userId
+    });
+  });
+
   socket.on('disconnect', async () => {
     console.log('User disconnected:', socket.id);
     

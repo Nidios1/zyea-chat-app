@@ -7,6 +7,8 @@ import ImageUpload from './ImageUpload';
 import EmojiPicker, { EmojiToggleButton } from './EmojiPicker';
 import ChatOptionsMenu from './ChatOptionsMenu';
 import ProfilePage from '../Profile/ProfilePage';
+import VideoCall from './VideoCall';
+import PermissionRequest from './PermissionRequest';
 import { chatAPI } from '../../utils/api';
 import useSwipeNavigation from '../../hooks/useSwipeNavigation';
 import SmartNavigationIndicator from '../Common/SmartNavigationIndicator';
@@ -517,6 +519,10 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
   const [conversationSettings, setConversationSettings] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
+  const [showVideoCall, setShowVideoCall] = useState(false);
+  const [isVideoCall, setIsVideoCall] = useState(true);
+  const [isIncomingCall, setIsIncomingCall] = useState(false);
+  const [showPermissionRequest, setShowPermissionRequest] = useState(false);
   
   // Smart swipe navigation
   const {
@@ -865,6 +871,16 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         }
       });
 
+      // Listen for incoming calls
+      socket.on('call-offer', (data) => {
+        if (conversation && data.from == conversation.user_id) {
+          console.log('Incoming call from:', data.from);
+          setIsVideoCall(data.isVideo);
+          setIsIncomingCall(true);
+          setShowVideoCall(true);
+        }
+      });
+
       return () => {
         socket.off('receiveMessage');
         socket.off('messageDelivered');
@@ -875,6 +891,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         socket.off('userTyping');
         socket.off('userStoppedTyping');
         socket.off('userStatusChanged');
+        socket.off('call-offer');
         
         // Clear timeouts on cleanup
         if (viewingTimeoutRef.current) {
@@ -1097,14 +1114,25 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
 
   const handleCall = (conversation) => {
     console.log('Calling:', conversation.full_name || conversation.username);
-    // TODO: Implement voice call functionality
-    alert(`Đang gọi ${conversation.full_name || conversation.username}...`);
+    setIsVideoCall(false);
+    setIsIncomingCall(false);
+    setShowPermissionRequest(true);
   };
 
   const handleVideoCall = (conversation) => {
     console.log('Video calling:', conversation.full_name || conversation.username);
-    // TODO: Implement video call functionality
-    alert(`Đang gọi video ${conversation.full_name || conversation.username}...`);
+    setIsVideoCall(true);
+    setIsIncomingCall(false);
+    setShowPermissionRequest(true);
+  };
+
+  const handlePermissionAllow = () => {
+    setShowPermissionRequest(false);
+    setShowVideoCall(true);
+  };
+
+  const handlePermissionDeny = () => {
+    setShowPermissionRequest(false);
   };
 
   const handleKeyPress = (e) => {
@@ -1509,6 +1537,33 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
             console.log('Logout from profile');
           }}
           isOwnProfile={false}
+        />
+      )}
+
+      {showPermissionRequest && (
+        <PermissionRequest
+          isVideoCall={isVideoCall}
+          conversationName={conversation.full_name || conversation.username}
+          onAllow={handlePermissionAllow}
+          onDeny={handlePermissionDeny}
+        />
+      )}
+
+      {showVideoCall && (
+        <VideoCall
+          conversation={conversation}
+          isVideoCall={isVideoCall}
+          isIncoming={isIncomingCall}
+          socket={socket}
+          onClose={() => setShowVideoCall(false)}
+          onAccept={() => {
+            console.log('Call accepted');
+            setIsIncomingCall(false);
+          }}
+          onReject={() => {
+            console.log('Call rejected');
+            setShowVideoCall(false);
+          }}
         />
       )}
     </ChatContainer>

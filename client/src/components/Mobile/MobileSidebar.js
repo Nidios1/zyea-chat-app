@@ -1383,6 +1383,7 @@ const MobileSidebar = ({
           />
         ) : showFriends ? (
           <MobileContacts 
+            socket={socket}
             onBack={() => setShowFriends(false)}
             onCall={(friend) => {
               console.log('Calling friend:', friend);

@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Version hiện tại của app
-const APP_VERSION = '1.1.0'; // First IPA release with Live Update system
+const APP_VERSION = '1.1.6'; // Force update - version badge removed
 
 /**
  * GET /api/app/version
@@ -18,8 +18,9 @@ router.get('/version', async (req, res) => {
       version: APP_VERSION,
       updateUrl: 'http://192.168.0.102:5000/api/app/download/latest',
       changeLog: `
-• Fix: hieukka v1.0.8
-
+• Fix Critical: Xóa hoàn toàn nút test "v1.1.x LIVE" khỏi màn hình
+• Clean: UI sạch sẽ, không còn phần debug
+• Improve: Live Update ổn định, cập nhật code đầy đủ
       `.trim(),
       mandatory: false, // true = bắt buộc update, false = có thể bỏ qua
       releaseDate: new Date().toISOString(),

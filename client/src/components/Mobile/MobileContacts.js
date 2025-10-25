@@ -14,6 +14,8 @@ import {
 import { BsQrCodeScan } from 'react-icons/bs';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
+import VideoCall from '../Chat/VideoCall';
+import PermissionRequest from '../Chat/PermissionRequest';
 
 const ContactsContainer = styled.div`
   display: flex;
@@ -315,13 +317,17 @@ const getAvatarColor = (name) => {
   return colors[index];
 };
 
-const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend }) => {
+const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket }) => {
   const [activeTab, setActiveTab] = useState('friends');
   const [searchQuery, setSearchQuery] = useState('');
   const [friends, setFriends] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [birthdays, setBirthdays] = useState([]);
+  const [showVideoCall, setShowVideoCall] = useState(false);
+  const [isVideoCall, setIsVideoCall] = useState(true);
+  const [selectedFriend, setSelectedFriend] = useState(null);
+  const [showPermissionRequest, setShowPermissionRequest] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'friends') {
@@ -391,11 +397,24 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend }) => {
   const recentlyActiveCount = Math.floor(friends.length * 0.16); // Mock: 16% recently active
 
   const handleCall = (friend, type) => {
+    setSelectedFriend(friend);
     if (type === 'voice') {
-      onCall?.(friend);
+      setIsVideoCall(false);
+      setShowPermissionRequest(true);
     } else if (type === 'video') {
-      onVideoCall?.(friend);
+      setIsVideoCall(true);
+      setShowPermissionRequest(true);
     }
+  };
+
+  const handlePermissionAllow = () => {
+    setShowPermissionRequest(false);
+    setShowVideoCall(true);
+  };
+
+  const handlePermissionDeny = () => {
+    setShowPermissionRequest(false);
+    setSelectedFriend(null);
   };
 
   const handleAcceptRequest = async (friendId) => {
@@ -651,6 +670,28 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend }) => {
           </EmptyState>
         )}
       </Content>
+
+      {showPermissionRequest && selectedFriend && (
+        <PermissionRequest
+          isVideoCall={isVideoCall}
+          conversationName={selectedFriend.full_name || selectedFriend.username}
+          onAllow={handlePermissionAllow}
+          onDeny={handlePermissionDeny}
+        />
+      )}
+
+      {showVideoCall && selectedFriend && socket && (
+        <VideoCall
+          conversation={selectedFriend}
+          isVideoCall={isVideoCall}
+          isIncoming={false}
+          socket={socket}
+          onClose={() => {
+            setShowVideoCall(false);
+            setSelectedFriend(null);
+          }}
+        />
+      )}
     </ContactsContainer>
   );
 };

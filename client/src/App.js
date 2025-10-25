@@ -26,7 +26,7 @@ import { useOfflineSync } from './hooks/useOfflineSync';
 import { useNativeFeatures } from './hooks/useNativeFeatures';
 import { isCapacitor, logPlatformInfo } from './utils/platformDetection';
 import { getApiBaseUrl } from './utils/platformConfig';
-import { checkForUpdates, downloadUpdate, applyUpdate, startAutoUpdateCheck, getCurrentVersion } from './utils/liveUpdate';
+import { checkForUpdates, downloadUpdate, applyUpdate, startAutoUpdateCheck } from './utils/liveUpdate';
 
 
 function App() {
@@ -493,41 +493,6 @@ function App() {
                 onClose={() => setShowSuccessToast(false)}
               />
             )}
-            
-            {/* Version Badge - TEST LIVE UPDATE */}
-            <div style={{
-              position: 'fixed',
-              bottom: '10px',
-              right: '10px',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              padding: '8px 16px',
-              borderRadius: '20px',
-              fontSize: '12px',
-              fontWeight: 'bold',
-              boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
-              zIndex: 9999,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              animation: 'pulse 2s ease-in-out infinite'
-            }}>
-              <span style={{ fontSize: '16px' }}>🚀</span>
-              <span>v{getCurrentVersion()}</span>
-              <span style={{ 
-                background: 'rgba(255,255,255,0.3)',
-                padding: '2px 6px',
-                borderRadius: '8px',
-                fontSize: '10px'
-              }}>LIVE</span>
-            </div>
-            
-            <style>{`
-              @keyframes pulse {
-                0%, 100% { transform: scale(1); }
-                50% { transform: scale(1.05); }
-              }
-            `}</style>
             
             <ToastContainer
               position="top-right"
