@@ -1,0 +1,332 @@
+/**
+ * Platform Sync CSS
+ * Đồng bộ hiển thị giữa PWA (Browser) và Native (Capacitor)
+ * Fix: Bố cục và kích thước hình ảnh khác nhau
+ */
+
+/* ==================== ROOT VARIABLES FOR CONSISTENCY ==================== */
+:root {
+  /* Consistent image sizes across platforms */
+  --avatar-xs: clamp(28px, 7vw, 32px);
+  --avatar-sm: clamp(32px, 8vw, 40px);
+  --avatar-md: clamp(40px, 10vw, 48px);
+  --avatar-lg: clamp(60px, 15vw, 80px);
+  --avatar-xl: clamp(80px, 20vw, 120px);
+  
+  /* Message image sizes */
+  --message-image-max-width: clamp(200px, 60vw, 300px);
+  --message-image-max-height: clamp(200px, 40vh, 400px);
+  
+  /* Post image sizes */
+  --post-image-max-height: clamp(300px, 50vh, 500px);
+  
+  /* Consistent spacing */
+  --gap-xs: clamp(4px, 1vw, 8px);
+  --gap-sm: clamp(8px, 2vw, 12px);
+  --gap-md: clamp(12px, 3vw, 16px);
+  --gap-lg: clamp(16px, 4vw, 24px);
+  
+  /* Container widths */
+  --container-max: min(100vw, 600px);
+  --content-max: min(90vw, 550px);
+}
+
+/* ==================== DETECT PLATFORM ==================== */
+/* Thêm class vào root để detect platform */
+.capacitor-app {
+  --is-native: 1;
+}
+
+.web-app {
+  --is-native: 0;
+}
+
+/* ==================== FIX AVATAR SIZES ==================== */
+/* Override styled-components avatar sizes */
+[class*="Avatar"],
+.avatar,
+.user-avatar {
+  width: var(--avatar-sm) !important;
+  height: var(--avatar-sm) !important;
+  min-width: var(--avatar-sm) !important;
+  min-height: var(--avatar-sm) !important;
+}
+
+/* Profile avatars - larger */
+[class*="ProfileAvatar"],
+.profile-avatar {
+  width: var(--avatar-lg) !important;
+  height: var(--avatar-lg) !important;
+  min-width: var(--avatar-lg) !important;
+  min-height: var(--avatar-lg) !important;
+}
+
+/* Chat header avatars */
+[class*="ChatHeader"] [class*="Avatar"] {
+  width: var(--avatar-md) !important;
+  height: var(--avatar-md) !important;
+}
+
+/* Post avatars */
+[class*="UserAvatar"] {
+  width: var(--avatar-md) !important;
+  height: var(--avatar-md) !important;
+}
+
+/* ==================== FIX IMAGE SIZES ==================== */
+/* Message images - responsive */
+[class*="MessageImage"],
+.message-image,
+img[src*="uploads/chat"] {
+  max-width: var(--message-image-max-width) !important;
+  max-height: var(--message-image-max-height) !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  display: block !important;
+}
+
+/* Post images - responsive and consistent */
+[class*="PostImage"],
+.post-image,
+img[src*="uploads/posts"] {
+  max-height: var(--post-image-max-height) !important;
+  width: 100% !important;
+  height: auto !important;
+  object-fit: cover !important;
+  object-position: center !important;
+  display: block !important;
+}
+
+/* Cover photos */
+[class*="CoverPhoto"],
+.cover-photo {
+  height: clamp(100px, 20vh, 140px) !important;
+  background-size: cover !important;
+  background-position: center !important;
+}
+
+/* ==================== FIX VIEWPORT CONSISTENCY ==================== */
+/* PWA: Adjust for browser UI */
+.web-app {
+  /* Compensate for browser address bar */
+  --viewport-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
+
+/* Native: Full viewport with safe areas */
+.capacitor-app {
+  --viewport-height: 100vh;
+}
+
+/* Apply consistent viewport height */
+.full-height,
+[class*="Container"]:not([class*="Message"]):not([class*="Post"]) {
+  height: var(--viewport-height, 100vh) !important;
+  max-height: var(--viewport-height, 100vh) !important;
+}
+
+/* ==================== FIX FONT RENDERING ==================== */
+/* Ensure consistent font rendering */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ==================== FIX IMAGE ASPECT RATIO ==================== */
+/* Maintain aspect ratio across platforms */
+img {
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+  /* Prevent layout shift */
+  aspect-ratio: attr(width) / attr(height);
+}
+
+/* ==================== PLATFORM-SPECIFIC FIXES ==================== */
+
+/* PWA ONLY - Fix viewport height calculation */
+@media (max-width: 768px) {
+  .web-app #root,
+  .web-app body {
+    /* Account for mobile browser UI */
+    min-height: -webkit-fill-available;
+  }
+  
+  .web-app .chat-container,
+  .web-app .newsfeed-container {
+    /* Slightly reduce to account for browser chrome */
+    max-height: calc(100vh - 60px);
+  }
+}
+
+/* NATIVE ONLY - Full edge-to-edge */
+.capacitor-app #root,
+.capacitor-app body {
+  height: 100vh !important;
+  min-height: 100vh !important;
+}
+
+/* ==================== FIX RESPONSIVE BREAKPOINTS ==================== */
+/* Ensure same breakpoints across platforms */
+@media (max-width: 375px) {
+  :root {
+    --avatar-sm: 30px;
+    --avatar-md: 38px;
+    --avatar-lg: 60px;
+    --message-image-max-width: 200px;
+    --post-image-max-height: 300px;
+  }
+}
+
+@media (min-width: 376px) and (max-width: 430px) {
+  :root {
+    --avatar-sm: 32px;
+    --avatar-md: 40px;
+    --avatar-lg: 70px;
+    --message-image-max-width: 250px;
+    --post-image-max-height: 400px;
+  }
+}
+
+@media (min-width: 431px) and (max-width: 768px) {
+  :root {
+    --avatar-sm: 36px;
+    --avatar-md: 44px;
+    --avatar-lg: 80px;
+    --message-image-max-width: 280px;
+    --post-image-max-height: 450px;
+  }
+}
+
+/* ==================== FIX IMAGE LOADING ==================== */
+/* Prevent layout shift during image load */
+img[loading="lazy"] {
+  min-height: 100px;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+img[loading="lazy"].loaded {
+  background: none;
+  animation: none;
+}
+
+/* ==================== FIX OBJECT-FIT CONSISTENCY ==================== */
+/* Ensure object-fit works the same on both platforms */
+img[style*="object-fit: cover"],
+img[class*="cover"] {
+  object-fit: cover !important;
+  object-position: center !important;
+  font-family: 'object-fit: cover;'; /* IE/Edge polyfill */
+}
+
+img[style*="object-fit: contain"],
+img[class*="contain"] {
+  object-fit: contain !important;
+  object-position: center !important;
+  font-family: 'object-fit: contain;'; /* IE/Edge polyfill */
+}
+
+/* ==================== FIX BORDER RADIUS CONSISTENCY ==================== */
+/* Ensure border radius looks the same */
+.message-image,
+[class*="MessageImage"] {
+  border-radius: clamp(8px, 2vw, 12px) !important;
+}
+
+.post-image,
+[class*="PostImage"] {
+  border-radius: clamp(10px, 2.5vw, 12px) !important;
+}
+
+/* ==================== FIX SHADOW CONSISTENCY ==================== */
+/* Ensure shadows render the same */
+.capacitor-app img {
+  /* Native may render shadows differently */
+  -webkit-box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ==================== FIX PIXEL DENSITY ==================== */
+/* Handle high DPI displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  img {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* ==================== DEBUG MODE (OPTIONAL) ==================== */
+/* Uncomment để debug differences */
+/*
+.web-app::after {
+  content: 'PWA MODE';
+  position: fixed;
+  bottom: 60px;
+  right: 10px;
+  background: rgba(255, 0, 0, 0.7);
+  color: white;
+  padding: 4px 8px;
+  font-size: 10px;
+  z-index: 999999;
+  border-radius: 4px;
+}
+
+.capacitor-app::after {
+  content: 'NATIVE MODE';
+  position: fixed;
+  bottom: 60px;
+  right: 10px;
+  background: rgba(0, 255, 0, 0.7);
+  color: white;
+  padding: 4px 8px;
+  font-size: 10px;
+  z-index: 999999;
+  border-radius: 4px;
+}
+*/
+
+/* ==================== FIX TEXT SIZE CONSISTENCY ==================== */
+/* Ensure text scales the same on both platforms */
+@media (max-width: 768px) {
+  html {
+    /* Prevent iOS text size adjustment */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  
+  body {
+    /* Set base font size */
+    font-size: 16px !important;
+  }
+}
+
+/* ==================== FIX LANDSCAPE MODE ==================== */
+@media (max-width: 768px) and (orientation: landscape) {
+  :root {
+    /* Reduce sizes in landscape */
+    --avatar-sm: clamp(24px, 6vw, 28px);
+    --avatar-md: clamp(32px, 8vw, 36px);
+    --message-image-max-width: clamp(150px, 40vw, 200px);
+    --message-image-max-height: clamp(120px, 30vh, 200px);
+    --post-image-max-height: clamp(200px, 40vh, 300px);
+  }
+}
+
+/* ==================== FORCE RECALCULATION ==================== */
+/* Force browser to recalculate layout */
+.web-app *,
+.capacitor-app * {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+

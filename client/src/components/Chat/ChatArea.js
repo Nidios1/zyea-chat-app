@@ -11,6 +11,7 @@ import VideoCall from './VideoCall';
 import PermissionRequest from './PermissionRequest';
 import { chatAPI } from '../../utils/api';
 import useSwipeNavigation from '../../hooks/useSwipeNavigation';
+import useKeyboard from '../../hooks/useKeyboard';
 import SmartNavigationIndicator from '../Common/SmartNavigationIndicator';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL } from '../../utils/imageUtils';
@@ -518,11 +519,13 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [conversationSettings, setConversationSettings] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [isVideoCall, setIsVideoCall] = useState(true);
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [showPermissionRequest, setShowPermissionRequest] = useState(false);
+  
+  // Keyboard handling for Native
+  const { isKeyboardVisible, keyboardHeight, hideKeyboard } = useKeyboard();
   
   // Smart swipe navigation
   const {
@@ -546,54 +549,8 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
   useEffect(() => {
     console.log('ChatArea mounted with isMobile:', isMobile);
     console.log('Window width:', window.innerWidth);
-  }, [isMobile]);
-
-  // iOS Keyboard detection - ENHANCED for IPA
-  useEffect(() => {
-    if (!isMobile) return;
-
-    let initialHeight = window.innerHeight;
-
-    const handleResize = () => {
-      // Method 1: visualViewport API
-      if (window.visualViewport) {
-        const viewportHeight = window.visualViewport.height;
-        const windowHeight = window.innerHeight;
-        const keyboardHeight = windowHeight - viewportHeight;
-        
-        if (keyboardHeight > 100) {
-          setKeyboardOffset(keyboardHeight);
-          return;
-        }
-      }
-      
-      // Method 2: Fallback - window resize
-      const currentHeight = window.innerHeight;
-      const heightDiff = initialHeight - currentHeight;
-      
-      if (heightDiff > 100) {
-        // Keyboard is open
-        setKeyboardOffset(heightDiff);
-      } else {
-        setKeyboardOffset(0);
-      }
-    };
-
-    // Listen to multiple events for better compatibility
-    window.addEventListener('resize', handleResize);
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleResize);
-      window.visualViewport.addEventListener('scroll', handleResize);
-    }
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleResize);
-        window.visualViewport.removeEventListener('scroll', handleResize);
-      }
-    };
-  }, [isMobile]);
+    console.log('Keyboard visible:', isKeyboardVisible, 'Height:', keyboardHeight);
+  }, [isMobile, isKeyboardVisible, keyboardHeight]);
 
   // Smart navigation handler
   const handleSmartNavigation = (action, target) => {
@@ -1437,7 +1394,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         )}
       </MessagesContainer>
 
-      <MessageInputContainer keyboardOffset={keyboardOffset}>
+      <MessageInputContainer keyboardOffset={keyboardHeight}>
         {selectedImage && (
           <ImageUpload
             onImageSelect={handleImageSelect}

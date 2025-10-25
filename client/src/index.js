@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
+import './styles/platform-sync.css'; // Fix PWA vs Native differences
 import App from './App';
 
 // Fix iOS viewport height - CRITICAL for fullscreen on iPhone

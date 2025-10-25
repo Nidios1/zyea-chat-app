@@ -54,6 +54,7 @@
     "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
     "build:win": "set DISABLE_ESLINT_PLUGIN=true && react-scripts build",
     "test": "react-scripts test",
+    "test:platform": "node test-platform-sync.js",
     "eject": "react-scripts eject",
     "cap:init": "cap init",
     "cap:add:ios": "cap add ios",
