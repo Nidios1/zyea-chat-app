@@ -12,6 +12,7 @@ import PermissionRequest from '../Shared/Chat/PermissionRequest';
 import { chatAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL } from '../../utils/imageUtils';
+import useKeyboard from '../../hooks/useKeyboard';
 
 // 📱 MOBILE-ONLY STYLES - No media queries needed!
 
@@ -161,8 +162,10 @@ const MessagesContainer = styled.div`
   flex-direction: column;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  /* CRITICAL: padding-bottom để tin nhắn không bị che bởi input */
-  padding-bottom: calc(85px + env(safe-area-inset-bottom, 0px));
+  /* CRITICAL: padding-bottom để tin nhắn không bị che bởi input + keyboard */
+  padding-bottom: calc(85px + ${props => props.keyboardHeight || 0}px + env(safe-area-inset-bottom, 0px));
+  /* Smooth transition khi keyboard xuất hiện */
+  transition: padding-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
   &::-webkit-scrollbar {
     display: none;
@@ -179,9 +182,9 @@ const TypingWrapper = styled.div`
 `;
 
 const MessageInputContainer = styled.div`
-  /* CRITICAL: Fixed ở dưới cùng - KHÔNG nhảy khi keyboard xuất hiện */
+  /* CRITICAL: Fixed ở dưới cùng - Đẩy lên khi keyboard xuất hiện */
   position: fixed;
-  bottom: 0;
+  bottom: ${props => props.keyboardHeight || 0}px;  /* CRITICAL: Adjust for keyboard */
   left: 0;
   right: 0;
   z-index: 1001;
@@ -194,6 +197,8 @@ const MessageInputContainer = styled.div`
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
   will-change: transform;
+  /* Smooth transition khi keyboard xuất hiện/ẩn */
+  transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 `;
 
 const InputForm = styled.form`
@@ -316,6 +321,9 @@ const MobileChatArea = ({
   const viewingTimeoutRef = useRef(null);
   const isUserScrollingRef = useRef(false);
   const scrollTimeoutRef = useRef(null);
+  
+  // 🎹 CRITICAL: Hook để detect keyboard và adjust input position
+  const { isKeyboardVisible, keyboardHeight } = useKeyboard();
 
   // Check if user is near bottom (within 100px)
   const isNearBottom = () => {
@@ -694,7 +702,7 @@ const MobileChatArea = ({
         </HeaderActions>
       </MobileHeader>
 
-      <MessagesContainer ref={messagesContainerRef}>
+      <MessagesContainer ref={messagesContainerRef} keyboardHeight={keyboardHeight}>
         {messages.length === 0 ? (
           <div style={{ 
             display: 'flex', 
@@ -726,7 +734,7 @@ const MobileChatArea = ({
         )}
       </MessagesContainer>
 
-      <MessageInputContainer>
+      <MessageInputContainer keyboardHeight={keyboardHeight}>
         <InputForm onSubmit={handleSendMessage}>
           <InputActionButton
             onClick={() => {

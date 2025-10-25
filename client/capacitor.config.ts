@@ -49,9 +49,9 @@ const config: CapacitorConfig = {
       sound: "message_tone.wav",
     },
     Keyboard: {
-      resize: 'body',
+      resize: 'native',  // CRITICAL: native mode - keyboard không đẩy body
       style: 'dark',
-      resizeOnFullScreen: true,
+      resizeOnFullScreen: false,  // CRITICAL: Không resize trong fullscreen
     }
   },
   // iOS specific config
