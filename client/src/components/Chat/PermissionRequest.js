@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { FiVideo, FiMic, FiAlertCircle, FiCheck, FiX } from 'react-icons/fi';
+import { getUserMedia, formatMediaError, isNative, isIOS } from '../../utils/mediaPermissions';
 
 const Overlay = styled.div`
   position: fixed;
@@ -284,21 +285,19 @@ const PermissionRequest = ({
     setError(null);
 
     try {
-      // Request permissions
-      const constraints = {
-        video: isVideoCall ? { width: 1280, height: 720 } : false,
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      };
+      console.log('🔍 Checking permissions...', { isNative: isNative(), isIOS: isIOS() });
+      
+      // Use utility function that handles both web and native
+      const stream = await getUserMedia(isVideoCall);
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log('✅ Stream obtained:', stream);
 
       // Update permissions state
       const videoTracks = stream.getVideoTracks();
       const audioTracks = stream.getAudioTracks();
+
+      console.log('📹 Video tracks:', videoTracks.length);
+      console.log('🎤 Audio tracks:', audioTracks.length);
 
       setPermissions({
         camera: { 
@@ -322,19 +321,10 @@ const PermissionRequest = ({
       }
 
     } catch (error) {
-      console.error('Permission error:', error);
+      console.error('❌ Permission error:', error);
       
-      let errorMessage = 'Không thể truy cập camera/microphone. ';
-      
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        errorMessage += 'Bạn đã từ chối quyền truy cập. Vui lòng click vào icon 🔒 hoặc 🎥 trên thanh địa chỉ và cho phép truy cập.';
-      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-        errorMessage += 'Không tìm thấy camera/microphone. Vui lòng kiểm tra thiết bị đã kết nối đúng chưa.';
-      } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-        errorMessage += 'Thiết bị đang được sử dụng bởi ứng dụng khác. Vui lòng đóng các ứng dụng khác (Zoom, Teams, Skype...) và thử lại.';
-      } else {
-        errorMessage += error.message;
-      }
+      // Use utility function for error formatting
+      const errorMessage = formatMediaError(error);
       
       setError(errorMessage);
       setPermissions({

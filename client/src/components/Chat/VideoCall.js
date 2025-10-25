@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { FiPhone, FiVideo, FiMic, FiMicOff, FiVideoOff, FiX, FiMaximize2, FiMinimize2 } from 'react-icons/fi';
+import { getUserMedia, formatMediaError, isNative } from '../../utils/mediaPermissions';
 
 const CallOverlay = styled.div`
   position: fixed;
@@ -320,33 +321,19 @@ const VideoCall = ({
   useEffect(() => {
     const initMediaStream = async () => {
       try {
-        // Kiểm tra xem trình duyệt có hỗ trợ không
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          const isLocalhost = window.location.hostname === 'localhost' || 
-                             window.location.hostname === '127.0.0.1';
-          const errorMsg = isLocalhost 
-            ? 'Trình duyệt không hỗ trợ tính năng gọi video/audio. Vui lòng sử dụng trình duyệt hiện đại hơn (Chrome 53+, Firefox 36+).'
-            : `⚠️ Cần truy cập qua HTTPS hoặc localhost!\n\n` +
-              `Hiện tại: ${window.location.protocol}//${window.location.host}\n\n` +
-              `Giải pháp:\n` +
-              `1. Truy cập: http://localhost:3000\n` +
-              `2. Hoặc enable Chrome flag:\n` +
-              `   chrome://flags/#unsafely-treat-insecure-origin-as-secure\n` +
-              `   Thêm: ${window.location.origin}`;
-          
-          alert(errorMsg);
-          onClose();
-          return;
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: isVideoCall ? { width: 1280, height: 720 } : false,
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          }
+        console.log('🎥 Initializing media stream...', { 
+          isNative: isNative(), 
+          isVideoCall, 
+          isIncoming,
+          isCallAccepted 
         });
+        
+        // Use utility function that works on both web and native
+        const stream = await getUserMedia(isVideoCall);
+        
+        console.log('✅ Media stream obtained:', stream);
+        console.log('   Video tracks:', stream.getVideoTracks().length);
+        console.log('   Audio tracks:', stream.getAudioTracks().length);
         
         localStreamRef.current = stream;
         if (localVideoRef.current) {
@@ -359,25 +346,10 @@ const VideoCall = ({
           createOffer();
         }
       } catch (error) {
-        console.error('Error accessing media devices:', error);
+        console.error('❌ Error accessing media devices:', error);
         
-        let errorMessage = 'Không thể truy cập camera/microphone.\n';
-        
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          errorMessage += '\n🔒 Quyền bị từ chối. Vui lòng:\n';
-          errorMessage += '1. Click vào icon khóa/camera trên thanh địa chỉ\n';
-          errorMessage += '2. Cho phép truy cập Camera và Microphone\n';
-          errorMessage += '3. Tải lại trang và thử lại';
-        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-          errorMessage += '\n📹 Không tìm thấy camera/microphone.\n';
-          errorMessage += 'Vui lòng kiểm tra thiết bị đã kết nối đúng chưa.';
-        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-          errorMessage += '\n⚠️ Thiết bị đang được sử dụng bởi ứng dụng khác.\n';
-          errorMessage += 'Vui lòng đóng các ứng dụng khác và thử lại.';
-        } else {
-          errorMessage += '\n❌ Lỗi: ' + error.message;
-        }
-        
+        // Use utility function for error formatting
+        const errorMessage = formatMediaError(error);
         alert(errorMessage);
         onClose();
       }
@@ -514,12 +486,9 @@ const VideoCall = ({
       onAccept();
     }
 
-    // Get media stream
+    // Get media stream using utility function
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: isVideoCall,
-        audio: true
-      });
+      const stream = await getUserMedia(isVideoCall);
       
       localStreamRef.current = stream;
       if (localVideoRef.current) {
@@ -532,7 +501,8 @@ const VideoCall = ({
       // This would be handled in socket listeners
     } catch (error) {
       console.error('Error accepting call:', error);
-      alert('Không thể truy cập camera/microphone.');
+      const errorMessage = formatMediaError(error);
+      alert(errorMessage);
       handleRejectCall();
     }
   };
