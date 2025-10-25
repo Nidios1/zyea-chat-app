@@ -62,7 +62,12 @@ const config: CapacitorConfig = {
     scrollEnabled: false,
     allowsLinkPreview: false,
     // CRITICAL: Enable fullscreen with notch support
-    limitsNavigationsToAppBoundDomains: false
+    limitsNavigationsToAppBoundDomains: false,
+    // CRITICAL: Enable WebRTC in WKWebView
+    allowsInlineMediaPlayback: true,
+    mediaTypesRequiringUserActionForPlayback: 'none',
+    // Enable camera and microphone
+    webViewMediaCaptureEnabled: true
   },
   // Android specific config
   android: {

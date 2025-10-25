@@ -83,15 +83,30 @@ export const getUserMedia = async (isVideoCall = true) => {
 
     // For native platforms
     if (isNative()) {
-      console.log('🔵 Native platform detected, using native getUserMedia');
+      console.log('🔵 Native platform detected');
+      console.log('   Platform:', Capacitor.getPlatform());
+      console.log('   Navigator:', !!navigator);
+      console.log('   MediaDevices:', !!navigator.mediaDevices);
+      console.log('   getUserMedia:', !!navigator.mediaDevices?.getUserMedia);
       
       // Check if getUserMedia exists
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('WebRTC not available in this WebView configuration');
+        const error = new Error('WebRTC_NOT_CONFIGURED');
+        error.name = 'WebRTCNotConfigured';
+        error.detail = {
+          platform: Capacitor.getPlatform(),
+          hasNavigator: !!navigator,
+          hasMediaDevices: !!navigator.mediaDevices,
+          hasGetUserMedia: !!navigator.mediaDevices?.getUserMedia
+        };
+        throw error;
       }
       
+      console.log('🎥 Requesting media stream...');
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      console.log('✅ Native stream obtained:', stream);
+      console.log('✅ Native stream obtained');
+      console.log('   Video tracks:', stream.getVideoTracks().length);
+      console.log('   Audio tracks:', stream.getAudioTracks().length);
       return stream;
     }
 
@@ -102,6 +117,9 @@ export const getUserMedia = async (isVideoCall = true) => {
 
   } catch (error) {
     console.error('❌ getUserMedia error:', error);
+    console.error('   Name:', error.name);
+    console.error('   Message:', error.message);
+    console.error('   Detail:', error.detail);
     throw error;
   }
 };
@@ -111,6 +129,24 @@ export const formatMediaError = (error) => {
   if (!error) return 'Unknown error';
   
   let message = '';
+  
+  // Special handling for WebRTC not configured
+  if (error.name === 'WebRTCNotConfigured') {
+    if (isIOS()) {
+      message = '⚠️ WebRTC Chưa Được Cấu Hình\n\n';
+      message += 'App cần rebuild với cấu hình mới:\n\n';
+      message += '📋 Developer checklist:\n';
+      message += '1. Update capacitor.config.ts\n';
+      message += '2. Update AppDelegate.swift\n';
+      message += '3. npx cap sync ios\n';
+      message += '4. Rebuild IPA\n\n';
+      message += 'Chi tiết: Check REBUILD-IPA-FIX.md';
+    } else {
+      message = '⚠️ WebRTC không khả dụng\n\n';
+      message += 'App cần được rebuild với cấu hình WebRTC.';
+    }
+    return message;
+  }
   
   if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
     if (isIOS()) {
@@ -129,6 +165,13 @@ export const formatMediaError = (error) => {
   } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
     message = '⚠️ Thiết bị đang được sử dụng\n\n';
     message += 'Vui lòng đóng các ứng dụng khác.';
+  } else if (error.message && error.message.includes('WebRTC')) {
+    message = '⚠️ WebRTC Không Khả Dụng\n\n';
+    message += 'App cần rebuild với:\n';
+    message += '- capacitor.config.ts updated\n';
+    message += '- AppDelegate.swift updated\n';
+    message += '- iOS native config\n\n';
+    message += 'Xem: REBUILD-IPA-FIX.md';
   } else if (error.message) {
     message = '❌ Lỗi: ' + error.message;
   } else {
