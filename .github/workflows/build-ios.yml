@@ -6,7 +6,7 @@ on:
       app_to_build:
         description: 'Which app to build'
         required: true
-        default: 'zyeaplus'
+        default: 'messenger'
         type: choice
         options:
           - messenger
