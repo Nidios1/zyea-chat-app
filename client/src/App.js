@@ -257,11 +257,11 @@ function App() {
       console.log('[Debug] - window.forceTestBundleProtection()');
     }
     
-    // FORCE TEST: Auto-trigger after 5 seconds for testing
+    // FORCE TEST: Auto-trigger after 2 seconds for testing (faster)
     const autoTestTimeout = setTimeout(() => {
       console.log('[Debug] 🚨 AUTO-TEST: Triggering Bundle Protection Error Screen...');
       setBundleProtectionFailed(true);
-    }, 5000);
+    }, 2000);
     
     return () => clearTimeout(autoTestTimeout);
   }, []);
@@ -327,6 +327,29 @@ function App() {
 
     // Request notification permission
     requestNotificationPermission();
+    
+    // AFTER PERMISSION: Check Bundle Protection again
+    setTimeout(async () => {
+      console.log('[Security] 🔍 Post-permission Bundle ID check...');
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const appInfo = await CapacitorApp.getInfo();
+          const currentBundleId = appInfo.id;
+          const expectedBundleId = 'com.zyea.hieudev';
+          
+          console.log('[Security] Post-permission Bundle ID:', currentBundleId);
+          console.log('[Security] Expected Bundle ID:', expectedBundleId);
+          
+          if (currentBundleId !== expectedBundleId) {
+            console.error('[Security] 🚨 POST-PERMISSION Bundle ID mismatch!');
+            setBundleProtectionFailed(true);
+          }
+        } catch (error) {
+          console.error('[Security] Post-permission Bundle check error:', error);
+          setBundleProtectionFailed(true);
+        }
+      }
+    }, 1000);
 
     // Listen for PWA install prompt (Web/PWA only, not for Capacitor)
     if (!isCapacitor()) {
