@@ -59,7 +59,7 @@ jobs:
       - name: Install CocoaPods dependencies
         working-directory: client/ios/App
         run: |
-          pod install
+          pod install --repo-update
           
       - name: Sync Capacitor
         working-directory: client
