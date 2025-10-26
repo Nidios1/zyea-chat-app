@@ -64,7 +64,7 @@ jobs:
       - name: Sync Capacitor
         working-directory: client
         run: |
-          npx cap sync ios --deployment
+          npx cap sync ios
           
       - name: Configure iOS project
         working-directory: client/ios/App/App
