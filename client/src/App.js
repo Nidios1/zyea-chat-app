@@ -25,7 +25,7 @@ import BundleProtectionError from './components/Common/BundleProtectionError';
 // import PerformanceMonitor from './components/Common/PerformanceMonitor';
 import { getToken, removeToken } from './utils/auth';
 import { initCopyProtection, preventDevTools } from './utils/copyProtection';
-import { initBundleProtection, startContinuousValidation } from './utils/bundleProtection';
+import { initBundleProtection, startContinuousValidation, testBundleProtection } from './utils/bundleProtection';
 import { useOfflineSync } from './hooks/useOfflineSync';
 import { useNativeFeatures } from './hooks/useNativeFeatures';
 import { isCapacitor, logPlatformInfo } from './utils/platformDetection';
@@ -80,7 +80,16 @@ function App() {
         }
       } catch (error) {
         console.error('[Security] Bundle validation error:', error);
-        setBundleProtectionFailed(true);
+        
+        // Check if it's Bundle Protection error
+        if (error.message === 'BUNDLE_ID_PROTECTION_FAILED') {
+          console.error('[Security] 🚨 Bundle Protection triggered - showing error screen');
+          setBundleProtectionFailed(true);
+        } else {
+          // Other errors - also show protection failed for security
+          console.error('[Security] Unknown error - triggering protection');
+          setBundleProtectionFailed(true);
+        }
       }
     };
     
@@ -147,6 +156,20 @@ function App() {
   const handleSkipUpdate = () => {
     setUpdateInfo(null);
   };
+
+  // Debug function để test Bundle Protection
+  const testBundleProtectionError = () => {
+    console.log('[Debug] Testing Bundle Protection Error Screen...');
+    setBundleProtectionFailed(true);
+  };
+
+  // Expose debug function to window for testing
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      window.testBundleProtection = testBundleProtectionError;
+      console.log('[Debug] Bundle Protection test function available: window.testBundleProtection()');
+    }
+  }, []);
 
   useEffect(() => {
     // Log platform info for debugging
