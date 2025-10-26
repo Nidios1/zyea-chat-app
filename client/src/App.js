@@ -21,9 +21,11 @@ import AppDownloadPrompt from './components/Loading/AppDownloadPrompt';
 import InstallPrompt from './components/Common/InstallPrompt';
 import UpdatePrompt from './components/Common/UpdatePrompt';
 import SuccessToast from './components/Common/SuccessToast';
+import BundleProtectionError from './components/Common/BundleProtectionError';
 // import PerformanceMonitor from './components/Common/PerformanceMonitor';
 import { getToken, removeToken } from './utils/auth';
 import { initCopyProtection, preventDevTools } from './utils/copyProtection';
+import { initBundleProtection, startContinuousValidation } from './utils/bundleProtection';
 import { useOfflineSync } from './hooks/useOfflineSync';
 import { useNativeFeatures } from './hooks/useNativeFeatures';
 import { isCapacitor, logPlatformInfo } from './utils/platformDetection';
@@ -38,6 +40,9 @@ function App() {
   const [preloadedData, setPreloadedData] = useState(null);
   const [dataLoadingProgress, setDataLoadingProgress] = useState(0);
   const [appStartTime] = useState(Date.now()); // Track khi app bắt đầu
+  
+  // Bundle Protection state
+  const [bundleProtectionFailed, setBundleProtectionFailed] = useState(false);
   
   // Live Update states
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -54,6 +59,33 @@ function App() {
   // PWA features
   const { isOnline, pendingCount, syncPendingData } = useOfflineSync();
   const { requestNotificationPermission, showNotification } = useNativeFeatures();
+
+  // Bundle Protection - Kiểm tra đầu tiên khi app khởi động
+  useEffect(() => {
+    const validateBundle = async () => {
+      try {
+        console.log('[Security] Initializing Bundle Protection...');
+        const isValid = await initBundleProtection();
+        
+        if (!isValid) {
+          console.error('[Security] ⚠️ Bundle ID validation failed!');
+          setBundleProtectionFailed(true);
+          return;
+        }
+        
+        // Start continuous validation nếu validate thành công
+        if (Capacitor.isNativePlatform()) {
+          startContinuousValidation();
+          console.log('[Security] ✅ Bundle Protection active');
+        }
+      } catch (error) {
+        console.error('[Security] Bundle validation error:', error);
+        setBundleProtectionFailed(true);
+      }
+    };
+    
+    validateBundle();
+  }, []);
 
   // Check for updates khi app load
   useEffect(() => {
@@ -388,6 +420,11 @@ function App() {
     removeToken();
     setUser(null);
   };
+
+  // CRITICAL: Kiểm tra Bundle Protection TRƯỚC tất cả
+  if (bundleProtectionFailed) {
+    return <BundleProtectionError />;
+  }
 
   if (loading) {
     // Chỉ hiển thị SplashScreen đẹp trên mobile, PC hiển thị loading đơn giản
