@@ -1,78 +1,273 @@
 workflows:
-  ios-capacitor-workflow:
-    name: iOS Capacitor Build
+  # ========================================
+  # MESSENGER APP (iOS)
+  # ========================================
+  ios-messenger-workflow:
+    name: Zyea+ Messenger iOS
     max_build_duration: 60
     instance_type: mac_mini_m1
+    
     environment:
       groups:
-        # Add your code signing credentials here via Codemagic UI
         - ios_credentials
       vars:
-        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_WORKSPACE: "client/ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
-      node: v18.17.0
+        BUNDLE_ID: "com.zyea.hieudev"
+        APP_STORE_CONNECT_ISSUER_ID: $APP_STORE_CONNECT_ISSUER_ID
+        APP_STORE_CONNECT_KEY_IDENTIFIER: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        APP_STORE_CONNECT_PRIVATE_KEY: $APP_STORE_CONNECT_PRIVATE_KEY
+        CERTIFICATE_PRIVATE_KEY: $CERTIFICATE_PRIVATE_KEY
+      node: latest
       xcode: latest
       cocoapods: default
-    
+
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+          source: true
+        - pattern: 'develop'
+          include: true
+          source: true
+
     scripts:
-      - name: Install dependencies
+      - name: Install npm dependencies (Messenger)
         script: |
           cd client
-          npm install
-      
-      - name: Build web app
+          npm ci
+
+      - name: Build React app (Messenger)
         script: |
           cd client
+          export DISABLE_ESLINT_PLUGIN=true
           npm run build
-      
-      - name: Install Capacitor CLI
-        script: |
-          cd client
-          npm install -g @capacitor/cli
-      
-      - name: Add iOS platform
-        script: |
-          cd client
-          npx cap add ios || echo "iOS platform already exists"
-      
-      - name: Sync Capacitor
+
+      - name: Setup Capacitor iOS (Messenger)
         script: |
           cd client
           npx cap sync ios
-      
-      - name: Install CocoaPods dependencies
+
+      - name: Set up code signing settings on Xcode project
         script: |
-          cd client/ios/App
-          pod install
-      
-      - name: Set up code signing
-        script: |
-          # Code signing will be handled automatically by Codemagic
-          keychain initialize
-      
+          cd client
+          xcode-project use-profiles
+
       - name: Build iOS app
         script: |
-          cd client/ios/App
-          xcodebuild -workspace App.xcworkspace \
-            -scheme App \
-            -configuration Release \
-            -archivePath $CM_BUILD_DIR/App.xcarchive \
-            archive
-      
-      - name: Export IPA
-        script: |
-          xcodebuild -exportArchive \
-            -archivePath $CM_BUILD_DIR/App.xcarchive \
-            -exportPath $CM_BUILD_DIR/export \
-            -exportOptionsPlist client/ios/App/exportOptions.plist
-    
+          cd client
+          xcode-project build-ipa \
+            --workspace ios/App/App.xcworkspace \
+            --scheme App
+
     artifacts:
-      - client/ios/App/build/App.ipa
-      - $CM_BUILD_DIR/export/*.ipa
-    
+      - client/build/ios/ipa/*.ipa
+      - client/build/ios/ipa/*.dSYM
+
     publishing:
       email:
         recipients:
-          - your-email@example.com
+          - hieudev@example.com
+        notify:
+          success: true
+          failure: true
 
+      # Optional: Publish to TestFlight
+      # app_store_connect:
+      #   auth: integration
+      #   submit_to_testflight: true
+      #   beta_groups:
+      #     - Testers
 
+  # ========================================
+  # ZYEA+ APP (iOS)
+  # ========================================
+  ios-zyeaplus-workflow:
+    name: Zyea+ Social iOS
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    
+    environment:
+      groups:
+        - ios_credentials
+      vars:
+        XCODE_WORKSPACE: "zyea-plus-app/ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+        BUNDLE_ID: "com.zyea.app"
+        APP_STORE_CONNECT_ISSUER_ID: $APP_STORE_CONNECT_ISSUER_ID
+        APP_STORE_CONNECT_KEY_IDENTIFIER: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        APP_STORE_CONNECT_PRIVATE_KEY: $APP_STORE_CONNECT_PRIVATE_KEY
+        CERTIFICATE_PRIVATE_KEY: $CERTIFICATE_PRIVATE_KEY
+      node: latest
+      xcode: latest
+      cocoapods: default
+
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+          source: true
+        - pattern: 'develop'
+          include: true
+          source: true
+
+    scripts:
+      - name: Install npm dependencies (Zyea+)
+        script: |
+          cd zyea-plus-app
+          npm ci
+
+      - name: Build React app (Zyea+)
+        script: |
+          cd zyea-plus-app
+          export DISABLE_ESLINT_PLUGIN=true
+          npm run build
+
+      - name: Setup Capacitor iOS (Zyea+)
+        script: |
+          cd zyea-plus-app
+          npx cap add ios || true
+          npx cap sync ios
+
+      - name: Set up code signing settings on Xcode project
+        script: |
+          cd zyea-plus-app
+          xcode-project use-profiles
+
+      - name: Build iOS app
+        script: |
+          cd zyea-plus-app
+          xcode-project build-ipa \
+            --workspace ios/App/App.xcworkspace \
+            --scheme App
+
+    artifacts:
+      - zyea-plus-app/build/ios/ipa/*.ipa
+      - zyea-plus-app/build/ios/ipa/*.dSYM
+
+    publishing:
+      email:
+        recipients:
+          - hieudev@example.com
+        notify:
+          success: true
+          failure: true
+
+      # Optional: Publish to TestFlight
+      # app_store_connect:
+      #   auth: integration
+      #   submit_to_testflight: true
+      #   beta_groups:
+      #     - Testers
+
+  # ========================================
+  # ANDROID BUILDS (Optional)
+  # ========================================
+  android-messenger-workflow:
+    name: Zyea+ Messenger Android
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    
+    environment:
+      groups:
+        - android_credentials
+      vars:
+        PACKAGE_NAME: "com.zyea.hieudev"
+      node: latest
+      java: 17
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+          source: true
+
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          cd client
+          npm ci
+
+      - name: Build React app
+        script: |
+          cd client
+          export DISABLE_ESLINT_PLUGIN=true
+          npm run build
+
+      - name: Setup Capacitor Android
+        script: |
+          cd client
+          npx cap sync android
+
+      - name: Build Android APK
+        script: |
+          cd client/android
+          ./gradlew assembleRelease
+
+    artifacts:
+      - client/android/app/build/outputs/**/*.apk
+
+    publishing:
+      email:
+        recipients:
+          - hieudev@example.com
+
+  android-zyeaplus-workflow:
+    name: Zyea+ Social Android
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    
+    environment:
+      groups:
+        - android_credentials
+      vars:
+        PACKAGE_NAME: "com.zyea.app"
+      node: latest
+      java: 17
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+          source: true
+
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          cd zyea-plus-app
+          npm ci
+
+      - name: Build React app
+        script: |
+          cd zyea-plus-app
+          export DISABLE_ESLINT_PLUGIN=true
+          npm run build
+
+      - name: Setup Capacitor Android
+        script: |
+          cd zyea-plus-app
+          npx cap add android || true
+          npx cap sync android
+
+      - name: Build Android APK
+        script: |
+          cd zyea-plus-app/android
+          ./gradlew assembleRelease
+
+    artifacts:
+      - zyea-plus-app/android/app/build/outputs/**/*.apk
+
+    publishing:
+      email:
+        recipients:
+          - hieudev@example.com

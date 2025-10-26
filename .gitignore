@@ -1,23 +1,23 @@
 # Dependencies
 node_modules/
 */node_modules/
-client/node_modules/
-server/node_modules/
+**/node_modules/
 
 # Build outputs
 build/
 dist/
-client/build/
-*.log
+*/build/
+**/build/
 
-# Environment files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-config.env
-server/config.env
+# Capacitor
+.capacitor/
+*/capacitor/
+android/
+ios/
+*/android/
+*/ios/
+**/android/
+**/ios/
 
 # IDE
 .vscode/
@@ -29,51 +29,35 @@ server/config.env
 # OS
 .DS_Store
 Thumbs.db
-desktop.ini
+*.log
 
-# Capacitor (generated folders)
-client/android/
-client/ios/
-
-# Keep iOS export options and capacitor config
-!client/ios-export-options.plist
-!client/capacitor.config.ts
-
-# Uploads (user uploaded files only)
-server/uploads/avatars/
-server/uploads/posts/
-
-# Keep public assets for iOS/Android build
-!client/public/**/*.png
-!client/public/**/*.jpg
-!client/public/**/*.jpeg
-!client/resources/**/*.png
-
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
+# Environment
+.env
+.env.local
+.env.production
+*.env
 
 # Testing
 coverage/
 .nyc_output/
 
-# Production
-*.tgz
-*.zip
-*.rar
-../htdocs.rar
+# Misc
+*.pem
+*.key
+*.p12
+*.mobileprovision
+.expo/
+.expo-shared/
 
-# Local files
-*.local
-
-# Package manager (keep package-lock for consistency)
-# package-lock.json
-yarn.lock
-pnpm-lock.yaml
+# Uploads
+uploads/
+**/uploads/
 
 # Temp files
 *.tmp
 *.temp
 .cache/
+
+# Package locks (optional - có thể commit nếu muốn)
+# package-lock.json
+# */package-lock.json

@@ -1,248 +1,257 @@
-# 💬 Zyea+ – Kết Nối Mọi Khoảnh Khắc
+# 🎉 Zyea+ Social Network
 
-Trò chuyện chưa bao giờ nhanh, mượt và gần gũi đến thế!  
-Ứng dụng chat real-time mang đến cho bạn **trải nghiệm trò chuyện tức thì**, hiện đại và đầy cảm xúc – nơi mọi cuộc trò chuyện trở nên sống động như thật 💖
+<div align="center">
 
----
+![Zyea+ Logo](client/public/app.jpg)
 
-## 🚀 Tính năng
+**Mạng xã hội hoàn chỉnh với 2 app riêng biệt: Messenger & NewsFeed**
 
-✨ **Chat tức thì – Không độ trễ:** Gửi và nhận tin nhắn ngay trong tích tắc với Socket.IO  
-🔒 **Đăng nhập an toàn:** Bảo mật thông tin tuyệt đối với JWT authentication  
-👀 **Trạng thái online/offline:** Biết ngay ai đang sẵn sàng trò chuyện  
-🔍 **Tìm kiếm bạn bè:** Dễ dàng kết nối và bắt đầu cuộc trò chuyện mới  
-💾 **Lưu trữ thông minh:** Giữ lại mọi kỷ niệm, tin nhắn được lưu trữ an toàn trên MySQL  
-📱 **Thiết kế hiện đại:** Giao diện thân thiện, tối ưu cho mọi thiết bị  
-🌙 **Dark Mode:** Chế độ tối bảo vệ mắt  
-📸 **Chia sẻ hình ảnh:** Upload và chia sẻ ảnh trong chat  
-🔔 **Thông báo real-time:** Nhận thông báo ngay lập tức  
+[![React](https://img.shields.io/badge/React-18.2.0-blue)](https://reactjs.org/)
+[![Capacitor](https://img.shields.io/badge/Capacitor-5.5.1-blue)](https://capacitorjs.com/)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+</div>
 
 ---
+
+## 📱 Giới thiệu
+
+Zyea+ là một hệ thống mạng xã hội đầy đủ tính năng, bao gồm **2 ứng dụng riêng biệt**:
+
+### 1. **Zyea+ Messenger** (`client/`)
+- 💬 Nhắn tin real-time với Socket.IO
+- 📞 Video call
+- 👥 Quản lý danh bạ
+- 🔔 Push notifications
+- 📸 Gửi ảnh/video
+
+### 2. **Zyea+ NewsFeed** (`zyea-plus-app/`)
+- 📰 Bảng tin (NewsFeed) giống Facebook
+- 📝 Đăng bài với ảnh/video
+- 🎯 Khoảnh khắc (Stories)
+- 💬 Nút tin nhắn với badge → Mở Messenger app
+- 🔗 Deep linking giữa 2 app
+
+## ✨ Tính năng nổi bật
+
+- ✅ **2 app độc lập**: Messenger & NewsFeed
+- ✅ **Deep Linking**: Click nút tin nhắn → Mở Messenger app
+- ✅ **Real-time**: Socket.IO cho chat
+- ✅ **Badge thông báo**: Hiển thị số tin nhắn chưa đọc
+- ✅ **Cross-platform**: iOS & Android
+- ✅ **UI/UX đẹp**: Giống Facebook & Messenger thật
+- ✅ **PWA Support**: Cài đặt trên web browser
+
+## 🏗️ Kiến trúc
+
+```
+┌─────────────────────────────────────────┐
+│         Zyea+ NewsFeed App              │
+│         (com.zyea.app)                  │
+│  ┌────────────────────────────────────┐ │
+│  │ 📰 NewsFeed                        │ │
+│  │ 📸 Stories                         │ │
+│  │ 💬 Messages Badge [3] ──────────┐ │ │
+│  └────────────────────────────────────┘ │
+└─────────────────────────────────────────┘
+                  │ Deep Link
+                  │ zyeamessenger://open
+                  ↓
+┌─────────────────────────────────────────┐
+│         Zyea+ Messenger App             │
+│         (com.zyea.hieudev)              │
+│  ┌────────────────────────────────────┐ │
+│  │ 💬 Chat conversations              │ │
+│  │ 📞 Video calls                     │ │
+│  │ 👥 Contacts                        │ │
+│  └────────────────────────────────────┘ │
+└─────────────────────────────────────────┘
+```
+
+## 🚀 Quick Start
+
+### 1. Clone Repository
+
+```bash
+git clone https://github.com/YOUR_USERNAME/zyea-plus-social-network.git
+cd zyea-plus-social-network
+```
+
+### 2. Setup Server
+
+```bash
+cd server
+npm install
+cp config.env.example config.env
+# Edit config.env with your database credentials
+node setup_database.js
+npm start
+```
+
+### 3. Build Messenger App
+
+```bash
+cd client
+npm install
+npm run build:win
+npx cap sync android
+npx cap open android
+```
+
+### 4. Build NewsFeed App
+
+```bash
+cd zyea-plus-app
+npm install
+npm run build:win
+npx cap sync android
+npx cap open android
+```
+
+**Hoặc dùng scripts:**
+- `BUILD-TEST-MOBILE.bat` - Build Messenger app
+- `BUILD-ZYEA-PLUS-APP.bat` - Build NewsFeed app
+
+## 📚 Documentation
+
+- 📘 [QUICK-START-2-APPS.md](QUICK-START-2-APPS.md) - Hướng dẫn nhanh
+- 📗 [ZYEA-PLUS-APP-README.md](ZYEA-PLUS-APP-README.md) - Chi tiết đầy đủ
+- 📕 [GITHUB-UPLOAD-GUIDE.md](GITHUB-UPLOAD-GUIDE.md) - Upload & build IPA
+- 📊 [SUMMARY-2-APPS.md](SUMMARY-2-APPS.md) - Tóm tắt project
 
 ## 🛠️ Tech Stack
 
 ### Frontend
-- ⚛️ **React.js** - UI framework
-- 🎨 **Styled Components** - CSS-in-JS
-- 🔌 **Socket.IO Client** - Real-time communication
-- 📱 **Capacitor** - Native mobile wrapper (iOS & Android)
-- 🎯 **Axios** - HTTP client
-- 🚀 **React Router** - Navigation
+- **React** 18.2.0
+- **Capacitor** 5.5.1 (iOS/Android native)
+- **Socket.IO Client** 4.7.2
+- **React Router** 6.15.0
+- **Styled Components** 6.0.7
+- **Material-UI** 5.14.16
 
 ### Backend
-- 🟢 **Node.js & Express** - Server framework
-- 🔌 **Socket.IO** - WebSocket server
-- 🗄️ **MySQL** - Database
-- 🔐 **JWT** - Authentication
-- 📁 **Multer** - File upload handling
+- **Node.js** 18+
+- **Express** 4.18+
+- **MySQL** 8.0+
+- **Socket.IO** 4.7.2
+- **JWT** Authentication
 
----
+### DevOps
+- **GitHub Actions** - CI/CD
+- **Codemagic** - iOS/Android builds
+- **Docker** (optional)
 
-## 📱 Hỗ trợ Đa nền tảng
+## 📱 Screenshots
 
-- ✅ **Web (PWA)** — Chạy trên mọi trình duyệt hiện đại
-- ✅ **Android** — Native app với Capacitor
-- ✅ **iOS** — Native app với Capacitor
-- 🔔 **Push Notifications** — Thông báo đẩy trên mobile
-- 📲 **Offline Support** — Lưu trữ offline với Service Worker
+### Zyea+ NewsFeed App
+- TopBar với nút tin nhắn có badge
+- NewsFeed với posts
+- Khoảnh khắc (Stories)
 
----
+### Zyea+ Messenger App
+- Chat conversations
+- Message UI
+- Video call interface
 
-## 🚀 Hướng dẫn Cài đặt
+## 🔐 Security
 
-### Yêu cầu
-- Node.js 16+ 
-- MySQL 8.0+
-- npm hoặc yarn
-
-### 1. Clone Repository
-```bash
-git clone https://github.com/your-username/zyea-chat-app.git
-cd zyea-chat-app
-```
-
-### 2. Cài đặt Backend
-```bash
-cd server
-npm install
-
-# Tạo file config
-cp config.env.example config.env
-
-# Cập nhật thông tin database trong config.env
-# DB_HOST=localhost
-# DB_USER=root
-# DB_PASSWORD=your_password
-# DB_NAME=zalo_clone
-# JWT_SECRET=your_secret_key
-# PORT=5000
-
-# Setup database
-npm run setup-db
-```
-
-### 3. Cài đặt Frontend
-```bash
-cd ../client
-npm install
-```
-
-### 4. Chạy ứng dụng
-
-#### Development Mode
-```bash
-# Terminal 1 - Start backend
-cd server
-npm start
-
-# Terminal 2 - Start frontend
-cd client
-npm start
-```
-
-Mở trình duyệt: `http://localhost:3000`
-
-#### Production Mode
-```bash
-# Build frontend
-cd client
-npm run build
-
-# Backend sẽ serve static files từ build/
-cd ../server
-npm start
-```
-
----
-
-## 📱 Build Mobile App
-
-### Android APK
-```bash
-cd client
-npm run build
-npx cap add android
-npx cap sync android
-npx cap open android
-# Build APK trong Android Studio
-```
-
-### iOS IPA
-Xem hướng dẫn chi tiết trong [BUILD_IPA_GUIDE.md](BUILD_IPA_GUIDE.md)
-
-**Tóm tắt:**
-- **Cách 1:** Dùng Codemagic (Cloud Build - Miễn phí)
-- **Cách 2:** Build local với Xcode (Cần Mac)
-- **Cách 3:** Dùng Ionic Appflow
-
-```bash
-cd client
-npm run build
-npx cap add ios
-npx cap sync ios
-npx cap open ios
-# Archive trong Xcode
-```
-
----
-
-## 📂 Cấu trúc Project
-
-```
-zyea-chat-app/
-├── client/                 # Frontend React app
-│   ├── src/
-│   │   ├── components/    # React components
-│   │   ├── contexts/      # React contexts
-│   │   ├── hooks/         # Custom hooks
-│   │   ├── utils/         # Utility functions
-│   │   └── styles/        # CSS files
-│   ├── public/            # Static assets
-│   ├── capacitor.config.ts # Capacitor config
-│   └── package.json
-│
-├── server/                # Backend Node.js
-│   ├── routes/           # API routes
-│   ├── middleware/       # Express middleware
-│   ├── config/           # Configuration
-│   ├── index.js          # Server entry point
-│   └── package.json
-│
-├── BUILD_IPA_GUIDE.md    # Hướng dẫn build iOS
-├── codemagic.yaml        # CI/CD config
-└── README.md             # This file
-```
-
----
-
-## 🔒 Bảo mật
-
-- ✅ JWT-based authentication
+- ✅ JWT Authentication
 - ✅ Password hashing với bcrypt
-- ✅ Input validation và sanitization
-- ✅ CORS protection
-- ✅ SQL injection prevention
+- ✅ SQL injection protection
 - ✅ XSS protection
+- ✅ CORS configuration
 
----
+## 📦 Build & Deploy
 
-## 🎨 Giao diện
+### Build Android APK
 
-### Desktop
-- **Sidebar:** Danh sách cuộc trò chuyện
-- **Chat Area:** Khu vực nhắn tin chính
-- **User Search:** Tìm kiếm người dùng
-- **Profile:** Thông tin cá nhân
+```bash
+# Messenger
+cd client
+npm run android
 
-### Mobile
-- **Bottom Navigation:** Điều hướng nhanh
-- **Swipe Gestures:** Vuốt để xem thêm
-- **Pull to Refresh:** Kéo để cập nhật
-- **Responsive:** Tương thích mọi kích thước màn hình
+# NewsFeed
+cd zyea-plus-app
+npm run android
+```
 
----
+### Build iOS IPA
 
-## 📊 Database Schema
+**Option 1: Local (Requires Mac + Xcode)**
+```bash
+cd client
+npm run ios
+```
 
-### Tables
-- `users` - Thông tin người dùng
-- `conversations` - Cuộc trò chuyện
-- `messages` - Tin nhắn
-- `friends` - Quan hệ bạn bè
-- `posts` - Bài viết newsfeed
-- `notifications` - Thông báo
+**Option 2: Codemagic (Recommended)**
+1. Push code to GitHub
+2. Go to https://codemagic.io
+3. Connect repository
+4. Start build
+5. Download IPA
 
-Chi tiết schema: Xem file `server/setup_database.sql`
+See [GITHUB-UPLOAD-GUIDE.md](GITHUB-UPLOAD-GUIDE.md) for details.
 
----
+## 🌐 API Endpoints
 
-## 🤝 Đóng góp
+### Authentication
+- `POST /auth/register` - Register new user
+- `POST /auth/login` - Login user
+- `GET /users/profile` - Get user profile
 
-Contributions, issues và feature requests đều được chào đón!
+### Chat
+- `GET /chat/conversations` - Get conversations
+- `POST /chat/send` - Send message
+- `DELETE /chat/message/:id` - Delete message
 
-1. Fork repo
-2. Tạo branch mới (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Mở Pull Request
+### NewsFeed
+- `GET /newsfeed/posts` - Get posts
+- `POST /newsfeed/create` - Create post
+- `POST /newsfeed/like/:id` - Like post
+- `POST /newsfeed/comment/:id` - Comment on post
 
----
+## 🤝 Contributing
 
-## 📝 License
+Contributions are welcome! Please follow these steps:
 
-This project is open source and available under the [MIT License](LICENSE).
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
----
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 👨‍💻 Author
 
-**Nidios1**
-- GitHub: [@Nidios1](https://github.com/Nidios1)
+**HieuDev**
+- GitHub: [@hieudev](https://github.com/hieudev)
+- Email: hieudev@example.com
+
+## 🙏 Acknowledgments
+
+- [React](https://reactjs.org/)
+- [Capacitor](https://capacitorjs.com/)
+- [Socket.IO](https://socket.io/)
+- [Material-UI](https://mui.com/)
+- [Codemagic](https://codemagic.io/)
+
+## 📞 Support
+
+If you have any questions or issues:
+1. Check the [Documentation](QUICK-START-2-APPS.md)
+2. Open an [Issue](https://github.com/YOUR_USERNAME/zyea-plus-social-network/issues)
+3. Contact: hieudev@example.com
 
 ---
 
-## ❤️ Trải nghiệm ngay hôm nay!
+<div align="center">
 
-Kết nối bạn bè, trò chuyện mọi lúc, mọi nơi – nhanh, an toàn và đầy cảm xúc cùng **Zyea+** 💬  
+Made with ❤️ by HieuDev
 
-**Zyea+ – Nơi mọi cuộc trò chuyện bắt đầu.** 🚀
+⭐ Star this repo if you like it!
+
+</div>

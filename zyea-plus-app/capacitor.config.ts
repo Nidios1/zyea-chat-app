@@ -1,14 +1,11 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.zyea.hieudev',
+  appId: 'com.zyea.app',
   appName: 'Zyea+',
   webDir: 'build',
   server: {
-    // QUAN TRỌNG: Config cho IP wifi
-    // Để native app connect được tới API server
     androidScheme: 'https',
-    // allowNavigation cho phép app gọi API tới IP wifi
     allowNavigation: [
       'http://192.168.0.102:5000',
       'http://192.168.0.102:3000',
@@ -17,7 +14,6 @@ const config: CapacitorConfig = {
       'http://localhost:5000',
       'http://localhost:3000'
     ],
-    // Clear text traffic cho development
     cleartext: true
   },
   plugins: {
@@ -36,49 +32,36 @@ const config: CapacitorConfig = {
       backgroundColor: '#0084ff',
       overlaysWebView: false
     },
-    PushNotifications: {
-      presentationOptions: ["badge", "sound", "alert"],
-    },
     Camera: {
       saveToGallery: true,
       quality: 90
     },
-    LocalNotifications: {
-      smallIcon: "ic_stat_icon_config_sample",
-      iconColor: "#0084ff",
-      sound: "message_tone.wav",
-    },
     Keyboard: {
-      resize: 'native',  // CRITICAL: native mode - keyboard không đẩy body
+      resize: 'native',
       style: 'dark',
-      resizeOnFullScreen: false,  // CRITICAL: Không resize trong fullscreen
+      resizeOnFullScreen: false,
+    },
+    // App Launcher for Deep Linking to Messenger app
+    AppLauncher: {
+      // No config needed here
     }
   },
-  // iOS specific config
   ios: {
     contentInset: 'never',
     preferredContentMode: 'mobile',
-    // Enable edge-to-edge content (extends behind notch/status bar)
     scrollEnabled: false,
     allowsLinkPreview: false,
-    // CRITICAL: Enable fullscreen with notch support
     limitsNavigationsToAppBoundDomains: false,
-    // CRITICAL: Enable WebRTC in WKWebView
     allowsInlineMediaPlayback: true,
     mediaTypesRequiringUserActionForPlayback: 'none',
-    // Enable camera and microphone
     webViewMediaCaptureEnabled: true,
-    // iOS appearance config
     backgroundColor: '#0084ff',
     overrideUserInterfaceStyle: 'Light',
-    // Disable long press context menu
     suppressesIncrementalRendering: false,
-    // Animation config for smooth iOS-like experience
     allowsBackForwardNavigationGestures: true,
-    // Deep Linking: Allow other apps to open this app
-    scheme: 'zyeamessenger'
+    // URL Schemes to open Messenger app
+    scheme: 'zyeaplus'
   },
-  // Android specific config
   android: {
     buildOptions: {
       keystorePath: undefined,
@@ -89,7 +72,17 @@ const config: CapacitorConfig = {
     },
     allowMixedContent: true,
     captureInput: true,
-    webContentsDebuggingEnabled: true // Enable cho development
+    webContentsDebuggingEnabled: true,
+    // Intent filters to open Messenger app
+    intentFilters: [
+      {
+        action: 'VIEW',
+        category: ['DEFAULT', 'BROWSABLE'],
+        data: {
+          scheme: 'zyeamessenger'
+        }
+      }
+    ]
   }
 };
 
