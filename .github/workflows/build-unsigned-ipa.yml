@@ -3,6 +3,9 @@ name: Build Unsigned IPA (for ESign)
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-unsigned-ipa:
     name: Build Unsigned iOS App
