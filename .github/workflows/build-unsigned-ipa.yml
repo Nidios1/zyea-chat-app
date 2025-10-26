@@ -1,0 +1,168 @@
+name: Build Unsigned IPA (for ESign)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-unsigned-ipa:
+    name: Build Unsigned iOS App
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./zyea-plus-app
+        run: npm ci
+
+      - name: Build React app
+        working-directory: ./zyea-plus-app
+        run: |
+          DISABLE_ESLINT_PLUGIN=true npm run build
+
+      - name: Sync Capacitor
+        working-directory: ./zyea-plus-app
+        run: |
+          npx cap sync ios
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install CocoaPods
+        run: sudo gem install cocoapods
+
+      - name: Install iOS dependencies
+        working-directory: ./zyea-plus-app/ios/App
+        run: pod install
+
+      - name: Build iOS app (Unsigned)
+        working-directory: ./zyea-plus-app/ios/App
+        run: |
+          # Build without signing
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination generic/platform=iOS \
+            -archivePath $PWD/build/App.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS=""
+
+      - name: Create unsigned IPA
+        working-directory: ./zyea-plus-app/ios/App
+        run: |
+          # Create Payload directory
+          mkdir -p $PWD/build/Payload
+          
+          # Copy app to Payload
+          cp -r $PWD/build/App.xcarchive/Products/Applications/App.app $PWD/build/Payload/
+          
+          # Create IPA
+          cd $PWD/build
+          zip -r ZyeaPlus-Unsigned.ipa Payload
+          
+          # Verify IPA was created
+          ls -lh ZyeaPlus-Unsigned.ipa
+          echo "✅ Unsigned IPA created successfully!"
+
+      - name: Upload Unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZyeaPlus-Unsigned-IPA
+          path: zyea-plus-app/ios/App/build/ZyeaPlus-Unsigned.ipa
+          retention-days: 30
+
+      - name: Create Release with IPA
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: unsigned-v1.0.${{ github.run_number }}
+          name: Zyea+ Unsigned iOS Build #${{ github.run_number }}
+          body: |
+            ## 🚀 Zyea+ Unsigned iOS Build
+            
+            **Build Number**: ${{ github.run_number }}
+            **Build Date**: ${{ github.event.head_commit.timestamp }}
+            **Commit**: ${{ github.sha }}
+            
+            ### 📦 File để tải:
+            - `ZyeaPlus-Unsigned.ipa` - File IPA chưa ký
+            
+            ### ✏️ Cách ký bằng ESign:
+            
+            1. **Tải ESign** từ: https://esign.yyyue.xyz/
+            2. **Import IPA** vào ESign
+            3. **Chọn certificate** để ký
+            4. **Sign & Install** lên iPhone
+            
+            ### 📱 Cách cài đặt:
+            
+            **Option 1: ESign (Khuyến nghị)**
+            - Cài ESign qua AltStore hoặc Sideloadly
+            - Import file IPA này vào ESign
+            - Ký và cài đặt trực tiếp
+            
+            **Option 2: Sideloadly**
+            - Mở Sideloadly
+            - Drag & drop file IPA
+            - Nhập Apple ID
+            - Click Start
+            
+            **Option 3: AltStore**
+            - Mở AltStore
+            - My Apps → + 
+            - Chọn file IPA
+            - Đợi cài đặt
+            
+            ### ⚠️ Lưu ý:
+            - File IPA này **CHƯA ĐƯỢC KÝ**
+            - Cần ký bằng certificate của bạn để cài đặt
+            - Sau khi cài: Settings → General → Device Management → Trust
+            
+            ---
+            **Built with ❤️ for Zyea+ Team**
+          files: |
+            zyea-plus-app/ios/App/build/ZyeaPlus-Unsigned.ipa
+          draft: false
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Summary
+        if: success()
+        run: |
+          echo "🎉 =================================="
+          echo "✅ BUILD THÀNH CÔNG!"
+          echo "===================================="
+          echo ""
+          echo "📦 File IPA đã được tạo:"
+          echo "   - ZyeaPlus-Unsigned.ipa"
+          echo ""
+          echo "📥 Download tại:"
+          echo "   - Artifacts (phía dưới)"
+          echo "   - Releases: https://github.com/${{ github.repository }}/releases"
+          echo ""
+          echo "✏️ Ký bằng ESign:"
+          echo "   1. Tải ESign: https://esign.yyyue.xyz/"
+          echo "   2. Import IPA vào ESign"
+          echo "   3. Chọn certificate"
+          echo "   4. Sign & Install"
+          echo ""
+          echo "🎯 Hoàn thành!"
+          echo "===================================="
+
+      - name: Error Details
+        if: failure()
+        run: |
+          echo "❌ BUILD THẤT BẠI!"
+          echo "Kiểm tra logs phía trên để xem lỗi chi tiết."
+
