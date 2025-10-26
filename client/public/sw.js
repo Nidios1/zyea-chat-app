@@ -8,14 +8,11 @@ const API_CACHE = `zyea-api-v${CACHE_VERSION}`;
 
 console.log('🚀 Service Worker version:', CACHE_VERSION);
 
-const STATIC_URLS = [
+// Cache core files only - no specific hashed files
+const CORE_URLS = [
   '/',
   '/index.html',
-  '/manifest.json',
-  '/favicon.ico',
-  '/Zyea.jpg',
-  '/static/css/main.9343b6c3.css',
-  '/static/js/main.b86f162f.js'
+  '/manifest.json'
 ];
 
 const API_URLS = [
@@ -24,14 +21,22 @@ const API_URLS = [
   '/api/chat/messages'
 ];
 
-// Install event
+// Install event with better error handling
 self.addEventListener('install', (event) => {
   console.log('Service Worker: Install');
   event.waitUntil(
     Promise.all([
       caches.open(STATIC_CACHE).then((cache) => {
-        console.log('Caching static assets');
-        return cache.addAll(STATIC_URLS);
+        console.log('Caching core assets');
+        // Cache core files one by one with error handling
+        return Promise.allSettled(
+          CORE_URLS.map(url => 
+            cache.add(url).catch(err => {
+              console.log('Failed to cache:', url, err);
+              return Promise.resolve();
+            })
+          )
+        );
       }),
       caches.open(DYNAMIC_CACHE).then((cache) => {
         console.log('Dynamic cache ready');
@@ -39,6 +44,9 @@ self.addEventListener('install', (event) => {
       })
     ]).then(() => {
       console.log('Service Worker installed successfully');
+      return self.skipWaiting();
+    }).catch(err => {
+      console.log('Service Worker install failed:', err);
       return self.skipWaiting();
     })
   );
@@ -71,8 +79,8 @@ self.addEventListener('fetch', (event) => {
 
   // Handle different types of requests
   if (request.method === 'GET') {
-    // Static assets - Cache First
-    if (STATIC_URLS.some(staticUrl => request.url.includes(staticUrl))) {
+    // Core files - Cache First
+    if (CORE_URLS.some(coreUrl => request.url.includes(coreUrl))) {
       event.respondWith(cacheFirst(request));
     }
     // API requests - Network First with fallback

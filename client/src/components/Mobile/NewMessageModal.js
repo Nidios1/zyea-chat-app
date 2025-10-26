@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { FiSearch, FiX, FiUsers } from 'react-icons/fi';
-import { chatAPI } from '../../utils/api';
+import { chatAPI, friendsAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
@@ -48,7 +48,7 @@ const ModalOverlay = styled.div`
 `;
 
 const ModalContainer = styled.div`
-  background: white;
+  background: var(--bg-primary, white);
   width: 100%;
   max-width: 100%;
   border-radius: 20px 20px 0 0;
@@ -59,7 +59,7 @@ const ModalContainer = styled.div`
   transform: translateY(${props => props.$dragOffset}px);
   transition: ${props => props.$isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)'};
   animation: ${slideUp} 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 -4px 24px var(--shadow-color, rgba(0, 0, 0, 0.15));
   
   /* Safe area for iOS */
   padding-bottom: env(safe-area-inset-bottom);
@@ -68,7 +68,7 @@ const ModalContainer = styled.div`
     border-radius: 16px;
     max-height: 680px;
     max-width: 480px;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 12px 48px var(--shadow-color, rgba(0, 0, 0, 0.2));
   }
 `;
 
@@ -92,25 +92,25 @@ const DragHandle = styled.div`
 const HandleBar = styled.div`
   width: 40px;
   height: 4px;
-  background: #d1d5db;
+  background: var(--border-color, #d1d5db);
   border-radius: 2px;
   transition: all 0.2s ease;
 
   ${DragHandle}:active & {
     width: 60px;
-    background: #9ca3af;
+    background: var(--text-tertiary, #9ca3af);
   }
 `;
 
 const Header = styled.div`
   padding: 8px 16px 16px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
   display: flex;
   align-items: center;
   justify-content: space-between;
   position: sticky;
   top: 0;
-  background: white;
+  background: var(--bg-primary, white);
   z-index: 10;
   border-radius: 20px 20px 0 0;
 
@@ -123,7 +123,7 @@ const Header = styled.div`
 const Title = styled.h2`
   font-size: 18px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--text-primary, #1f2937);
   margin: 0;
   flex: 1;
   text-align: center;
@@ -135,7 +135,7 @@ const CloseButton = styled.button`
   border: none;
   padding: 8px;
   cursor: pointer;
-  color: #6b7280;
+  color: var(--text-secondary, #6b7280);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -144,20 +144,20 @@ const CloseButton = styled.button`
   -webkit-tap-highlight-color: transparent;
 
   &:hover {
-    background: #f3f4f6;
-    color: #374151;
+    background: var(--bg-secondary, #f3f4f6);
+    color: var(--text-primary, #374151);
   }
 
   &:active {
-    background: #e5e7eb;
+    background: var(--border-color, #e5e7eb);
     transform: scale(0.95);
   }
 `;
 
 const SearchContainer = styled.div`
   padding: 0 16px 12px;
-  background: white;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--bg-primary, white);
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
   position: sticky;
   top: 58px;
   z-index: 9;
@@ -170,26 +170,26 @@ const SearchContainer = styled.div`
 const SearchBox = styled.div`
   display: flex;
   align-items: center;
-  background: #f3f4f6;
+  background: var(--bg-secondary, #f3f4f6);
   border-radius: 12px;
   padding: 10px 14px;
   gap: 10px;
   transition: all 0.2s ease;
 
   &:focus-within {
-    background: #e5e7eb;
+    background: var(--bg-tertiary, #e5e7eb);
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
 `;
 
 const SearchIcon = styled.div`
-  color: #9ca3af;
+  color: var(--text-tertiary, #9ca3af);
   display: flex;
   align-items: center;
   transition: color 0.2s ease;
 
   ${SearchBox}:focus-within & {
-    color: #6b7280;
+    color: var(--text-secondary, #6b7280);
   }
 `;
 
@@ -199,11 +199,11 @@ const SearchInput = styled.input`
   border: none;
   outline: none;
   font-size: 15px;
-  color: #1f2937;
+  color: var(--text-primary, #1f2937);
   font-weight: 400;
 
   &::placeholder {
-    color: #9ca3af;
+    color: var(--text-tertiary, #9ca3af);
   }
 `;
 
@@ -229,18 +229,18 @@ const CreateGroupOption = styled.div`
   gap: 14px;
   cursor: pointer;
   transition: all 0.15s ease;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
   -webkit-tap-highlight-color: transparent;
   user-select: none;
 
   &:active {
-    background: #f3f4f6;
+    background: var(--bg-secondary, #f3f4f6);
     transform: scale(0.98);
   }
 
   @media (hover: hover) {
     &:hover {
-      background: #f9fafb;
+      background: var(--bg-secondary, #f9fafb);
     }
   }
 `;
@@ -270,7 +270,7 @@ const GroupText = styled.div`
 const GroupTitle = styled.div`
   font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary, #1f2937);
   letter-spacing: -0.2px;
 `;
 
@@ -282,9 +282,9 @@ const SectionTitle = styled.div`
   padding: 16px 16px 8px;
   font-size: 13px;
   font-weight: 700;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: var(--text-secondary, #6b7280);
+  /* Removed text-transform to fix Vietnamese character rendering */
+  letter-spacing: 0.3px;
 `;
 
 const FriendItem = styled.div`
@@ -305,7 +305,7 @@ const FriendItem = styled.div`
     left: 82px;
     right: 16px;
     height: 1px;
-    background: #f3f4f6;
+    background: var(--border-color, #f3f4f6);
   }
 
   &:last-child::after {
@@ -313,13 +313,13 @@ const FriendItem = styled.div`
   }
 
   &:active {
-    background: #f3f4f6;
+    background: var(--bg-secondary, #f3f4f6);
     transform: scale(0.98);
   }
 
   @media (hover: hover) {
     &:hover {
-      background: #f9fafb;
+      background: var(--bg-secondary, #f9fafb);
     }
   }
 `;
@@ -347,7 +347,7 @@ const OnlineIndicator = styled.div`
   width: 14px;
   height: 14px;
   background: #10b981;
-  border: 3px solid white;
+  border: 3px solid var(--bg-primary, white);
   border-radius: 50%;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 `;
@@ -360,7 +360,7 @@ const FriendInfo = styled.div`
 const FriendName = styled.div`
   font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--text-primary, #1f2937);
   margin-bottom: 3px;
   white-space: nowrap;
   overflow: hidden;
@@ -370,7 +370,7 @@ const FriendName = styled.div`
 
 const FriendDetails = styled.div`
   font-size: 14px;
-  color: #6b7280;
+  color: var(--text-secondary, #6b7280);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -382,7 +382,7 @@ const FriendDetails = styled.div`
 const EmptyState = styled.div`
   padding: 80px 24px;
   text-align: center;
-  color: #6b7280;
+  color: var(--text-secondary, #6b7280);
 `;
 
 const EmptyIcon = styled.div`
@@ -396,21 +396,21 @@ const EmptyText = styled.div`
   font-size: 18px;
   font-weight: 600;
   margin-bottom: 8px;
-  color: #374151;
+  color: var(--text-primary, #374151);
   letter-spacing: -0.3px;
 `;
 
 const EmptySubtext = styled.div`
   font-size: 14px;
-  color: #9ca3af;
+  color: var(--text-tertiary, #9ca3af);
   line-height: 1.5;
 `;
 
 const LoadingSpinner = styled.div`
   width: 24px;
   height: 24px;
-  border: 3px solid #e5e7eb;
-  border-top-color: #0084ff;
+  border: 3px solid var(--border-color, #e5e7eb);
+  border-top-color: var(--primary-color, #0084ff);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin: 0 auto 16px;
@@ -459,15 +459,25 @@ const NewMessageModal = ({ onClose, onSelectUser, onCreateGroup }) => {
   const loadFriends = async () => {
     try {
       setLoading(true);
-      const response = await chatAPI.getFriends();
+      const response = await friendsAPI.getFriends();
       console.log('Friends response:', response);
       
-      if (response && Array.isArray(response)) {
-        setFriends(response);
-        setFilteredFriends(response);
-      } else if (response && response.data && Array.isArray(response.data)) {
-        setFriends(response.data);
-        setFilteredFriends(response.data);
+      // friendsAPI.getFriends() returns response object with data property
+      if (response && response.data && Array.isArray(response.data)) {
+        // Filter only accepted friends (status === 'accepted')
+        const acceptedFriends = response.data.filter(friend => 
+          friend.status === 'accepted' || !friend.status
+        );
+        console.log('Accepted friends:', acceptedFriends);
+        setFriends(acceptedFriends);
+        setFilteredFriends(acceptedFriends);
+      } else if (response && Array.isArray(response)) {
+        // Fallback if response is direct array
+        const acceptedFriends = response.filter(friend => 
+          friend.status === 'accepted' || !friend.status
+        );
+        setFriends(acceptedFriends);
+        setFilteredFriends(acceptedFriends);
       } else {
         setFriends([]);
         setFilteredFriends([]);
