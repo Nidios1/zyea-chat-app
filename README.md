@@ -1,15 +1,18 @@
-# 🎉 Zyea+ Social Network
+# 🎉 Zyea Chat App
 
 <div align="center">
 
-![Zyea+ Logo](client/public/app.jpg)
+![Zyea Logo](client/public/app.jpg)
 
-**Mạng xã hội hoàn chỉnh với 2 app riêng biệt: Messenger & NewsFeed**
+**Ứng dụng Chat & Mạng Xã Hội Hoàn Chỉnh**
 
 [![React](https://img.shields.io/badge/React-18.2.0-blue)](https://reactjs.org/)
 [![Capacitor](https://img.shields.io/badge/Capacitor-5.5.1-blue)](https://capacitorjs.com/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green)](https://nodejs.org/)
+[![iOS](https://img.shields.io/badge/iOS-13%2B-black)](https://www.apple.com/ios/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+[🚀 Build IPA Guide](BUILD-IPA-GUIDE.md) | [📱 Demo](#) | [🐛 Report Bug](https://github.com/Nidios1/zyea-chat-app/issues)
 
 </div>
 
@@ -17,31 +20,27 @@
 
 ## 📱 Giới thiệu
 
-Zyea+ là một hệ thống mạng xã hội đầy đủ tính năng, bao gồm **2 ứng dụng riêng biệt**:
+Zyea Chat App là một ứng dụng mạng xã hội và nhắn tin hoàn chỉnh, kết hợp:
 
-### 1. **Zyea+ Messenger** (`client/`)
-- 💬 Nhắn tin real-time với Socket.IO
-- 📞 Video call
-- 👥 Quản lý danh bạ
-- 🔔 Push notifications
-- 📸 Gửi ảnh/video
+### ✨ Tính năng chính
+- 💬 **Nhắn tin Real-time**: Chat với Socket.IO, typing indicators
+- 📞 **Video Call**: Gọi video 1-1 và nhóm
+- 📰 **NewsFeed**: Bảng tin giống Facebook với posts, reactions, comments
+- 👥 **Quản lý bạn bè**: Thêm bạn, gợi ý kết bạn
+- 🔔 **Push Notifications**: Thông báo tin nhắn và hoạt động
+- 📸 **Chia sẻ Media**: Gửi ảnh, video, emoji
+- 🎨 **UI/UX đẹp**: Responsive design cho iOS và Android
+- 🌐 **PWA Support**: Cài đặt như app native
 
-### 2. **Zyea+ NewsFeed** (`zyea-plus-app/`)
-- 📰 Bảng tin (NewsFeed) giống Facebook
-- 📝 Đăng bài với ảnh/video
-- 🎯 Khoảnh khắc (Stories)
-- 💬 Nút tin nhắn với badge → Mở Messenger app
-- 🔗 Deep linking giữa 2 app
+## ✅ Tính năng nổi bật
 
-## ✨ Tính năng nổi bật
-
-- ✅ **2 app độc lập**: Messenger & NewsFeed
-- ✅ **Deep Linking**: Click nút tin nhắn → Mở Messenger app
-- ✅ **Real-time**: Socket.IO cho chat
-- ✅ **Badge thông báo**: Hiển thị số tin nhắn chưa đọc
-- ✅ **Cross-platform**: iOS & Android
-- ✅ **UI/UX đẹp**: Giống Facebook & Messenger thật
-- ✅ **PWA Support**: Cài đặt trên web browser
+- ✅ **Cross-platform**: iOS Native, Android, và PWA
+- ✅ **Real-time Chat**: Socket.IO cho messaging tức thì
+- ✅ **Video Call**: WebRTC integration
+- ✅ **Badge Notifications**: Hiển thị số tin nhắn chưa đọc
+- ✅ **Mobile Responsive**: Tối ưu cho iOS và Android
+- ✅ **Offline Support**: Service Worker caching
+- ✅ **CI/CD Ready**: Codemagic & GitHub Actions workflows
 
 ## 🏗️ Kiến trúc
 

@@ -1,0 +1,2 @@
+"use strict";(self.webpackChunkzalo_clone_client=self.webpackChunkzalo_clone_client||[]).push([[484],{484:(e,s,c)=>{c.d(s,{SplashScreenWeb:()=>n});var l=c(403);class n extends l.E_{async show(e){}async hide(e){}}}}]);
+//# sourceMappingURL=484.9155c6a7.chunk.js.map

@@ -13,14 +13,22 @@ dist/
 .capacitor/
 */capacitor/
 
-# Android/iOS - Ignore client builds but keep zyea-plus-app
+# Android/iOS - Ignore builds but keep config files
 client/android/
-client/ios/
 */android/**/*.class
 */android/**/build/
+
+# iOS - Keep project structure but ignore builds
+client/ios/App/Pods/
+client/ios/App/build/
+client/ios/App/App/xcuserdata/
+client/ios/App/*.ipa
+client/ios/App/*.dSYM
+client/ios/App/Podfile.lock
+*.xcuserdata/
+xcuserdata/
 */ios/**/Pods/
 */ios/**/build/
-*/ios/**/xcuserdata/
 */ios/**/*.ipa
 */ios/**/*.dSYM
 

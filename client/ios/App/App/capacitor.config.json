@@ -1,0 +1,74 @@
+{
+	"appId": "com.zyea.hieudev",
+	"appName": "Zyea+",
+	"webDir": "build",
+	"server": {
+		"androidScheme": "https",
+		"allowNavigation": [
+			"http://192.168.0.102:5000",
+			"http://192.168.0.102:3000",
+			"https://192.168.0.102:5000",
+			"https://192.168.0.102:3000",
+			"http://localhost:5000",
+			"http://localhost:3000"
+		],
+		"cleartext": true
+	},
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 0,
+			"launchAutoHide": true,
+			"showSpinner": false,
+			"backgroundColor": "#0084ff",
+			"androidSplashResourceName": "splash",
+			"androidScaleType": "CENTER_CROP",
+			"splashFullScreen": true,
+			"splashImmersive": true
+		},
+		"StatusBar": {
+			"style": "light",
+			"backgroundColor": "#0084ff",
+			"overlaysWebView": false
+		},
+		"PushNotifications": {
+			"presentationOptions": [
+				"badge",
+				"sound",
+				"alert"
+			]
+		},
+		"Camera": {
+			"saveToGallery": true,
+			"quality": 90
+		},
+		"LocalNotifications": {
+			"smallIcon": "ic_stat_icon_config_sample",
+			"iconColor": "#0084ff",
+			"sound": "message_tone.wav"
+		},
+		"Keyboard": {
+			"resize": "native",
+			"style": "dark",
+			"resizeOnFullScreen": false
+		}
+	},
+	"ios": {
+		"contentInset": "never",
+		"preferredContentMode": "mobile",
+		"scrollEnabled": false,
+		"allowsLinkPreview": false,
+		"limitsNavigationsToAppBoundDomains": false,
+		"allowsInlineMediaPlayback": true,
+		"mediaTypesRequiringUserActionForPlayback": "none",
+		"webViewMediaCaptureEnabled": true,
+		"backgroundColor": "#0084ff",
+		"overrideUserInterfaceStyle": "Light",
+		"suppressesIncrementalRendering": false,
+		"allowsBackForwardNavigationGestures": true
+	},
+	"android": {
+		"allowMixedContent": true,
+		"captureInput": true,
+		"webContentsDebuggingEnabled": true
+	}
+}

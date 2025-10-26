@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear Cache - Zyea+</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #0068ff 0%, #00a651 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #0068ff;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .step {
+            background: #f5f5f5;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            border-left: 4px solid #0068ff;
+        }
+        .step h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .step p {
+            margin: 5px 0;
+            color: #666;
+        }
+        button {
+            width: 100%;
+            background: #0068ff;
+            color: white;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 10px 0;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #0056cc;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            display: block;
+        }
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+            display: block;
+        }
+        .back-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .back-link a {
+            color: #0068ff;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Xóa Cache & Service Worker</h1>
+        <p class="subtitle">Công cụ dọn dẹp cache để fix lỗi đăng nhập</p>
+
+        <div class="step">
+            <h3>📋 Tại sao cần xóa cache?</h3>
+            <p>• Service Worker đang cache các API requests cũ</p>
+            <p>• Browser cache có thể chứa dữ liệu lỗi thời</p>
+            <p>• Giúp ứng dụng load lại cấu hình mới nhất</p>
+        </div>
+
+        <button onclick="clearServiceWorker()">🗑️ Xóa Service Worker</button>
+        <button onclick="clearAllCaches()">🧽 Xóa Tất Cả Cache</button>
+        <button onclick="clearLocalStorage()">📦 Xóa LocalStorage</button>
+        <button onclick="clearEverything()">💣 Xóa Tất Cả (Full Reset)</button>
+
+        <div id="status"></div>
+
+        <div class="step">
+            <h3>✅ Sau khi xóa cache:</h3>
+            <p>1. Click nút "Quay lại Login" bên dưới</p>
+            <p>2. Hoặc refresh trang (F5 hoặc Ctrl+R)</p>
+            <p>3. Thử đăng nhập lại</p>
+        </div>
+
+        <div class="back-link">
+            <a href="/login" onclick="reloadApp()">🔄 Quay lại Login</a>
+        </div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+
+        function showStatus(message, type = 'info') {
+            statusDiv.textContent = message;
+            statusDiv.className = type;
+        }
+
+        async function clearServiceWorker() {
+            try {
+                showStatus('🔄 Đang xóa Service Worker...', 'info');
+                
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                
+                if (registrations.length === 0) {
+                    showStatus('ℹ️ Không tìm thấy Service Worker nào', 'info');
+                    return;
+                }
+
+                for (let registration of registrations) {
+                    await registration.unregister();
+                }
+
+                showStatus(`✅ Đã xóa ${registrations.length} Service Worker(s)!`, 'success');
+                
+                setTimeout(() => {
+                    showStatus('🔄 Vui lòng refresh trang để hoàn tất...', 'warning');
+                }, 1500);
+            } catch (error) {
+                showStatus('❌ Lỗi: ' + error.message, 'error');
+            }
+        }
+
+        async function clearAllCaches() {
+            try {
+                showStatus('🔄 Đang xóa tất cả cache...', 'info');
+                
+                const cacheNames = await caches.keys();
+                
+                if (cacheNames.length === 0) {
+                    showStatus('ℹ️ Không tìm thấy cache nào', 'info');
+                    return;
+                }
+
+                await Promise.all(
+                    cacheNames.map(cacheName => caches.delete(cacheName))
+                );
+
+                showStatus(`✅ Đã xóa ${cacheNames.length} cache(s)!`, 'success');
+            } catch (error) {
+                showStatus('❌ Lỗi: ' + error.message, 'error');
+            }
+        }
+
+        function clearLocalStorage() {
+            try {
+                showStatus('🔄 Đang xóa LocalStorage...', 'info');
+                
+                const itemCount = localStorage.length;
+                localStorage.clear();
+                
+                showStatus(`✅ Đã xóa ${itemCount} item(s) từ LocalStorage!`, 'success');
+            } catch (error) {
+                showStatus('❌ Lỗi: ' + error.message, 'error');
+            }
+        }
+
+        async function clearEverything() {
+            try {
+                showStatus('🔄 Đang xóa tất cả dữ liệu...', 'info');
+                
+                // Clear Service Workers
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(registrations.map(reg => reg.unregister()));
+                
+                // Clear all caches
+                const cacheNames = await caches.keys();
+                await Promise.all(cacheNames.map(name => caches.delete(name)));
+                
+                // Clear localStorage
+                localStorage.clear();
+                
+                // Clear sessionStorage
+                sessionStorage.clear();
+                
+                showStatus('✅ Đã xóa tất cả! Đang reload trang...', 'success');
+                
+                // Reload after 2 seconds
+                setTimeout(() => {
+                    window.location.href = '/login';
+                }, 2000);
+            } catch (error) {
+                showStatus('❌ Lỗi: ' + error.message, 'error');
+            }
+        }
+
+        function reloadApp(e) {
+            if (e) e.preventDefault();
+            
+            // Clear everything before reload
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+            } catch (error) {
+                console.error('Error clearing storage:', error);
+            }
+            
+            // Reload to login page
+            window.location.href = '/login';
+            window.location.reload(true); // Force reload from server
+        }
+
+        // Display current status on load
+        window.addEventListener('load', async () => {
+            try {
+                const swCount = (await navigator.serviceWorker.getRegistrations()).length;
+                const cacheCount = (await caches.keys()).length;
+                const lsCount = localStorage.length;
+                
+                showStatus(
+                    `📊 Trạng thái hiện tại:\n` +
+                    `• Service Workers: ${swCount}\n` +
+                    `• Caches: ${cacheCount}\n` +
+                    `• LocalStorage items: ${lsCount}`,
+                    'info'
+                );
+            } catch (error) {
+                console.error('Error checking status:', error);
+            }
+        });
+    </script>
+</body>
+</html>
+
