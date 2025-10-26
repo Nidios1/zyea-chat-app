@@ -4,6 +4,7 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Capacitor } from '@capacitor/core';
 import { SplashScreen as CapacitorSplash } from '@capacitor/splash-screen';
+import { App as CapacitorApp } from '@capacitor/app';
 
 import AuthContext from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -65,6 +66,27 @@ function App() {
     const validateBundle = async () => {
       try {
         console.log('[Security] Initializing Bundle Protection...');
+        
+        // Force check Bundle ID immediately
+        if (Capacitor.isNativePlatform()) {
+          const appInfo = await CapacitorApp.getInfo();
+          const currentBundleId = appInfo.id;
+          const expectedBundleId = 'com.zyea.hieudev';
+          
+          console.log('[Security] Current Bundle ID:', currentBundleId);
+          console.log('[Security] Expected Bundle ID:', expectedBundleId);
+          console.log('[Security] Bundle ID Match:', currentBundleId === expectedBundleId);
+          
+          if (currentBundleId !== expectedBundleId) {
+            console.error('[Security] 🚨 BUNDLE ID MISMATCH DETECTED!');
+            console.error('[Security] Expected:', expectedBundleId);
+            console.error('[Security] Got:', currentBundleId);
+            console.error('[Security] Triggering Bundle Protection Error Screen...');
+            setBundleProtectionFailed(true);
+            return;
+          }
+        }
+        
         const isValid = await initBundleProtection();
         
         if (!isValid) {
@@ -94,6 +116,23 @@ function App() {
     };
     
     validateBundle();
+    
+    // Fallback: Force trigger Bundle Protection after 3 seconds if still loading
+    const fallbackTimeout = setTimeout(() => {
+      if (!bundleProtectionFailed && loading) {
+        console.log('[Security] ⏰ Fallback timeout - checking Bundle ID...');
+        if (Capacitor.isNativePlatform()) {
+          CapacitorApp.getInfo().then(appInfo => {
+            if (appInfo.id !== 'com.zyea.hieudev') {
+              console.error('[Security] 🚨 Fallback detected Bundle ID mismatch!');
+              setBundleProtectionFailed(true);
+            }
+          });
+        }
+      }
+    }, 3000);
+    
+    return () => clearTimeout(fallbackTimeout);
   }, []);
 
   // Check for updates khi app load
@@ -446,6 +485,7 @@ function App() {
 
   // CRITICAL: Kiểm tra Bundle Protection TRƯỚC tất cả
   if (bundleProtectionFailed) {
+    console.log('[Security] 🚨 Showing Bundle Protection Error Screen');
     return <BundleProtectionError />;
   }
 
