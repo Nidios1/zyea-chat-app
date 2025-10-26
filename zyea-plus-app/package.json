@@ -45,13 +45,15 @@
     "cap:open:android": "cap open android",
     "cap:build": "npm run build && cap sync",
     "android": "npm run cap:build && cap run android",
-    "ios": "npm run cap:build && cap run ios"
+    "ios": "npm run cap:build && cap run ios",
+    "generate:icons": "node generate-rounded-icons.js"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^5.5.1",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.31",
+    "sharp": "^0.34.4",
     "tailwindcss": "^3.3.5"
   },
   "eslintConfig": {
@@ -74,4 +76,3 @@
   },
   "proxy": "http://192.168.0.102:5000"
 }
-
