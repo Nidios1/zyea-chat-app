@@ -12,12 +12,17 @@ dist/
 # Capacitor
 .capacitor/
 */capacitor/
-android/
-ios/
-*/android/
-*/ios/
-**/android/
-**/ios/
+
+# Android/iOS - Ignore client builds but keep zyea-plus-app
+client/android/
+client/ios/
+*/android/**/*.class
+*/android/**/build/
+*/ios/**/Pods/
+*/ios/**/build/
+*/ios/**/xcuserdata/
+*/ios/**/*.ipa
+*/ios/**/*.dSYM
 
 # IDE
 .vscode/

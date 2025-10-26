@@ -25,20 +25,22 @@ yarn-error.log*
 
 # Capacitor
 .capacitor
-capacitor.config.json
 
-# iOS
+# iOS - Only ignore build artifacts and user-specific files
 ios/App/Pods
 ios/App/build
-ios/App/App.xcodeproj/xcuserdata
-ios/App/App.xcodeproj/project.xcworkspace/xcuserdata
-ios/App/App.xcworkspace/xcuserdata
+ios/App/DerivedData
+ios/App/*.xcodeproj/xcuserdata
+ios/App/*.xcodeproj/project.xcworkspace/xcuserdata
+ios/App/*.xcworkspace/xcuserdata
+ios/App/*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
 *.ipa
 *.dSYM
 *.mobileprovision
 *.p12
 *.cer
 *.certSigningRequest
+*.hmap
 
 # Android
 android/app/build
