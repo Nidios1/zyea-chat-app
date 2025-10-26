@@ -92,17 +92,15 @@ jobs:
           cd build
           zip -r ZyeaChat-unsigned-${{ github.run_number }}.ipa Payload
           
-          # Move to root for easy access
-          mv ZyeaChat-unsigned-${{ github.run_number }}.ipa ../../../
-          
           echo "✅ Unsigned IPA created"
-          ls -lh ../../../*.ipa
+          ls -lh ZyeaChat-unsigned-*.ipa
+          pwd
           
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
           name: ZyeaChat-unsigned-${{ github.run_number }}
-          path: client/ios/App/ZyeaChat-unsigned-*.ipa
+          path: client/ios/App/build/ZyeaChat-unsigned-*.ipa
           retention-days: 30
           
       - name: Generate build summary
