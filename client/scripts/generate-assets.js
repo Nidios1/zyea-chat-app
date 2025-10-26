@@ -23,15 +23,16 @@ async function generateAssets() {
     }
 
     // Create resources folder if not exists
-    const resourcesDir = path.join(__dirname, 'resources');
+    const projectRoot = path.join(__dirname, '..');
+    const resourcesDir = path.join(projectRoot, 'resources');
     if (!fs.existsSync(resourcesDir)) {
       fs.mkdirSync(resourcesDir, { recursive: true });
       console.log('✅ Created resources directory');
     }
 
     // Source files
-    const sourceJPG = path.join(__dirname, 'public', 'Zyea.jpg');
-    const altSourceJPG = path.join(__dirname, 'public', 'app.jpg');
+    const sourceJPG = path.join(projectRoot, 'public', 'Zyea.jpg');
+    const altSourceJPG = path.join(projectRoot, 'public', 'app.jpg');
     
     let inputFile = sourceJPG;
     if (!fs.existsSync(sourceJPG)) {
@@ -96,7 +97,7 @@ async function generateAssets() {
     try {
       execSync('npx @capacitor/assets generate --iconBackgroundColor "#0084ff" --splashBackgroundColor "#0084ff"', { 
         stdio: 'inherit',
-        cwd: __dirname
+        cwd: projectRoot
       });
       console.log('\n✅ Capacitor assets generated!');
     } catch (error) {
