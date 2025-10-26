@@ -321,7 +321,7 @@ const MediaThumbnail = styled.div`
   flex-shrink: 0;
 `;
 
-const ChatOptionsMenu = ({ isOpen, onClose, conversation, currentUser, onSettingsUpdate, onShowProfile }) => {
+const ChatOptionsMenu = ({ isOpen, onClose, conversation, currentUser, onSettingsUpdate, onShowProfile, onMessagesDeleted }) => {
   const [pinned, setPinned] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [callNotifications, setCallNotifications] = useState(true);
@@ -527,6 +527,10 @@ const ChatOptionsMenu = ({ isOpen, onClose, conversation, currentUser, onSetting
       chatAPI.deleteConversationHistory(conversation.id)
         .then(() => {
           alert('Đã xóa lịch sử trò chuyện');
+          // Clear messages in parent component
+          if (onMessagesDeleted) {
+            onMessagesDeleted();
+          }
           onClose(); // Close menu after deletion
         })
         .catch(error => {

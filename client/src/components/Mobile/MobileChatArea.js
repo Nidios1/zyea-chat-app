@@ -813,6 +813,11 @@ const MobileChatArea = ({
         currentUser={currentUser}
         onSettingsUpdate={loadConversationSettings}
         onShowProfile={() => setShowProfile(true)}
+        onMessagesDeleted={() => {
+          // Clear all messages after deletion
+          setMessages([]);
+          console.log('Messages cleared after deletion');
+        }}
       />
 
       {showProfile && conversation && (

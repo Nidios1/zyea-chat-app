@@ -99,6 +99,19 @@ const createTables = async () => {
       )
     `);
 
+    // Message deletions table - tracks which users deleted which messages
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS message_deletions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        message_id INT NOT NULL,
+        user_id INT NOT NULL,
+        deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_message_user_deletion (message_id, user_id)
+      )
+    `);
+
     // Typing status table
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS typing_status (

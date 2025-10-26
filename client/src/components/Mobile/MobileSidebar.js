@@ -309,20 +309,24 @@ const MobileSidebar = ({
       case 'delete':
         setConfirmDialog({
           title: 'Xóa cuộc trò chuyện',
-          message: 'Bạn có chắc muốn xóa cuộc trò chuyện này?',
+          message: 'Bạn có chắc muốn xóa cuộc trò chuyện này? Lịch sử tin nhắn cũng sẽ bị xóa.',
           confirmText: 'Xóa',
           cancelText: 'Hủy',
           onConfirm: async () => {
             setConfirmDialog(null);
             
             try {
+              // Delete BOTH: conversation history + conversation itself
+              await chatAPI.deleteConversationHistory(conversationId);
               await chatAPI.deleteConversation(conversationId);
+              
               setLocalConversations(prev => prev.filter(conv => conv.id !== conversationId));
               setToast({
-                message: 'Đã xóa cuộc trò chuyện',
+                message: 'Đã xóa cuộc trò chuyện và lịch sử tin nhắn',
                 type: 'success'
               });
             } catch (error) {
+              console.error('Error deleting conversation:', error);
               setToast({
                 message: 'Không thể xóa cuộc trò chuyện. Vui lòng thử lại.',
                 type: 'error'

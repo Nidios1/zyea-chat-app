@@ -126,7 +126,7 @@ router.get('/conversations/:id/messages', async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Get messages with read status
+    // Get messages with read status, excluding messages deleted by this user
     const [messages] = await connection.execute(`
       SELECT m.id, m.content, m.message_type, m.file_url, m.created_at,
              u.id as sender_id, u.username, u.full_name, u.avatar_url,
@@ -139,10 +139,11 @@ router.get('/conversations/:id/messages', async (req, res) => {
       FROM messages m
       JOIN users u ON m.sender_id = u.id
       LEFT JOIN message_read_status mrs ON m.id = mrs.message_id AND mrs.user_id = ?
-      WHERE m.conversation_id = ?
+      LEFT JOIN message_deletions md ON m.id = md.message_id AND md.user_id = ?
+      WHERE m.conversation_id = ? AND md.id IS NULL
       ORDER BY m.created_at DESC
       LIMIT ? OFFSET ?
-    `, [req.user.id, req.user.id, id, parseInt(limit), offset]);
+    `, [req.user.id, req.user.id, req.user.id, id, parseInt(limit), offset]);
 
     res.json(messages.reverse());
   } catch (error) {
@@ -489,7 +490,7 @@ router.get('/conversations/:id/settings', async (req, res) => {
   }
 });
 
-// Delete conversation history
+// Delete conversation history (for current user only)
 router.delete('/conversations/:id/messages', async (req, res) => {
   try {
     const { id } = req.params;
@@ -504,14 +505,18 @@ router.delete('/conversations/:id/messages', async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Delete messages for this user only (soft delete)
+    // Mark ALL messages in this conversation as deleted for this user
+    // This affects both sent and received messages
     await connection.execute(`
-      UPDATE messages 
-      SET deleted_for_user = ? 
-      WHERE conversation_id = ? AND sender_id = ?
-    `, [req.user.id, id, req.user.id]);
+      INSERT INTO message_deletions (message_id, user_id)
+      SELECT m.id, ? 
+      FROM messages m
+      WHERE m.conversation_id = ?
+      ON DUPLICATE KEY UPDATE deleted_at = CURRENT_TIMESTAMP
+    `, [req.user.id, id]);
 
-    res.json({ success: true });
+    console.log('Deleted all messages in conversation for user:', req.user.id);
+    res.json({ success: true, message: 'Conversation history deleted for you' });
   } catch (error) {
     console.error('Delete conversation history error:', error);
     res.status(500).json({ message: 'Server error' });

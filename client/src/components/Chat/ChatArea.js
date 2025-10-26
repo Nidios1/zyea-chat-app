@@ -1483,6 +1483,11 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         currentUser={currentUser}
         onSettingsUpdate={loadConversationSettings}
         onShowProfile={() => setShowProfile(true)}
+        onMessagesDeleted={() => {
+          // Clear all messages after deletion
+          setMessages([]);
+          console.log('Messages cleared after deletion');
+        }}
       />
       
       {showProfile && (
