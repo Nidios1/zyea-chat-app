@@ -23,7 +23,8 @@
 			"androidSplashResourceName": "splash",
 			"androidScaleType": "CENTER_CROP",
 			"splashFullScreen": true,
-			"splashImmersive": true
+			"splashImmersive": true,
+			"launchFadeOutDuration": 0
 		},
 		"StatusBar": {
 			"style": "light",

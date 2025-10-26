@@ -85,17 +85,11 @@ async function validateBundleId() {
     const appInfo = await CapacitorApp.getInfo();
     const currentBundleId = appInfo.id;
 
-    // Debug logging
-    console.log('[Security] Current Bundle ID:', currentBundleId);
-    console.log('[Security] Expected Bundle ID:', PROTECTED_BUNDLE_ID);
-    console.log('[Security] Bundle ID Match:', currentBundleId === PROTECTED_BUNDLE_ID);
-
     // Validate Bundle ID
     if (currentBundleId !== PROTECTED_BUNDLE_ID) {
-      console.error('[Security] ❌ Invalid Bundle ID detected');
+      console.error('[Security] Invalid Bundle ID detected');
       console.error('[Security] Expected:', PROTECTED_BUNDLE_ID);
       console.error('[Security] Got:', currentBundleId);
-      console.error('[Security] This will trigger Bundle Protection Error Screen');
       return false;
     }
 
@@ -135,9 +129,7 @@ export async function initBundleProtection() {
     console.error('[Security] ⚠️ BUNDLE ID PROTECTION TRIGGERED');
     console.error('[Security] This app is protected and cannot run with modified Bundle ID');
     console.error('[Security] Official Bundle ID: com.zyea.hieudev');
-    
-    // Force show error screen by throwing error
-    throw new Error('BUNDLE_ID_PROTECTION_FAILED');
+    return false;
   }
 
   return true;
@@ -194,31 +186,11 @@ export async function isOfficialApp() {
   }
 })();
 
-/**
- * Test function để trigger Bundle Protection (for debugging)
- * Note: This function should be called from App.js, not from this module
- */
-export function testBundleProtection() {
-  console.log('[Security] 🧪 Testing Bundle Protection...');
-  console.log('[Security] Call setBundleProtectionFailed(true) from App.js to trigger error screen');
-}
-
-/**
- * Reset Bundle Protection (for debugging)
- */
-export function resetBundleProtection() {
-  console.log('[Security] 🔄 Resetting Bundle Protection...');
-  isValidated = false;
-  validationAttempts = 0;
-}
-
 export default {
   initBundleProtection,
   startContinuousValidation,
   getProtectedBundleId,
   isValidBundleId,
-  isOfficialApp,
-  testBundleProtection,
-  resetBundleProtection
+  isOfficialApp
 };
 

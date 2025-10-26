@@ -4,7 +4,6 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Capacitor } from '@capacitor/core';
 import { SplashScreen as CapacitorSplash } from '@capacitor/splash-screen';
-import { App as CapacitorApp } from '@capacitor/app';
 
 import AuthContext from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -26,7 +25,7 @@ import BundleProtectionError from './components/Common/BundleProtectionError';
 // import PerformanceMonitor from './components/Common/PerformanceMonitor';
 import { getToken, removeToken } from './utils/auth';
 import { initCopyProtection, preventDevTools } from './utils/copyProtection';
-import { initBundleProtection, startContinuousValidation, testBundleProtection } from './utils/bundleProtection';
+import { initBundleProtection, startContinuousValidation } from './utils/bundleProtection';
 import { useOfflineSync } from './hooks/useOfflineSync';
 import { useNativeFeatures } from './hooks/useNativeFeatures';
 import { isCapacitor, logPlatformInfo } from './utils/platformDetection';
@@ -61,117 +60,32 @@ function App() {
   const { isOnline, pendingCount, syncPendingData } = useOfflineSync();
   const { requestNotificationPermission, showNotification } = useNativeFeatures();
 
-  // Bundle Protection - Kiểm tra đầu tiên khi app khởi động
+  // Bundle Protection - TEMPORARILY DISABLED FOR DEBUGGING BLACK SCREEN
   useEffect(() => {
     const validateBundle = async () => {
       try {
-        console.log('[Security] Initializing Bundle Protection...');
-        
-        // IMMEDIATE CHECK - Force check Bundle ID ngay lập tức
-        if (Capacitor.isNativePlatform()) {
-          try {
-            const appInfo = await CapacitorApp.getInfo();
-            const currentBundleId = appInfo.id;
-            const expectedBundleId = 'com.zyea.hieudev';
-            
-            console.log('[Security] Current Bundle ID:', currentBundleId);
-            console.log('[Security] Expected Bundle ID:', expectedBundleId);
-            console.log('[Security] Bundle ID Match:', currentBundleId === expectedBundleId);
-            
-            if (currentBundleId !== expectedBundleId) {
-              console.error('[Security] 🚨 BUNDLE ID MISMATCH DETECTED!');
-              console.error('[Security] Expected:', expectedBundleId);
-              console.error('[Security] Got:', currentBundleId);
-              console.error('[Security] IMMEDIATELY triggering Bundle Protection Error Screen...');
-              
-              // FORCE SET ERROR STATE IMMEDIATELY
-              setBundleProtectionFailed(true);
-              return;
-            }
-          } catch (error) {
-            console.error('[Security] Error getting app info:', error);
-            // If we can't get app info, assume it's compromised
-            setBundleProtectionFailed(true);
-            return;
-          }
-        }
-        
-        const isValid = await initBundleProtection();
-        
-        if (!isValid) {
-          console.error('[Security] ⚠️ Bundle ID validation failed!');
-          setBundleProtectionFailed(true);
-          return;
-        }
-        
-        // Start continuous validation nếu validate thành công
-        if (Capacitor.isNativePlatform()) {
-          startContinuousValidation();
-          console.log('[Security] ✅ Bundle Protection active');
-        }
+        console.log('[Security] Bundle Protection DISABLED for debugging');
+        // TEMPORARILY DISABLE BUNDLE PROTECTION TO FIX BLACK SCREEN
+        // const isValid = await initBundleProtection();
+        // 
+        // if (!isValid) {
+        //   console.error('[Security] ⚠️ Bundle ID validation failed!');
+        //   setBundleProtectionFailed(true);
+        //   return;
+        // }
+        // 
+        // // Start continuous validation nếu validate thành công
+        // if (Capacitor.isNativePlatform()) {
+        //   startContinuousValidation();
+        //   console.log('[Security] ✅ Bundle Protection active');
+        // }
       } catch (error) {
         console.error('[Security] Bundle validation error:', error);
-        
-        // ANY ERROR = TRIGGER PROTECTION
-        console.error('[Security] 🚨 ANY ERROR - triggering protection');
-        setBundleProtectionFailed(true);
+        // setBundleProtectionFailed(true);
       }
     };
     
-    // IMMEDIATE EXECUTION
     validateBundle();
-    
-    // MULTIPLE FALLBACKS
-    const fallback1 = setTimeout(() => {
-      console.log('[Security] ⏰ Fallback 1s - checking Bundle ID...');
-      if (Capacitor.isNativePlatform()) {
-        CapacitorApp.getInfo().then(appInfo => {
-          if (appInfo.id !== 'com.zyea.hieudev') {
-            console.error('[Security] 🚨 Fallback 1s detected Bundle ID mismatch!');
-            setBundleProtectionFailed(true);
-          }
-        }).catch(() => {
-          console.error('[Security] 🚨 Fallback 1s error - triggering protection');
-          setBundleProtectionFailed(true);
-        });
-      }
-    }, 1000);
-    
-    const fallback2 = setTimeout(() => {
-      console.log('[Security] ⏰ Fallback 2s - checking Bundle ID...');
-      if (Capacitor.isNativePlatform()) {
-        CapacitorApp.getInfo().then(appInfo => {
-          if (appInfo.id !== 'com.zyea.hieudev') {
-            console.error('[Security] 🚨 Fallback 2s detected Bundle ID mismatch!');
-            setBundleProtectionFailed(true);
-          }
-        }).catch(() => {
-          console.error('[Security] 🚨 Fallback 2s error - triggering protection');
-          setBundleProtectionFailed(true);
-        });
-      }
-    }, 2000);
-    
-    const fallback3 = setTimeout(() => {
-      console.log('[Security] ⏰ Fallback 3s - checking Bundle ID...');
-      if (Capacitor.isNativePlatform()) {
-        CapacitorApp.getInfo().then(appInfo => {
-          if (appInfo.id !== 'com.zyea.hieudev') {
-            console.error('[Security] 🚨 Fallback 3s detected Bundle ID mismatch!');
-            setBundleProtectionFailed(true);
-          }
-        }).catch(() => {
-          console.error('[Security] 🚨 Fallback 3s error - triggering protection');
-          setBundleProtectionFailed(true);
-        });
-      }
-    }, 3000);
-    
-    return () => {
-      clearTimeout(fallback1);
-      clearTimeout(fallback2);
-      clearTimeout(fallback3);
-    };
   }, []);
 
   // Check for updates khi app load
@@ -235,40 +149,17 @@ function App() {
     setUpdateInfo(null);
   };
 
-  // Debug function để test Bundle Protection
-  const testBundleProtectionError = () => {
-    console.log('[Debug] Testing Bundle Protection Error Screen...');
-    setBundleProtectionFailed(true);
-  };
-
-  // FORCE TEST: Always trigger Bundle Protection for testing
-  const forceTestBundleProtection = () => {
-    console.log('[Debug] 🚨 FORCE TESTING Bundle Protection Error Screen...');
-    setBundleProtectionFailed(true);
-  };
-
-  // Expose debug function to window for testing
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      window.testBundleProtection = testBundleProtectionError;
-      window.forceTestBundleProtection = forceTestBundleProtection;
-      console.log('[Debug] Bundle Protection test functions available:');
-      console.log('[Debug] - window.testBundleProtection()');
-      console.log('[Debug] - window.forceTestBundleProtection()');
-    }
-    
-    // FORCE TEST: Auto-trigger after 2 seconds for testing (faster)
-    const autoTestTimeout = setTimeout(() => {
-      console.log('[Debug] 🚨 AUTO-TEST: Triggering Bundle Protection Error Screen...');
-      setBundleProtectionFailed(true);
-    }, 2000);
-    
-    return () => clearTimeout(autoTestTimeout);
-  }, []);
-
   useEffect(() => {
     // Log platform info for debugging
     logPlatformInfo();
+    
+    // CRITICAL DEBUG: Log app state
+    console.log('🚀 App starting...');
+    console.log('📱 Platform:', Capacitor.getPlatform());
+    console.log('🌐 Is Capacitor:', isCapacitor());
+    console.log('📱 Is Mobile:', isMobile);
+    console.log('👤 User:', user);
+    console.log('⏳ Loading:', loading);
     
     // Thêm class để hiển thị app ngay lập tức (ngăn flash)
     const rootElement = document.getElementById('root');
@@ -288,7 +179,13 @@ function App() {
         // Để sử dụng custom splash screen
         CapacitorSplash.hide({
           fadeOutDuration: 0
-        }).catch(err => console.log('Splash hide error:', err));
+        }).catch(err => {
+          console.log('Splash hide error:', err);
+          // Force hide nếu có lỗi
+          setTimeout(() => {
+            CapacitorSplash.hide().catch(() => {});
+          }, 100);
+        });
       } else {
         rootElement.classList.add('web-app');
       }
@@ -327,29 +224,6 @@ function App() {
 
     // Request notification permission
     requestNotificationPermission();
-    
-    // AFTER PERMISSION: Check Bundle Protection again
-    setTimeout(async () => {
-      console.log('[Security] 🔍 Post-permission Bundle ID check...');
-      if (Capacitor.isNativePlatform()) {
-        try {
-          const appInfo = await CapacitorApp.getInfo();
-          const currentBundleId = appInfo.id;
-          const expectedBundleId = 'com.zyea.hieudev';
-          
-          console.log('[Security] Post-permission Bundle ID:', currentBundleId);
-          console.log('[Security] Expected Bundle ID:', expectedBundleId);
-          
-          if (currentBundleId !== expectedBundleId) {
-            console.error('[Security] 🚨 POST-PERMISSION Bundle ID mismatch!');
-            setBundleProtectionFailed(true);
-          }
-        } catch (error) {
-          console.error('[Security] Post-permission Bundle check error:', error);
-          setBundleProtectionFailed(true);
-        }
-      }
-    }, 1000);
 
     // Listen for PWA install prompt (Web/PWA only, not for Capacitor)
     if (!isCapacitor()) {
@@ -564,15 +438,7 @@ function App() {
 
   // CRITICAL: Kiểm tra Bundle Protection TRƯỚC tất cả
   if (bundleProtectionFailed) {
-    console.log('[Security] 🚨 Showing Bundle Protection Error Screen');
     return <BundleProtectionError />;
-  }
-
-  // TEST: Force show error screen for debugging
-  if (process.env.NODE_ENV === 'development') {
-    console.log('[Debug] Bundle Protection State:', bundleProtectionFailed);
-    console.log('[Debug] Loading State:', loading);
-    console.log('[Debug] User State:', user);
   }
 
   if (loading) {
@@ -586,7 +452,9 @@ function App() {
         justifyContent: 'center', 
         alignItems: 'center', 
         height: '100vh',
-        fontSize: '18px'
+        fontSize: '18px',
+        backgroundColor: '#0084ff',
+        color: 'white'
       }}>
         Loading... {dataLoadingProgress > 0 && `${dataLoadingProgress}%`}
       </div>

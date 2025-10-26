@@ -30,6 +30,9 @@ const config: CapacitorConfig = {
       androidScaleType: "CENTER_CROP",
       splashFullScreen: true,
       splashImmersive: true,
+      // CRITICAL: Force hide splash screen
+      launchFadeOutDuration: 0,
+      launchAutoHide: true,
     },
     StatusBar: {
       style: 'light',
