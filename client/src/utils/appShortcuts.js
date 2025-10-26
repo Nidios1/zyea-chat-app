@@ -108,21 +108,21 @@ export const setupAndroidShortcuts = async () => {
       shortLabel: 'Tin nhắn mới',
       longLabel: 'Gửi tin nhắn mới',
       icon: '@mipmap/ic_message',
-      action: 'com.zyea.messenger.NEW_MESSAGE'
+      action: 'com.zyea.hieudev.NEW_MESSAGE'
     },
     {
       id: 'new_post',
       shortLabel: 'Bài viết mới',
       longLabel: 'Tạo bài viết mới',
       icon: '@mipmap/ic_post',
-      action: 'com.zyea.messenger.NEW_POST'
+      action: 'com.zyea.hieudev.NEW_POST'
     },
     {
       id: 'scan_qr',
       shortLabel: 'Quét QR',
       longLabel: 'Quét mã QR',
       icon: '@mipmap/ic_qr',
-      action: 'com.zyea.messenger.SCAN_QR'
+      action: 'com.zyea.hieudev.SCAN_QR'
     }
   ];
 

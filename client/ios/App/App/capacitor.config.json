@@ -64,7 +64,8 @@
 		"backgroundColor": "#0084ff",
 		"overrideUserInterfaceStyle": "Light",
 		"suppressesIncrementalRendering": false,
-		"allowsBackForwardNavigationGestures": true
+		"allowsBackForwardNavigationGestures": true,
+		"scheme": "zyeamessenger"
 	},
 	"android": {
 		"allowMixedContent": true,
