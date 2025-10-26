@@ -19,13 +19,13 @@ const config: CapacitorConfig = {
   plugins: {
     SplashScreen: {
       launchShowDuration: 0,
-      launchAutoHide: true,
+      launchAutoHide: false,  // CHANGED: Manual hide để đảm bảo React đã mount
       showSpinner: false,
-      backgroundColor: "#0084ff",
+      backgroundColor: "#ffffff",  // CHANGED: Màu trắng thay vì xanh
       androidSplashResourceName: "splash",
       androidScaleType: "CENTER_CROP",
-      splashFullScreen: true,
-      splashImmersive: true,
+      splashFullScreen: false,  // CHANGED: Không full screen
+      splashImmersive: false,  // CHANGED: Không immersive
     },
     StatusBar: {
       style: 'light',
@@ -55,7 +55,7 @@ const config: CapacitorConfig = {
     allowsInlineMediaPlayback: true,
     mediaTypesRequiringUserActionForPlayback: 'none',
     webViewMediaCaptureEnabled: true,
-    backgroundColor: '#0084ff',
+    backgroundColor: '#ffffff',  // CHANGED: Màu trắng thay vì xanh
     overrideUserInterfaceStyle: 'Light',
     suppressesIncrementalRendering: false,
     allowsBackForwardNavigationGestures: true,
