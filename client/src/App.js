@@ -41,8 +41,8 @@ function App() {
   const [dataLoadingProgress, setDataLoadingProgress] = useState(0);
   const [appStartTime] = useState(Date.now()); // Track khi app bắt đầu
   
-  // Bundle Protection state
-  const [bundleProtectionFailed, setBundleProtectionFailed] = useState(false);
+  // Bundle Protection state - FORCE DISABLED
+  const [bundleProtectionFailed] = useState(false); // NEVER SET TO TRUE
   
   // Live Update states
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -160,6 +160,16 @@ function App() {
     console.log('📱 Is Mobile:', isMobile);
     console.log('👤 User:', user);
     console.log('⏳ Loading:', loading);
+    
+    // SAFETY: Force set loading to false after 5 seconds to prevent infinite loading
+    const safetyTimeout = setTimeout(() => {
+      if (loading) {
+        console.log('⚠️ SAFETY: Force setting loading to false after 5s timeout');
+        setLoading(false);
+      }
+    }, 5000);
+    
+    return () => clearTimeout(safetyTimeout);
     
     // Thêm class để hiển thị app ngay lập tức (ngăn flash)
     const rootElement = document.getElementById('root');
@@ -356,6 +366,7 @@ function App() {
         console.log(`⏱️ Loading took ${loadDuration}ms, waiting ${remainingTime}ms more`);
         
         setTimeout(() => {
+          console.log('✅ Setting loading to false after token verification');
           setLoading(false);
           // Don't show download prompt if user is already logged in
         }, remainingTime);
@@ -384,6 +395,7 @@ function App() {
         console.log(`⏱️ Elapsed: ${elapsed}ms, waiting ${remainingTime}ms more for splash`);
         
         setTimeout(() => {
+          console.log('✅ Setting loading to false (no token)');
           setLoading(false);
         }, remainingTime);
       }
@@ -422,6 +434,7 @@ function App() {
     // Tạo object mới để trigger re-render
     const newUserData = { ...userData };
     setUser(newUserData);
+    console.log('✅ Setting loading to false after login');
     setLoading(false); // Đảm bảo loading screen được tắt
     console.log('✅ User logged in successfully');
   };
@@ -442,21 +455,42 @@ function App() {
   }
 
   if (loading) {
-    // Chỉ hiển thị SplashScreen đẹp trên mobile, PC hiển thị loading đơn giản
-    if (isMobile) {
-      return <SplashScreen isVisible={true} loadingProgress={dataLoadingProgress} />;
-    }
+    // CRITICAL: Always show loading screen with background
+    console.log('🔄 Showing loading screen...');
     return (
       <div style={{ 
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         display: 'flex', 
+        flexDirection: 'column',
         justifyContent: 'center', 
         alignItems: 'center', 
-        height: '100vh',
-        fontSize: '18px',
         backgroundColor: '#0084ff',
-        color: 'white'
+        color: 'white',
+        fontSize: '18px',
+        zIndex: 9999
       }}>
-        Loading... {dataLoadingProgress > 0 && `${dataLoadingProgress}%`}
+        <div style={{ marginBottom: '20px' }}>
+          <img 
+            src="/apple-touch-icon.png" 
+            alt="Zyea+" 
+            style={{ width: '80px', height: '80px', borderRadius: '16px' }}
+          />
+        </div>
+        <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>
+          Zyea+
+        </div>
+        <div style={{ fontSize: '16px', opacity: 0.9 }}>
+          Đang khởi động...
+        </div>
+        {dataLoadingProgress > 0 && (
+          <div style={{ marginTop: '20px', fontSize: '14px' }}>
+            {dataLoadingProgress}%
+          </div>
+        )}
       </div>
     );
   }
