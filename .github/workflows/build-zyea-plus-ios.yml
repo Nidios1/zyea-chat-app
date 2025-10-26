@@ -12,13 +12,14 @@ on:
           - development
           - adhoc
           - appstore
-  push:
-    branches:
-      - main
-      - master
-    paths:
-      - 'zyea-plus-app/**'
-      - '.github/workflows/build-zyea-plus-ios.yml'
+  # Auto build on push (commented out - run manually instead)
+  # push:
+  #   branches:
+  #     - main
+  #     - master
+  #   paths:
+  #     - 'zyea-plus-app/**'
+  #     - '.github/workflows/build-zyea-plus-ios.yml'
 
 jobs:
   build-ios:
