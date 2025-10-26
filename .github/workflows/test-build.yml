@@ -1,0 +1,77 @@
+name: Test Build (Simple)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test Build Steps
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Check zyea-plus-app exists
+        run: |
+          echo "Checking if zyea-plus-app directory exists..."
+          ls -la
+          echo "---"
+          echo "Checking zyea-plus-app contents..."
+          ls -la zyea-plus-app/
+          echo "---"
+          echo "Checking iOS directory..."
+          ls -la zyea-plus-app/ios/ || echo "iOS directory not found"
+
+      - name: Install dependencies
+        working-directory: ./zyea-plus-app
+        run: |
+          echo "Installing npm packages..."
+          npm ci
+
+      - name: Build React app
+        working-directory: ./zyea-plus-app
+        run: |
+          echo "Building React app..."
+          DISABLE_ESLINT_PLUGIN=true npm run build
+          echo "---"
+          echo "Checking build directory..."
+          ls -la build/ || echo "Build directory not found"
+
+      - name: Sync Capacitor
+        working-directory: ./zyea-plus-app
+        run: |
+          echo "Syncing Capacitor..."
+          npx cap sync ios
+          echo "---"
+          echo "Checking iOS App directory..."
+          ls -la ios/App/
+
+      - name: Check Podfile
+        working-directory: ./zyea-plus-app/ios/App
+        run: |
+          echo "Checking Podfile..."
+          cat Podfile
+          echo "---"
+          echo "Installing CocoaPods..."
+          sudo gem install cocoapods
+          echo "---"
+          echo "Running pod install..."
+          pod install
+
+      - name: Build Summary
+        if: success()
+        run: |
+          echo "✅ All steps completed successfully!"
+          echo "The project is ready for iOS build."
+
+      - name: Show Error Details
+        if: failure()
+        run: |
+          echo "❌ Build failed. Check the logs above for details."
+
