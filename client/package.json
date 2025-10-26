@@ -1,6 +1,6 @@
 {
   "name": "zalo-clone-client",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "dependencies": {
     "@capacitor/android": "^5.5.1",
