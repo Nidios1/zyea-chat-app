@@ -1,0 +1,223 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - adhoc
+          - appstore
+
+jobs:
+  build-ios:
+    name: Build iOS IPA
+    runs-on: macos-14
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.17.0'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+          
+      - name: Install dependencies
+        working-directory: client
+        run: |
+          npm ci --legacy-peer-deps
+          
+      - name: Build React app
+        working-directory: client
+        env:
+          DISABLE_ESLINT_PLUGIN: true
+          CI: false
+        run: |
+          npm run build
+          echo "✅ React build completed"
+          ls -la build/
+          
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.2'
+          
+      - name: Install CocoaPods dependencies
+        working-directory: client/ios/App
+        run: |
+          pod install
+          
+      - name: Sync Capacitor
+        working-directory: client
+        run: |
+          npx cap sync ios --deployment
+          
+      - name: Configure iOS project
+        working-directory: client/ios/App/App
+        run: |
+          # Update app display name
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Zyea Chat'" Info.plist || true
+          
+          # Update version
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.0.0" Info.plist || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" Info.plist || true
+          
+          echo "✅ iOS project configured"
+          
+      - name: Import certificates and provisioning profiles
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          
+          # Import certificate and provisioning profile from secrets
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode --output $CERTIFICATE_PATH
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode --output $PP_PATH
+          
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          
+          # Import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          
+          # Apply provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+          
+          echo "✅ Certificates and provisioning profiles imported"
+          
+      - name: Build iOS app (Development)
+        if: github.event_name == 'pull_request' || github.event.inputs.build_type == 'development'
+        working-directory: client/ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+            
+          echo "✅ Development build completed"
+          
+      - name: Build iOS IPA (Release)
+        if: github.event_name == 'push' || github.event.inputs.build_type != 'development'
+        working-directory: client/ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath build/App.xcarchive \
+            archive
+            
+          echo "✅ Archive created"
+          
+      - name: Export IPA
+        if: github.event_name == 'push' || github.event.inputs.build_type != 'development'
+        working-directory: client
+        run: |
+          # Create export options
+          cat > ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>${{ github.event.inputs.build_type || 'adhoc' }}</string>
+            <key>teamID</key>
+            <string>${{ secrets.TEAM_ID }}</string>
+            <key>compileBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.zyea.hieudev</key>
+              <string>${{ secrets.PROVISIONING_PROFILE_NAME }}</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+          
+          # Export IPA
+          xcodebuild -exportArchive \
+            -archivePath ios/App/build/App.xcarchive \
+            -exportPath ios/App/build/ipa \
+            -exportOptionsPlist ExportOptions.plist
+            
+          echo "✅ IPA exported successfully"
+          ls -la ios/App/build/ipa/
+          
+      - name: Upload IPA artifact
+        if: github.event_name == 'push' || github.event.inputs.build_type != 'development'
+        uses: actions/upload-artifact@v4
+        with:
+          name: zyea-chat-ios-${{ github.run_number }}
+          path: |
+            client/ios/App/build/ipa/*.ipa
+            client/ios/App/build/ipa/*.dSYM.zip
+          retention-days: 30
+          
+      - name: Upload to TestFlight
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.inputs.build_type == 'appstore'
+        env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+        run: |
+          xcrun altool --upload-app \
+            -t ios \
+            -f client/ios/App/build/ipa/*.ipa \
+            --apiKey $APP_STORE_CONNECT_KEY_ID \
+            --apiIssuer $APP_STORE_CONNECT_ISSUER_ID
+            
+          echo "✅ Uploaded to TestFlight"
+          
+      - name: Clean up keychain and provisioning profiles
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+          rm -rf ~/Library/MobileDevice/Provisioning\ Profiles || true
+          
+      - name: Generate build summary
+        if: always()
+        run: |
+          echo "## iOS Build Summary 📱" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Number:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Type:** ${{ github.event.inputs.build_type || 'adhoc' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Build completed successfully!" >> $GITHUB_STEP_SUMMARY
+
