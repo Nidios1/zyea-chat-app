@@ -5,38 +5,65 @@ import AuthContext from '../../contexts/AuthContext';
 import { getApiBaseUrl } from '../../utils/platformConfig';
 
 const LoginContainer = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #0084ff 0%, #00a651 100%);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 20px;
+  overflow-y: auto;
+  z-index: 9999;
 `;
 
 const LoginCard = styled.div`
   background: white;
-  border-radius: 16px;
-  padding: 40px;
+  border-radius: 20px;
+  padding: 40px 30px;
   width: 100%;
   max-width: 400px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.4s ease-out;
+  
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+`;
+
+const LogoContainer = styled.div`
+  text-align: center;
+  margin-bottom: 30px;
 `;
 
 const Logo = styled.h1`
-  font-size: 48px;
-  font-weight: bold;
-  color: #0084ff;
-  text-align: center;
+  font-size: 56px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   margin-bottom: 10px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: -1px;
 `;
 
 const Subtitle = styled.p`
   text-align: center;
   color: #666;
   margin-bottom: 30px;
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.5;
 `;
 
 const Form = styled.form`
@@ -46,59 +73,104 @@ const Form = styled.form`
 `;
 
 const Input = styled.input`
-  padding: 12px 16px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 15px;
+  padding: 15px 20px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  font-size: 16px;
   outline: none;
-  transition: border-color 0.2s;
+  transition: all 0.3s ease;
+  background: #f8f9fa;
 
   &:focus {
-    border-color: #0084ff;
+    border-color: #667eea;
+    background: white;
+    box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+  }
+
+  &::placeholder {
+    color: #999;
   }
 `;
 
 const Button = styled.button`
-  padding: 14px;
-  background: #0084ff;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 600;
+  border-radius: 12px;
+  font-size: 17px;
+  font-weight: 700;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.3s ease;
+  margin-top: 10px;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
 
   &:hover {
-    background: #0066cc;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+  }
+
+  &:active {
+    transform: translateY(0);
   }
 
   &:disabled {
     background: #ccc;
     cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
   }
 `;
 
 const ErrorMessage = styled.div`
-  color: #ff4444;
+  background: #ffe0e0;
+  color: #d32f2f;
   font-size: 14px;
   text-align: center;
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 15px;
+  border-left: 4px solid #d32f2f;
 `;
 
 const LinkText = styled.p`
   text-align: center;
   color: #666;
-  font-size: 14px;
-  margin-top: 20px;
+  font-size: 15px;
+  margin-top: 25px;
 
   a {
-    color: #0084ff;
+    color: #667eea;
     text-decoration: none;
-    font-weight: 600;
+    font-weight: 700;
 
     &:hover {
       text-decoration: underline;
     }
+  }
+`;
+
+const Divider = styled.div`
+  display: flex;
+  align-items: center;
+  margin: 25px 0;
+  color: #999;
+  font-size: 13px;
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e0e0e0;
+  }
+
+  &::before {
+    margin-right: 15px;
+  }
+
+  &::after {
+    margin-left: 15px;
   }
 `;
 
@@ -143,30 +215,36 @@ const Login = () => {
   return (
     <LoginContainer>
       <LoginCard>
-        <Logo>facebook</Logo>
-        <Subtitle>Kết nối với bạn bè và thế giới xung quanh bạn trên Zyea+</Subtitle>
+        <LogoContainer>
+          <Logo>Zyea+</Logo>
+          <Subtitle>Kết nối với bạn bè và thế giới xung quanh bạn</Subtitle>
+        </LogoContainer>
 
         <Form onSubmit={handleSubmit}>
           <Input
             type="email"
-            placeholder="Email"
+            placeholder="📧 Email hoặc số điện thoại"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            autoComplete="email"
           />
           <Input
             type="password"
-            placeholder="Mật khẩu"
+            placeholder="🔒 Mật khẩu"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            autoComplete="current-password"
           />
           <Button type="submit" disabled={loading}>
-            {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+            {loading ? '⏳ Đang đăng nhập...' : '🚀 Đăng nhập'}
           </Button>
         </Form>
 
-        {error && <ErrorMessage>{error}</ErrorMessage>}
+        {error && <ErrorMessage>❌ {error}</ErrorMessage>}
+
+        <Divider>hoặc</Divider>
 
         <LinkText>
           Chưa có tài khoản? <Link to="/register">Đăng ký ngay</Link>
