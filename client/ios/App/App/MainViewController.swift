@@ -7,6 +7,16 @@ class MainViewController: CAPBridgeViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         print("✅ MainViewController loaded")
+        
+        // Add a small delay to ensure WebView is ready
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            if let webView = self.webView {
+                print("✅ WebView is ready")
+                webView.load(URLRequest(url: webView.url ?? URL(string: "about:blank")!))
+            } else {
+                print("⚠️ WebView not found, will load by Capacitor")
+            }
+        }
     }
     
     // Override webView configuration to enable WebRTC
