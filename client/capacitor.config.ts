@@ -5,18 +5,19 @@ const config: CapacitorConfig = {
   appName: 'Zyea+',
   webDir: 'build',
   server: {
-    // DISABLED FOR PRODUCTION BUILD
-    // Uncomment for development with local server
-    // androidScheme: 'https',
-    // allowNavigation: [
-    //   'http://192.168.0.102:5000',
-    //   'http://192.168.0.102:3000',
-    //   'https://192.168.0.102:5000',
-    //   'https://192.168.0.102:3000',
-    //   'http://localhost:5000',
-    //   'http://localhost:3000'
-    // ],
-    // cleartext: true
+    // ENABLED FOR DEVELOPMENT - Connect via WiFi IP
+    androidScheme: 'https',
+    // allowNavigation cho phép app gọi API tới IP WiFi
+    allowNavigation: [
+      'http://192.168.0.102:5000',
+      'http://192.168.0.102:3000',
+      'https://192.168.0.102:5000',
+      'https://192.168.0.102:3000',
+      'http://localhost:5000',
+      'http://localhost:3000'
+    ],
+    // Clear text traffic cho development
+    cleartext: true
   },
   plugins: {
     SplashScreen: {

@@ -2,7 +2,18 @@
 	"appId": "com.zyea.hieudev",
 	"appName": "Zyea+",
 	"webDir": "build",
-	"server": {},
+	"server": {
+		"androidScheme": "https",
+		"allowNavigation": [
+			"http://192.168.0.102:5000",
+			"http://192.168.0.102:3000",
+			"https://192.168.0.102:5000",
+			"https://192.168.0.102:3000",
+			"http://localhost:5000",
+			"http://localhost:3000"
+		],
+		"cleartext": true
+	},
 	"plugins": {
 		"SplashScreen": {
 			"launchShowDuration": 2000,
