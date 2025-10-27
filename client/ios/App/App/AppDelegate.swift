@@ -1,7 +1,6 @@
 import UIKit
 import Capacitor
 import WebKit
-import AVFoundation
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -10,24 +9,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
-        // NOTE: DO NOT manually initialize window or MainViewController here
-        // Capacitor handles this automatically - manually doing it will cause build errors
-        
-        // Configure audio session for VoIP
-        do {
-            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .defaultToSpeaker])
-            try AVAudioSession.sharedInstance().setActive(true)
-            print("✅ AVAudioSession configured for VoIP")
-        } catch {
-            print("❌ Failed to configure AVAudioSession: \(error)")
-        }
-        
-        // Request microphone permission at startup (optional - getUserMedia will also prompt)
-        AVAudioSession.sharedInstance().requestRecordPermission { granted in
-            print("🎤 Microphone permission: \(granted ? "✅ Granted" : "❌ Denied")")
-        }
-        
-        print("✅ AppDelegate initialized with WebRTC support")
+        print("✅ AppDelegate initialized")
         
         return true
     }
