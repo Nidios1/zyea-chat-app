@@ -2,11 +2,43 @@ import UIKit
 import Capacitor
 import WebKit
 
-class MainViewController: CAPBridgeViewController {
+class MainViewController: CAPBridgeViewController, WKNavigationDelegate {
     
     override func viewDidLoad() {
         super.viewDidLoad()
         print("✅ MainViewController loaded with WebRTC support")
+        
+        // CRITICAL FIX: Ensure proper initialization sequence
+        DispatchQueue.main.async {
+            self.setupWebView()
+        }
+    }
+    
+    private func setupWebView() {
+        // Ensure WebView loads properly
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            if let webView = self.webView {
+                print("✅ WebView loaded successfully")
+                
+                // Add error handling for WebView
+                webView.navigationDelegate = self
+                
+                // Force a small delay to ensure proper initialization
+                webView.evaluateJavaScript("console.log('WebView ready')") { result, error in
+                    if let error = error {
+                        print("❌ WebView JS error: \(error)")
+                    } else {
+                        print("✅ WebView JS ready")
+                    }
+                }
+            } else {
+                print("❌ WebView not found - attempting to reload")
+                // Try to reload the view
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    self.load()
+                }
+            }
+        }
     }
     
     // CRITICAL FIX: Override webView configuration to enable WebRTC
@@ -60,6 +92,36 @@ class MainViewController: CAPBridgeViewController {
         
         // Always grant permission (iOS system prompt will still show)
         decisionHandler(.grant)
+    }
+    
+    // MARK: - WKNavigationDelegate
+    
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        print("🌐 WebView started loading")
+    }
+    
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        print("✅ WebView finished loading")
+    }
+    
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        print("❌ WebView failed to load: \(error.localizedDescription)")
+        
+        // Try to reload after a delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            print("🔄 Attempting to reload WebView...")
+            webView.reload()
+        }
+    }
+    
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        print("❌ WebView failed provisional navigation: \(error.localizedDescription)")
+        
+        // Try to reload after a delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            print("🔄 Attempting to reload WebView...")
+            webView.reload()
+        }
     }
     
 }

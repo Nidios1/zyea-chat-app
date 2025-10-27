@@ -11,6 +11,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
         
+        // CRITICAL FIX: Configure window and MainViewController
+        self.window = UIWindow(frame: UIScreen.main.bounds)
+        
+        // Create MainViewController instance
+        let mainViewController = MainViewController()
+        
+        // Set as root view controller
+        self.window?.rootViewController = mainViewController
+        self.window?.makeKeyAndVisible()
+        
         // Configure audio session for VoIP
         do {
             try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .defaultToSpeaker])
@@ -25,7 +35,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             print("🎤 Microphone permission: \(granted ? "✅ Granted" : "❌ Denied")")
         }
         
-        print("✅ WebRTC configuration applied via MainViewController")
+        print("✅ MainViewController initialized and WebRTC configuration applied")
         
         return true
     }

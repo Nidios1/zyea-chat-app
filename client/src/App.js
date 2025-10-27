@@ -41,8 +41,8 @@ function App() {
   const [dataLoadingProgress, setDataLoadingProgress] = useState(0);
   const [appStartTime] = useState(Date.now()); // Track khi app bắt đầu
   
-  // Bundle Protection state - FORCE DISABLED
-  const [bundleProtectionFailed] = useState(false); // NEVER SET TO TRUE
+  // Bundle Protection state
+  const [bundleProtectionFailed, setBundleProtectionFailed] = useState(false);
   
   // Live Update states
   const [updateInfo, setUpdateInfo] = useState(null);
@@ -60,28 +60,34 @@ function App() {
   const { isOnline, pendingCount, syncPendingData } = useOfflineSync();
   const { requestNotificationPermission, showNotification } = useNativeFeatures();
 
-  // Bundle Protection - TEMPORARILY DISABLED FOR DEBUGGING BLACK SCREEN
+  // Bundle Protection - ENABLED with proper error handling
   useEffect(() => {
     const validateBundle = async () => {
       try {
-        console.log('[Security] Bundle Protection DISABLED for debugging');
-        // TEMPORARILY DISABLE BUNDLE PROTECTION TO FIX BLACK SCREEN
-        // const isValid = await initBundleProtection();
-        // 
-        // if (!isValid) {
-        //   console.error('[Security] ⚠️ Bundle ID validation failed!');
-        //   setBundleProtectionFailed(true);
-        //   return;
-        // }
-        // 
-        // // Start continuous validation nếu validate thành công
-        // if (Capacitor.isNativePlatform()) {
-        //   startContinuousValidation();
-        //   console.log('[Security] ✅ Bundle Protection active');
-        // }
+        console.log('[Security] Initializing Bundle Protection...');
+        
+        // Only enable bundle protection in production builds
+        if (process.env.NODE_ENV === 'production' && Capacitor.isNativePlatform()) {
+          const isValid = await initBundleProtection();
+          
+          if (!isValid) {
+            console.error('[Security] ⚠️ Bundle ID validation failed!');
+            setBundleProtectionFailed(true);
+            return;
+          }
+          
+          // Start continuous validation nếu validate thành công
+          startContinuousValidation();
+          console.log('[Security] ✅ Bundle Protection active');
+        } else {
+          console.log('[Security] Bundle Protection skipped (development mode)');
+        }
       } catch (error) {
         console.error('[Security] Bundle validation error:', error);
-        // setBundleProtectionFailed(true);
+        // Don't fail the app in development, only in production
+        if (process.env.NODE_ENV === 'production') {
+          setBundleProtectionFailed(true);
+        }
       }
     };
     
@@ -161,13 +167,20 @@ function App() {
     console.log('👤 User:', user);
     console.log('⏳ Loading:', loading);
     
-    // SAFETY: Force set loading to false after 5 seconds to prevent infinite loading
+    // Debug localStorage
+    console.log('💾 LocalStorage debug:', {
+      token: localStorage.getItem('token') ? 'Token exists' : 'No token',
+      tokenLength: localStorage.getItem('token')?.length || 0,
+      allKeys: Object.keys(localStorage)
+    });
+    
+    // SAFETY: Force set loading to false after 3 seconds to prevent infinite loading
     const safetyTimeout = setTimeout(() => {
       if (loading) {
-        console.log('⚠️ SAFETY: Force setting loading to false after 5s timeout');
+        console.log('⚠️ SAFETY: Force setting loading to false after 3s timeout');
         setLoading(false);
       }
-    }, 5000);
+    }, 3000);
     
     return () => clearTimeout(safetyTimeout);
     
@@ -185,17 +198,19 @@ function App() {
           rootElement.classList.add('android-app');
         }
         
-        // Ẩn Capacitor splash screen mặc định ngay lập tức
-        // Để sử dụng custom splash screen
-        CapacitorSplash.hide({
-          fadeOutDuration: 0
-        }).catch(err => {
-          console.log('Splash hide error:', err);
-          // Force hide nếu có lỗi
-          setTimeout(() => {
-            CapacitorSplash.hide().catch(() => {});
-          }, 100);
-        });
+        // Hide Capacitor splash screen with smooth transition
+        // Wait a bit to ensure app is ready
+        setTimeout(() => {
+          CapacitorSplash.hide({
+            fadeOutDuration: 300
+          }).catch(err => {
+            console.log('Splash hide error:', err);
+            // Force hide nếu có lỗi
+            setTimeout(() => {
+              CapacitorSplash.hide().catch(() => {});
+            }, 100);
+          });
+        }, 100);
       } else {
         rootElement.classList.add('web-app');
       }
@@ -271,20 +286,31 @@ function App() {
     }
 
     const token = getToken();
+    console.log('🔍 Token check:', token ? 'Token exists' : 'No token found');
+    
     // CHỈ verify token khi app khởi động lần đầu, KHÔNG verify khi đang login
     if (token && !user) {
       // Verify token and get user info + Preload data
       const apiUrl = getApiBaseUrl();
       const loadStartTime = Date.now();
       
-      console.log('🔐 Verifying existing token...');
+      console.log('🔐 Verifying existing token...', token.substring(0, 20) + '...');
+      console.log('🌐 API URL:', apiUrl);
+      
+      // Add timeout và network check
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
       
       fetch(`${apiUrl}/users/profile`, {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        signal: controller.signal
       })
       .then(res => {
+        clearTimeout(timeoutId);
+        console.log('📡 API Response status:', res.status);
+        
         if (!res.ok) {
           throw new Error(`HTTP error! status: ${res.status}`);
         }
@@ -354,14 +380,31 @@ function App() {
         }
       })
       .catch((error) => {
+        clearTimeout(timeoutId);
         console.error('❌ Error loading user:', error);
-        console.log('🔄 Token invalid or expired, clearing state');
-        clearUserState();
+        
+        if (error.name === 'AbortError') {
+          console.log('⏰ Request timeout - API server may be unreachable');
+          console.log('🌐 Check if API server is running on:', apiUrl);
+          // Don't clear token on timeout, just show login screen
+          setUser(null);
+        } else {
+          console.log('🔄 Token invalid or expired, clearing state');
+          console.log('🔍 Error details:', {
+            message: error.message,
+            name: error.name,
+            stack: error.stack
+          });
+          
+          // Clear token và user state
+          removeToken();
+          setUser(null);
+        }
       })
       .finally(() => {
-        // Đảm bảo splash screen hiển thị ít nhất 1 giây (mượt mà)
+        // Đảm bảo splash screen hiển thị ít nhất 2 giây (mượt mà)
         const loadDuration = Date.now() - loadStartTime;
-        const remainingTime = Math.max(0, 1000 - loadDuration);
+        const remainingTime = Math.max(0, 2000 - loadDuration);
         
         console.log(`⏱️ Loading took ${loadDuration}ms, waiting ${remainingTime}ms more`);
         
@@ -389,7 +432,7 @@ function App() {
         // Nếu không cần download prompt → hiển thị splash screen bình thường
         console.log('⏱️ No token found, showing splash screen for minimum time');
         const elapsed = Date.now() - appStartTime;
-        const minSplashTime = 1200; // 1.2 giây
+        const minSplashTime = 2000; // 2 giây để hiển thị custom splash screen đẹp
         const remainingTime = Math.max(0, minSplashTime - elapsed);
         
         console.log(`⏱️ Elapsed: ${elapsed}ms, waiting ${remainingTime}ms more for splash`);
@@ -429,7 +472,15 @@ function App() {
 
   const login = (userData, token) => {
     console.log('🔐 Login called with user:', userData);
+    console.log('🔐 Token received:', token ? 'Token exists' : 'No token');
+    
+    // Lưu token vào localStorage
     localStorage.setItem('token', token);
+    console.log('💾 Token saved to localStorage');
+    
+    // Verify token was saved
+    const savedToken = localStorage.getItem('token');
+    console.log('✅ Token verification:', savedToken ? 'Token saved successfully' : 'Token save failed');
     
     // Tạo object mới để trigger re-render
     const newUserData = { ...userData };
@@ -455,43 +506,17 @@ function App() {
   }
 
   if (loading) {
-    // CRITICAL: Always show loading screen with background
-    console.log('🔄 Showing loading screen...');
+    // CRITICAL: Show custom splash screen
+    console.log('🔄 Showing custom splash screen...');
     return (
-      <div style={{ 
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        display: 'flex', 
-        flexDirection: 'column',
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        backgroundColor: '#0084ff',
-        color: 'white',
-        fontSize: '18px',
-        zIndex: 9999
-      }}>
-        <div style={{ marginBottom: '20px' }}>
-          <img 
-            src="/apple-touch-icon.png" 
-            alt="Zyea+" 
-            style={{ width: '80px', height: '80px', borderRadius: '16px' }}
-          />
-        </div>
-        <div style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '10px' }}>
-          Zyea+
-        </div>
-        <div style={{ fontSize: '16px', opacity: 0.9 }}>
-          Đang khởi động...
-        </div>
-        {dataLoadingProgress > 0 && (
-          <div style={{ marginTop: '20px', fontSize: '14px' }}>
-            {dataLoadingProgress}%
-          </div>
-        )}
-      </div>
+      <SplashScreen 
+        isVisible={true}
+        loadingProgress={dataLoadingProgress}
+        onComplete={() => {
+          console.log('✅ Splash screen completed');
+          setLoading(false);
+        }}
+      />
     );
   }
 
