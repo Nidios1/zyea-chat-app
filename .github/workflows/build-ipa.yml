@@ -56,4 +56,3 @@ jobs:
           name: ipa
           path: client/ios/App/build/ipa/*.ipa
           retention-days: 7
-
