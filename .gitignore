@@ -1,81 +1,33 @@
 # Dependencies
 node_modules/
 */node_modules/
-**/node_modules/
 
 # Build outputs
 build/
 dist/
 */build/
-**/build/
 
-# Capacitor
-.capacitor/
-*/capacitor/
-
-# Android/iOS - Ignore builds but keep config files
-client/android/
-*/android/**/*.class
-*/android/**/build/
-
-# iOS - Keep project structure but ignore builds
-client/ios/App/Pods/
+# iOS - Ignore builds
 client/ios/App/build/
-client/ios/App/App/xcuserdata/
-client/ios/App/*.ipa
-client/ios/App/*.dSYM
-client/ios/App/Podfile.lock
-*.xcuserdata/
-xcuserdata/
-*/ios/**/Pods/
-*/ios/**/build/
-*/ios/**/*.ipa
-*/ios/**/*.dSYM
+client/ios/App/Pods/
+client/ios/App/*.xcworkspace
+client/ios/App/*.xcodeproj
+*.ipa
+*.dSYM
 
-# Mobile build folders
-mobile/ios/build/
-mobile/android/build/
-mobile/build/
+# Keep iOS config files
+!client/ios/App/exportOptions.plist
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
 
 # OS
 .DS_Store
-Thumbs.db
-*.log
 
 # Environment
 .env
-.env.local
-.env.production
 *.env
 
-# Testing
-coverage/
-.nyc_output/
-
-# Misc
-*.pem
-*.key
-*.p12
-*.mobileprovision
-.expo/
-.expo-shared/
-
-# Uploads
-uploads/
-**/uploads/
-
-# Temp files
-*.tmp
-*.temp
-.cache/
-
-# Package locks (optional - có thể commit nếu muốn)
-# package-lock.json
-# */package-lock.json
+# Logs
+*.log
