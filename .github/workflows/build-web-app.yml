@@ -1,0 +1,42 @@
+name: Build Web App for Testing
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: |
+          cd client
+          npm ci --legacy-peer-deps
+
+      - name: Build
+        run: |
+          cd client
+          npm run build
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: client/build
+          retention-days: 30
+
+      - name: Success
+        run: |
+          echo "✅ Build thành công!"
+          echo "📦 Files: client/build/"
+          ls -la client/build/ || echo "No files"
+

@@ -40,3 +40,45 @@ jobs:
           echo "2. Add iOS: npx cap add ios"
           echo "3. Sync: npx cap sync ios"
 
+
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install and build
+        run: |
+          cd client
+          npm ci --legacy-peer-deps
+          npm run build
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: client/build
+          retention-days: 30
+
+      - name: Deploy summary
+        run: |
+          echo "✅ Web app built successfully!"
+          echo "📦 Build files in client/build/"
+          echo ""
+          echo "To build iOS:"
+          echo "1. Install Capacitor: npm install @capacitor/ios"
+          echo "2. Add iOS: npx cap add ios"
+          echo "3. Sync: npx cap sync ios"
+
