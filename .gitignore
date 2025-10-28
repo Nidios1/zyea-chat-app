@@ -32,6 +32,11 @@ xcuserdata/
 */ios/**/*.ipa
 */ios/**/*.dSYM
 
+# Mobile build folders
+mobile/ios/build/
+mobile/android/build/
+mobile/build/
+
 # IDE
 .vscode/
 .idea/

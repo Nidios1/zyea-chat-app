@@ -56,6 +56,18 @@ export const ThemeProvider = ({ children }) => {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme-color', themeColor);
+    
+    // Update meta theme-color for mobile status bar
+    const themeColorMeta = document.querySelector('#theme-color-default');
+    if (themeColorMeta) {
+      themeColorMeta.content = isDarkMode ? '#1c1c1e' : '#ffffff';
+    }
+    
+    // Update apple-mobile-web-app-status-bar-style
+    const statusBarStyleMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    if (statusBarStyleMeta) {
+      statusBarStyleMeta.content = isDarkMode ? 'black-translucent' : 'default';
+    }
   }, [isDarkMode, themeColor]);
 
   // Save theme mode to localStorage

@@ -1,12 +1,12 @@
 import React from 'react';
 import styled from 'styled-components';
-import { FiMessageCircle, FiUsers, FiGrid, FiUser } from 'react-icons/fi';
+import { FiMessageCircle, FiUsers, FiUser, FiBell, FiHome, FiMenu } from 'react-icons/fi';
 
 const BottomNav = styled.div`
-  background: var(--bg-primary, white);
+  background: var(--bg-primary);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 -2px 8px var(--shadow-color, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 -2px 8px var(--shadow-color);
   position: fixed;
   bottom: 0;
   left: 0;
@@ -15,6 +15,15 @@ const BottomNav = styled.div`
   padding-bottom: max(env(safe-area-inset-bottom, 0), 8px);
   min-height: 60px;
   pointer-events: auto;
+  
+  /* Smooth slide animation */
+  transform: translateY(${props => props.hidden ? '100%' : '0'});
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* Optimize animation performance */
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 `;
 
 const NavItemsContainer = styled.div`
@@ -31,16 +40,22 @@ const NavItem = styled.div`
   padding: clamp(6px, 1.5vw, 8px) clamp(4px, 1vw, 6px);
   cursor: pointer;
   transition: all var(--duration-fast, 150ms) var(--ease-out, ease);
-  color: ${props => props.active ? 'var(--primary-color, #0084ff)' : 'var(--text-secondary, #666)'};
+  color: ${props => {
+    if (props.active && props.isProfile) return 'var(--primary-color)';
+    if (props.active && props.isFeedBoard) return 'var(--primary-color)';
+    if (props.active) return 'var(--primary-color)';
+    return 'var(--text-secondary)';
+  }};
   position: relative;
   min-height: var(--touch-min, 44px);
   gap: clamp(2px, 0.5vw, 4px);
   -webkit-tap-highlight-color: transparent;
   user-select: none;
 
-  &:hover {
+  /* Remove hover color change to match design */
+  /* &:hover {
     color: var(--primary-color, #0084ff);
-  }
+  } */
 
   &:active {
     transform: scale(0.95);
@@ -93,26 +108,48 @@ const NotificationBadge = styled.div`
   line-height: 1.2;
 `;
 
-const MobileBottomNav = ({ currentView, onViewChange, unreadCount }) => {
+const ActiveDot = styled.div`
+  position: absolute;
+  top: -2px;
+  right: 50%;
+  transform: translateX(50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: ${props => props.color || '#0084ff'};
+`;
+
+const MobileBottomNav = ({ currentView, onViewChange, unreadCount, isScrollingDown }) => {
+  // Hide bottom nav when on profile tab
+  if (currentView === 'profile') {
+    return null;
+  }
+
   const navItems = [
+    { id: 'feedboard', label: 'Bảng feed', icon: FiHome },
+    { id: 'contacts', label: 'Bạn bè', icon: FiUsers },
     { id: 'messages', label: 'Tin nhắn', icon: FiMessageCircle, badge: unreadCount > 0 ? unreadCount : null },
-    { id: 'contacts', label: 'Danh bạ', icon: FiUsers },
-    { id: 'discover', label: 'Khám phá', icon: FiGrid },
-    { id: 'profile', label: 'Cá nhân', icon: FiUser }
+    { id: 'notifications', label: 'Thông báo', icon: FiBell, badge: 0 },
+    { id: 'profile', label: 'Cá nhân', icon: FiMenu }
   ];
 
   return (
-    <BottomNav>
+    <BottomNav hidden={isScrollingDown}>
       <NavItemsContainer>
         {navItems.map((item) => (
           <NavItem 
             key={item.id} 
             active={item.id === currentView}
+            isFeedBoard={item.id === 'feedboard'}
+            isProfile={item.id === 'profile'}
             onClick={() => onViewChange(item.id)}
           >
             <NavIcon>
               <item.icon size={20} />
-              {item.badge && item.badge > 0 && (
+              {item.id === currentView && (
+                <ActiveDot color={item.id === 'profile' ? '#00a651' : item.id === 'feedboard' ? '#ff6b35' : '#0084ff'} />
+              )}
+              {item.badge !== null && item.badge !== undefined && item.badge > 0 && (
                 <NotificationBadge>{item.badge}</NotificationBadge>
               )}
             </NavIcon>

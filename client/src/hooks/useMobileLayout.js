@@ -1,7 +1,7 @@
 /**
- * useMobileLayout - HOOK DUY NHẤT cho Mobile Layout
+ * useMobileLayout - HOOK for Mobile Layout (Web version)
  * 
- * Cung cấp tất cả thông tin cần thiết:
+ * Provides necessary information:
  * - Keyboard height & visibility
  * - Safe area insets
  * - Viewport dimensions
@@ -12,10 +12,6 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Capacitor } from '@capacitor/core';
-import { Keyboard } from '@capacitor/keyboard';
-
-const isNative = Capacitor.isNativePlatform();
 
 const useMobileLayout = () => {
   // Keyboard state
@@ -85,63 +81,24 @@ const useMobileLayout = () => {
     };
   }, [updateViewportHeight, updateSafeArea]);
 
-  // Handle keyboard (Native)
+  // Handle keyboard (Web only - visualViewport API)
   useEffect(() => {
-    if (!isNative) {
-      // Web fallback: visualViewport API
-      if (window.visualViewport) {
-        const handleViewportChange = () => {
-          const diff = window.innerHeight - window.visualViewport.height;
-          updateKeyboardHeight(diff > 150 ? diff : 0);
-        };
+    if (window.visualViewport) {
+      const handleViewportChange = () => {
+        const diff = window.innerHeight - window.visualViewport.height;
+        updateKeyboardHeight(diff > 150 ? diff : 0);
+      };
 
-        window.visualViewport.addEventListener('resize', handleViewportChange);
-        return () => {
-          window.visualViewport.removeEventListener('resize', handleViewportChange);
-        };
-      }
-      return;
+      window.visualViewport.addEventListener('resize', handleViewportChange);
+      return () => {
+        window.visualViewport.removeEventListener('resize', handleViewportChange);
+      };
     }
-
-    // Native: Capacitor Keyboard API
-    let listeners = [];
-
-    const setupKeyboard = async () => {
-      try {
-        // Show
-        const showListener = await Keyboard.addListener('keyboardWillShow', (info) => {
-          updateKeyboardHeight(info.keyboardHeight);
-        });
-        listeners.push(showListener);
-
-        // Hide
-        const hideListener = await Keyboard.addListener('keyboardWillHide', () => {
-          updateKeyboardHeight(0);
-        });
-        listeners.push(hideListener);
-      } catch (error) {
-        console.error('Keyboard setup error:', error);
-      }
-    };
-
-    setupKeyboard();
-
-    return () => {
-      listeners.forEach(listener => listener.remove());
-    };
   }, [updateKeyboardHeight]);
 
   // Hide keyboard programmatically
   const hideKeyboard = useCallback(async () => {
-    if (isNative) {
-      try {
-        await Keyboard.hide();
-      } catch (error) {
-        console.error('Error hiding keyboard:', error);
-      }
-    } else {
-      document.activeElement?.blur();
-    }
+    document.activeElement?.blur();
   }, []);
 
   return {
@@ -161,10 +118,9 @@ const useMobileLayout = () => {
     viewportWidth: window.innerWidth,
     
     // Device
-    isNative,
+    isNative: false,
     isMobile: window.innerWidth <= 768,
   };
 };
 
 export default useMobileLayout;
-

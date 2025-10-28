@@ -1,0 +1,100 @@
+name: Build iOS with Fastlane
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build and Sign iOS
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+          bundler-cache: true
+
+      - name: Install dependencies
+        run: |
+          cd client
+          npm ci --legacy-peer-deps
+          npm run build
+
+      - name: Setup Capacitor iOS
+        run: |
+          cd client
+          npx cap sync ios
+
+      - name: Install Fastlane
+        run: |
+          cd client/ios
+          bundle install
+
+      # Method 1: Automatic Signing (Recommended)
+      - name: Build with Fastlane (Auto Sign)
+        run: |
+          cd client/ios
+          bundle exec fastlane ios build
+        env:
+          GYM_CODE_SIGN_IDENTITY: ""
+          GYM_DEVELOPMENT_TEAM: ${{ secrets.IOS_TEAM_ID }}
+          FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+
+      # Method 2: Manual Signing
+      - name: Configure Signing
+        run: |
+          # Import certificate
+          echo "${{ secrets.IOS_CERTIFICATE_BASE64 }}" | base64 -d > certificate.p12
+          security create-keychain -p build build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p build build.keychain
+          security import certificate.p12 lunch:build -P "${{ secrets.IOS_CERTIFICATE_PASSWORD }}" -A
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k build build.keychain
+
+      - name: Build IPA Manual Sign
+        run: |
+          cd client/ios
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -archivePath build/App.xcarchive \
+            archive
+          
+          xcodebuild -exportArchive \
+            -archivePath build/App.xcarchive \
+            -exportPath build/output \
+            -exportOptionsPlist exportOptions.plist
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: client/ios/build/output/*.ipa
+          retention-days: 90
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: client/ios/build/output/*.ipa
+          draft: false
+          prerelease: false
+          tag_name: v${{ github.run_number }}
+          name: Release v${{ github.run_number }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

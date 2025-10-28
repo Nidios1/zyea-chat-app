@@ -3,7 +3,8 @@ import styled from 'styled-components';
 import { FiChevronLeft, FiEye, FiEyeOff, FiVideo, FiImage, FiUsers, FiHeart } from 'react-icons/fi';
 import { BsQrCodeScan } from 'react-icons/bs';
 import api from '../../utils/api';
-import { toast } from 'react-toastify';
+import { toast, ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
 import AuthContext from '../../contexts/AuthContext';
 import { useContext } from 'react';
@@ -214,6 +215,146 @@ const BackBtn = styled.button`
   border: none; background: transparent; padding: 6px; display: flex; align-items: center;
 `;
 
+// Facebook-style Toast Styling
+const ToastWrapper = styled(ToastContainer)`
+  &&&& {
+    .Toastify__toast {
+      background: ${props => props.$isDark ? '#242526' : '#ffffff'};
+      border-radius: 8px;
+      box-shadow: ${props => props.$isDark 
+        ? '0 4px 12px rgba(0, 0, 0, 0.4)' 
+        : '0 2px 8px rgba(0, 0, 0, 0.15)'};
+      min-height: 48px;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      color: ${props => props.$isDark ? '#e4e6eb' : '#1c1e21'};
+      border-left: 4px solid;
+      border-left-color: ${props => props.type === 'error' ? '#f02849' : 
+                                  props.type === 'success' ? '#42b72a' : 
+                                  props.type === 'warning' ? '#f7b928' : 
+                                  props.$isDark ? '#1877f2' : '#1877f2'};
+    }
+    
+    .Toastify__toast--error {
+      border-left-color: #f02849;
+      background: ${props => props.$isDark ? '#242526' : '#ffffff'};
+    }
+    
+    .Toastify__toast--success {
+      border-left-color: #42b72a;
+      background: ${props => props.$isDark ? '#242526' : '#ffffff'};
+    }
+    
+    .Toastify__toast--warning {
+      border-left-color: #f7b928;
+      background: ${props => props.$isDark ? '#242526' : '#ffffff'};
+    }
+    
+    .Toastify__toast-body {
+      margin: 0;
+      padding: 0;
+    }
+    
+    .Toastify__progress-bar {
+      height: 2px;
+      background: ${props => props.$isDark 
+        ? 'rgba(132, 162, 255, 0.5)' 
+        : 'rgba(24, 119, 242, 0.3)'};
+    }
+  }
+`;
+
+// iOS-style Alert Dialog
+const AlertOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  animation: fadeIn 0.2s ease;
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+`;
+
+const AlertDialog = styled.div`
+  background: #fff;
+  border-radius: 14px;
+  width: 280px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  animation: slideUp 0.25s ease;
+  
+  @keyframes slideUp {
+    from {
+      transform: scale(0.9);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+`;
+
+const AlertTitle = styled.div`
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+  padding: 22px 22px 8px;
+  color: #000;
+`;
+
+const AlertMessage = styled.div`
+  font-size: 14px;
+  text-align: center;
+  padding: 4px 22px;
+  color: #6b6b6b;
+  line-height: 1.4;
+`;
+
+const AlertButtonContainer = styled.div`
+  border-top: 0.5px solid #c7c7cc;
+  display: flex;
+  flex-direction: column;
+`;
+
+const AlertButton = styled.button`
+  font-size: 17px;
+  font-weight: 400;
+  padding: 13px;
+  border: none;
+  background: transparent;
+  color: ${props => props.$isPrimary ? '#007aff' : '#007aff'};
+  font-weight: ${props => props.$isPrimary ? '600' : '400'};
+  
+  &:active {
+    background: #f5f5f7;
+  }
+  
+  &:not(:last-child) {
+    border-bottom: 0.5px solid #c7c7cc;
+  }
+`;
+
+const TermsLink = styled.span`
+  color: #007aff;
+  cursor: pointer;
+  
+  &:active {
+    opacity: 0.6;
+  }
+`;
+
 
 const MobileLogin = () => {
   const [step, setStep] = useState(1); // 1: intro, 2: email, 3: password
@@ -229,9 +370,65 @@ const MobileLogin = () => {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
+  const [rememberPassword, setRememberPassword] = useState(false);
+  const [showForgotPasswordAlert, setShowForgotPasswordAlert] = useState(false);
+  const [alertData, setAlertData] = useState({ show: false, title: '', message: '', onConfirm: null });
   const { login, user, clearUserState } = useContext(AuthContext);
   const { isDarkMode } = useTheme();
   const navigate = useNavigate();
+
+  // Helper function to show alert
+  const showAlert = (title, message, onConfirm = null) => {
+    setAlertData({ show: true, title, message, onConfirm });
+  };
+
+  const closeAlert = () => {
+    setAlertData({ show: false, title: '', message: '', onConfirm: null });
+  };
+
+  // Open terms
+  const openTerms = (e, type) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const url = type === 'usage' 
+      ? '/m/terms' 
+      : '/m/social-terms';
+    navigate(url);
+  };
+
+  // Load saved email when entering step 2
+  useEffect(() => {
+    if (step === 2) {
+      const savedEmail = localStorage.getItem('savedEmail');
+      const savedPassword = localStorage.getItem('savedPassword');
+      if (savedEmail) {
+        setEmail(savedEmail);
+      }
+      // If both saved email and password exist, set remember checkbox to true
+      if (savedEmail && savedPassword) {
+        setRememberPassword(true);
+      }
+    }
+  }, [step]);
+
+  // Load saved password when entering step 3
+  useEffect(() => {
+    if (step === 3) {
+      const savedPassword = localStorage.getItem('savedPassword');
+      const savedEmail = localStorage.getItem('savedEmail');
+      // Load saved password if email matches saved email
+      if (savedPassword && savedEmail === email) {
+        setPassword(savedPassword);
+        setRememberPassword(true);
+      } else {
+        // Clear password if email doesn't match
+        if (!savedPassword || savedEmail !== email) {
+          setPassword('');
+          setRememberPassword(false);
+        }
+      }
+    }
+  }, [step, email]);
 
   const slides = [
     {
@@ -283,13 +480,19 @@ const MobileLogin = () => {
   };
 
   const handleContinue = () => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      toast.error('Vui lòng nhập email hợp lệ');
+    // Validate email
+    if (!email || email.trim() === '') {
+      showAlert('Vui lòng nhập email', 'Email không được để trống.');
       return;
     }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showAlert('Email không hợp lệ', 'Vui lòng kiểm tra lại địa chỉ email.');
+      return;
+    }
+    // Validate terms
     if (!agree1 || !agree2) {
-      toast.error('Vui lòng đồng ý các điều khoản');
+      showAlert('Điều khoản', 'Vui lòng đồng ý các điều khoản để tiếp tục.');
       setShowTermsError(true);
       setTermsTouched(true);
       return;
@@ -301,17 +504,63 @@ const MobileLogin = () => {
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
+    
+    // Validate password
+    if (!password || password.trim() === '') {
+      showAlert('Vui lòng nhập mật khẩu', 'Mật khẩu không được để trống.');
+      return;
+    }
+    
     setLoading(true);
     try {
       const res = await api.post('/auth/login', { email, password });
       login(res.data.user, res.data.token);
       
+      // Save credentials if remember password is checked
+      if (rememberPassword) {
+        localStorage.setItem('savedEmail', email);
+        localStorage.setItem('savedPassword', password);
+      } else {
+        // Clear saved credentials if unchecked
+        localStorage.removeItem('savedEmail');
+        localStorage.removeItem('savedPassword');
+      }
+      
       // Đợi một chút để đảm bảo state được cập nhật
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      navigate('/');
+      // CRITICAL: Use replace instead of push to prevent back navigation to login
+      navigate('/', { replace: true });
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Đăng nhập thất bại');
+      // Check for network/server errors
+      if (!err.response) {
+        // Network error - no response from server
+        showAlert('Không có kết nối', 'Không thể kết nối tới server. Vui lòng kiểm tra kết nối internet và thử lại.');
+        setLoading(false);
+        return;
+      }
+      
+      const errorMessage = err.response?.data?.message || '';
+      const statusCode = err.response?.status || 0;
+      
+      // Provide specific error messages
+      if (errorMessage.includes('password') || errorMessage.includes('mật khẩu')) {
+        showAlert('Mật khẩu không đúng', 'Mật khẩu bạn nhập không đúng. Vui lòng thử lại.');
+      } else if (errorMessage.includes('email') || errorMessage.includes('Email') || errorMessage.includes('user')) {
+        showAlert('Email không tồn tại', 'Email này chưa được đăng ký. Vui lòng kiểm tra lại.');
+      } else if (errorMessage.includes('blocked') || errorMessage.includes('khóa')) {
+        showAlert('Tài khoản bị khóa', 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ hỗ trợ.');
+      } else if (statusCode === 401 || statusCode === 403) {
+        showAlert('Đăng nhập thất bại', 'Thông tin đăng nhập không đúng. Vui lòng kiểm tra lại.');
+      } else if (statusCode === 500 || statusCode >= 500) {
+        showAlert('Lỗi server', 'Server đang gặp sự cố. Vui lòng thử lại sau.');
+      } else if (statusCode === 0 || statusCode >= 400) {
+        showAlert('Không có kết nối', 'Không thể kết nối tới server. Vui lòng kiểm tra kết nối internet.');
+      } else if (errorMessage) {
+        showAlert('Đăng nhập thất bại', errorMessage);
+      } else {
+        showAlert('Đăng nhập thất bại', 'Đã xảy ra lỗi. Vui lòng thử lại sau.');
+      }
     } finally {
       setLoading(false);
     }
@@ -377,19 +626,24 @@ const MobileLogin = () => {
             />
             <CheckboxRow $isDark={isDarkMode}>
               <input type="checkbox" checked={agree1} onChange={(e) => { setAgree1(e.target.checked); setTermsTouched(true); }} />
-              Tôi đồng ý với các điều khoản sử dụng Zyea+
+              <span>
+                Tôi đồng ý với các{' '}
+                <TermsLink onClick={(e) => openTerms(e, 'usage')}>điều khoản sử dụng Zyea+</TermsLink>
+              </span>
             </CheckboxRow>
             <CheckboxRow $isDark={isDarkMode}>
               <input type="checkbox" checked={agree2} onChange={(e) => { setAgree2(e.target.checked); setTermsTouched(true); }} />
-              Tôi đồng ý với điều khoản Mạng xã hội của Zyea+
+              <span>
+                Tôi đồng ý với{' '}
+                <TermsLink onClick={(e) => openTerms(e, 'social')}>điều khoản Mạng xã hội của Zyea+</TermsLink>
+              </span>
             </CheckboxRow>
             {(showTermsError || (termsTouched && (!agree1 || !agree2))) && (
               <div style={{ color:'#e53935', fontSize:12, marginTop:2 }}>Bạn cần đồng ý đầy đủ các điều khoản để tiếp tục</div>
             )}
             <PrimaryButton type="submit" disabled={loading}>Tiếp tục</PrimaryButton>
           </FormWrap>
-          <FooterNote $isDark={isDarkMode}>Bạn đã có tài khoản? <span style={{ color: '#0a66ff' }} onClick={() => setStep(3)}>Đăng nhập ngay</span></FooterNote>
-          <FooterNote $isDark={isDarkMode}><span style={{ color: '#0a66ff' }} onClick={() => navigate('/m/forgot-password')}>Quên mật khẩu?</span></FooterNote>
+          <FooterNote $isDark={isDarkMode}>Chưa có tài khoản? <span style={{ color: '#0a66ff' }} onClick={() => navigate('/m/register')}>Tạo tài khoản</span></FooterNote>
         </>
       )}
 
@@ -413,15 +667,83 @@ const MobileLogin = () => {
                 {showPw ? <FiEyeOff /> : <FiEye />}
               </EyeBtn>
             </PasswordRow>
+            <CheckboxRow $isDark={isDarkMode} style={{ marginTop: '10px', marginBottom: '4px' }}>
+              <input 
+                type="checkbox" 
+                checked={rememberPassword} 
+                onChange={(e) => setRememberPassword(e.target.checked)} 
+              />
+              Lưu mật khẩu
+            </CheckboxRow>
             <PrimaryButton type="submit" disabled={loading}>{loading ? 'Đang đăng nhập...' : 'Tiếp tục'}</PrimaryButton>
           </FormWrap>
-          <FooterNote $isDark={isDarkMode}><span style={{ color: '#0a66ff' }} onClick={() => navigate('/m/forgot-password')}>Quên mật khẩu?</span></FooterNote>
+          <FooterNote $isDark={isDarkMode}><span style={{ color: '#0a66ff' }} onClick={() => setShowForgotPasswordAlert(true)}>Quên mật khẩu?</span></FooterNote>
         </>
       )}
 
       {showQRScanner && (
         <QRScanner onClose={() => setShowQRScanner(false)} />
       )}
+
+      {showForgotPasswordAlert && (
+        <AlertOverlay onClick={() => setShowForgotPasswordAlert(false)}>
+          <AlertDialog onClick={(e) => e.stopPropagation()}>
+            <AlertTitle>Bạn quên mật khẩu ư?</AlertTitle>
+            <AlertMessage>
+              Chúng tôi có thể hỗ trợ bạn đăng nhập vào tài khoản trong trường hợp quên mật khẩu.
+            </AlertMessage>
+            <AlertButtonContainer>
+              <AlertButton $isPrimary onClick={() => {
+                setShowForgotPasswordAlert(false);
+                navigate('/m/forgot-password');
+              }}>
+                Quên mật khẩu
+              </AlertButton>
+              <AlertButton onClick={() => setShowForgotPasswordAlert(false)}>
+                Thử lại
+              </AlertButton>
+            </AlertButtonContainer>
+          </AlertDialog>
+        </AlertOverlay>
+      )}
+
+      {alertData.show && (
+        <AlertOverlay onClick={closeAlert}>
+          <AlertDialog onClick={(e) => e.stopPropagation()}>
+            <AlertTitle>{alertData.title}</AlertTitle>
+            <AlertMessage>{alertData.message}</AlertMessage>
+            <AlertButtonContainer>
+              <AlertButton $isPrimary onClick={() => {
+                if (alertData.onConfirm) alertData.onConfirm();
+                closeAlert();
+              }}>
+                OK
+              </AlertButton>
+            </AlertButtonContainer>
+          </AlertDialog>
+        </AlertOverlay>
+      )}
+
+      <ToastWrapper
+        $isDark={isDarkMode}
+        position="top-center"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={true}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        style={{
+          width: '100%',
+          top: '60px'
+        }}
+        toastStyle={{
+          fontSize: '14px',
+          fontFamily: 'inherit'
+        }}
+      />
     </Container>
   );
 };

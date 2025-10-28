@@ -556,8 +556,34 @@ const NewsFeed = ({ currentUser, onBack, onGoToMessages, onNavigateToContacts, o
     try {
       setLoading(true);
       const response = await newsfeedAPI.getPosts();
-      console.log('Posts data:', response.data);
-      setPosts(response.data);
+      
+      // Transform posts to nest user data correctly
+      const transformedPosts = response.data.map(post => {
+        // Transform comments to nest user data
+        const transformedComments = (post.comments || []).map(comment => ({
+          ...comment,
+          user: {
+            id: comment.user_id,
+            username: comment.username,
+            full_name: comment.full_name,
+            avatar_url: comment.avatar_url
+          }
+        }));
+        
+        return {
+          ...post,
+          user: {
+            id: post.user_id,
+            username: post.username,
+            full_name: post.full_name,
+            avatar_url: post.avatar_url,
+            status: post.status
+          },
+          comments: transformedComments
+        };
+      });
+      
+      setPosts(transformedPosts);
     } catch (error) {
       console.error('Error loading posts:', error);
     } finally {
@@ -576,7 +602,20 @@ const NewsFeed = ({ currentUser, onBack, onGoToMessages, onNavigateToContacts, o
       console.log('Creating post with data:', postData);
       const response = await newsfeedAPI.createPost(postData);
       console.log('Post created successfully:', response.data);
-      setPosts(prev => [response.data, ...prev]);
+      
+      // Transform post to nest user data correctly
+      const transformedPost = {
+        ...response.data,
+        user: {
+          id: response.data.user_id,
+          username: response.data.username,
+          full_name: response.data.full_name,
+          avatar_url: response.data.avatar_url,
+          status: response.data.status
+        }
+      };
+      
+      setPosts(prev => [transformedPost, ...prev]);
     } catch (error) {
       console.error('Error creating post:', error);
       console.error('Error response:', error.response?.data);

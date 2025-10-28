@@ -824,7 +824,8 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         if (conversation && data.conversationId === conversation.id) {
           console.log('Messages marked as read by other user:', data);
           
-          if (data.messageIds.length === 0) {
+          // Check if messageIds exists and is an array
+          if (!data.messageIds || data.messageIds.length === 0) {
             // All messages marked as read
             setMessages(prev => prev.map(msg => 
               msg.sender_id === currentUser.id ? { ...msg, status: 'read' } : msg

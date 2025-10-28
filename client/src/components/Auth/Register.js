@@ -86,7 +86,7 @@ const Logo = styled.div`
     width: 60px;
     height: 60px;
     background: #0068ff;
-    border-radius: 12px;
+    border-radius: 13px;
     display: flex;
     align-items: center;
     justify-content: center;

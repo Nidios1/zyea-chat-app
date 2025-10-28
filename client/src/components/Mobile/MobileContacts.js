@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { friendsAPI } from '../../utils/api';
+import api from '../../utils/api';
 import { 
   FiPhone, 
   FiVideo, 
@@ -27,7 +28,7 @@ const ContactsContainer = styled.div`
   /* Fill parent container */
   flex: 1;
   height: 100%;
-  background: var(--bg-secondary, #f0f2f5);
+  background: var(--bg-primary, #000000);
   overflow: hidden;
   position: relative;
   width: 100%;
@@ -463,6 +464,14 @@ const Avatar = styled.div`
   font-size: clamp(16px, 4.5vw, 18px);
   flex-shrink: 0;
   position: relative;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  
+  &:active {
+    opacity: 0.8;
+  }
   
   /* Landscape mode */
   @media (max-width: 768px) and (orientation: landscape) {
@@ -685,7 +694,7 @@ const AddFriendContainer = styled.div`
   flex-direction: column;
   flex: 1;
   height: 100%;
-  background: var(--bg-secondary, #f0f2f5);
+  background: var(--bg-primary, #000000);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 `;
@@ -887,6 +896,101 @@ const OptionSubtitle = styled.div`
   color: var(--text-secondary, #65676b);
 `;
 
+const SearchResultsSection = styled.div`
+  background: var(--bg-primary, white);
+  margin-bottom: 8px;
+`;
+
+const SearchSectionTitle = styled.div`
+  padding: clamp(16px, 4vw, 20px);
+  padding-bottom: clamp(12px, 3vw, 16px);
+  font-size: clamp(14px, 3.5vw, 15px);
+  font-weight: 700;
+  color: var(--text-secondary, #65676b);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+`;
+
+const UserSearchResult = styled.div`
+  display: flex;
+  align-items: center;
+  padding: clamp(12px, 3vw, 16px);
+  gap: clamp(12px, 3vw, 16px);
+  border-bottom: 1px solid var(--border-color, #e4e6eb);
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  
+  /* Ensure UserInfo can receive click events */
+  > div:first-child {
+    pointer-events: auto;
+  }
+`;
+
+const UserInfo = styled.div`
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  
+  &:active {
+    opacity: 0.7;
+  }
+  
+  * {
+    pointer-events: none;
+  }
+`;
+
+const UserName = styled.div`
+  font-size: clamp(15px, 3.75vw, 16px);
+  font-weight: 500;
+  color: var(--text-primary, #050505);
+  margin-bottom: 3px;
+`;
+
+const UserPhone = styled.div`
+  font-size: clamp(13px, 3.25vw, 14px);
+  color: var(--text-secondary, #65676b);
+`;
+
+const AddFriendButton = styled.button`
+  background: var(--primary-color, #0084ff);
+  color: white;
+  border: none;
+  padding: clamp(8px, 2vw, 10px) clamp(20px, 5vw, 24px);
+  border-radius: 20px;
+  font-size: clamp(13px, 3.25vw, 14px);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+
+  &:active {
+    background: #0066cc;
+    transform: scale(0.98);
+  }
+`;
+
+const MessageButton = styled.button`
+  background: var(--bg-secondary, #f0f2f5);
+  color: var(--text-primary, #050505);
+  border: none;
+  padding: clamp(8px, 2vw, 10px) clamp(20px, 5vw, 24px);
+  border-radius: 20px;
+  font-size: clamp(13px, 3.25vw, 14px);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+
+  &:active {
+    background: var(--border-color, #e4e6eb);
+    transform: scale(0.98);
+  }
+`;
+
 const getAvatarColor = (name) => {
   const colors = ['#0084ff', '#31a24c', '#f02849', '#ffc107', '#9c27b0', '#ff6b6b', '#4ecdc4', '#45b7d1'];
   const index = name ? name.charCodeAt(0) % colors.length : 0;
@@ -911,6 +1015,8 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket, user
   const [showPermissionRequest, setShowPermissionRequest] = useState(false);
   const [showUserProfile, setShowUserProfile] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'friends') {
@@ -1080,6 +1186,59 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket, user
     }
   };
 
+  const handleSendFriendRequest = async (userId) => {
+    try {
+      await friendsAPI.sendFriendRequest(userId);
+      alert('Đã gửi lời mời kết bạn!');
+      // Reload to show updated status
+    } catch (error) {
+      console.error('Error sending friend request:', error);
+      if (error.response?.status === 400) {
+        alert('Lời mời kết bạn đã được gửi trước đó hoặc đã là bạn bè!');
+      } else {
+        alert('Có lỗi xảy ra khi gửi lời mời kết bạn!');
+      }
+    }
+  };
+
+  const handleSearchByPhone = async () => {
+    if (!phoneNumber.trim()) {
+      alert('Vui lòng nhập số điện thoại hoặc email');
+      return;
+    }
+
+    try {
+      setSearching(true);
+      
+      // Detect if input is email or phone
+      const isEmail = phoneNumber.includes('@');
+      
+      let response;
+      if (isEmail) {
+        // Search by email
+        response = await api.get(`/users/search/email?email=${encodeURIComponent(phoneNumber)}`);
+      } else {
+        // Search by phone
+        const fullPhone = `${countryCode}${phoneNumber}`;
+        console.log('Searching with phone:', fullPhone);
+        response = await api.get(`/users/search/phone?phone=${encodeURIComponent(fullPhone)}`);
+        console.log('Search results:', response.data);
+      }
+      
+      setSearchResults(response.data || []);
+      
+      if (response.data.length === 0) {
+        alert('Không tìm thấy người dùng nào');
+      }
+    } catch (error) {
+      console.error('Error searching user:', error);
+      setSearchResults([]);
+      alert('Không tìm thấy người dùng nào');
+    } finally {
+      setSearching(false);
+    }
+  };
+
   // Render Add Friend View
   if (showAddFriendView) {
     return (
@@ -1115,16 +1274,86 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket, user
               <option value="+82">+82</option>
             </CountryCodeSelect>
             <PhoneInput
-              type="tel"
-              placeholder="Nhập số điện thoại"
+              type="text"
+              placeholder="Nhập số điện thoại hoặc email"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
             />
-            <SearchButton>
+            <SearchButton onClick={handleSearchByPhone} disabled={searching}>
               <FiSearch size={20} />
             </SearchButton>
           </PhoneInputWrapper>
         </PhoneInputSection>
+
+        {/* Search Results */}
+        {searchResults.length > 0 && (
+          <SearchResultsSection>
+            <SearchSectionTitle>Tìm kiếm ({searchResults.length})</SearchSectionTitle>
+            {searchResults.map((result) => (
+              <UserSearchResult key={result.id}>
+                <Avatar 
+                  color={getAvatarColor(result.full_name || result.username)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    console.log('Clicking on avatar, opening profile for:', result);
+                    setSelectedUser(result);
+                    setShowUserProfile(true);
+                  }}
+                >
+                  {result.avatar_url ? (
+                    <img src={getAvatarURL(result.avatar_url)} alt={result.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                  ) : (
+                    getInitials(result.full_name || result.username)
+                  )}
+                </Avatar>
+                <UserInfo 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    console.log('Clicking on user info, opening profile for:', result);
+                    setSelectedUser(result);
+                    setShowUserProfile(true);
+                  }}
+                >
+                  <UserName onClick={(e) => e.stopPropagation()}>
+                    {result.full_name || result.username}
+                  </UserName>
+                  <UserPhone onClick={(e) => e.stopPropagation()}>
+                    {result.phone || result.email}
+                  </UserPhone>
+                </UserInfo>
+                <div style={{ display: 'flex', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
+                  <MessageButton onClick={async (e) => {
+                    e.stopPropagation();
+                    console.log('Starting chat with:', result);
+                    // Start chat first
+                    if (onStartChat) {
+                      await onStartChat(result);
+                    }
+                    // Then close Add Friend view
+                    setShowAddFriendView(false);
+                  }}>
+                    Nhắn tin
+                  </MessageButton>
+                  <AddFriendButton onClick={(e) => {
+                    e.stopPropagation();
+                    // Add friend
+                    handleSendFriendRequest(result.id);
+                  }}>
+                    Kết bạn
+                  </AddFriendButton>
+                </div>
+              </UserSearchResult>
+            ))}
+          </SearchResultsSection>
+        )}
+
+        {searching && (
+          <SearchResultsSection>
+            <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+              Đang tìm kiếm...
+            </div>
+          </SearchResultsSection>
+        )}
 
         <OptionButton>
           <OptionIcon>
@@ -1134,16 +1363,18 @@ const MobileContacts = ({ onBack, onCall, onVideoCall, onAddFriend, socket, user
             <OptionTitle>Quét mã QR</OptionTitle>
           </OptionContent>
         </OptionButton>
-
-        <OptionButton>
-          <OptionIcon>
-            <FiUsers />
-          </OptionIcon>
-          <OptionContent>
-            <OptionTitle>Bạn bè có thể quen</OptionTitle>
-            <OptionSubtitle>Xem lời mời kết bạn đã gửi tại trang Danh bạ Zalo</OptionSubtitle>
-          </OptionContent>
-        </OptionButton>
+        
+        {showUserProfile && selectedUser && (
+          <MobileUserProfile
+            user={selectedUser}
+            currentUserId={user?.id}
+            onClose={() => {
+              setShowUserProfile(false);
+              setSelectedUser(null);
+            }}
+            onStartChat={handleStartChatFromProfile}
+          />
+        )}
       </AddFriendContainer>
     );
   }

@@ -41,12 +41,13 @@ api.interceptors.response.use(
     if (error.response?.data) {
       console.error('Error details:', error.response.data);
     }
-    if (error.response?.status === 401) {
-      console.log('🔒 Unauthorized, removing token but not redirecting');
+    // CRITICAL: Only remove token on 401 if it's NOT a profile check during initial load
+    // This prevents accidental logout when app is starting
+    if (error.response?.status === 401 && !error.config?.url?.includes('/users/profile')) {
+      console.log('🔒 Unauthorized on API request, removing token');
       localStorage.removeItem('token');
-      // Don't redirect automatically - let the app handle it
-      // window.location.href = '/login';
     }
+    // For /users/profile endpoint, don't remove token - let App.js handle it
     return Promise.reject(error);
   }
 );
@@ -151,6 +152,27 @@ export const chatAPI = {
   markAsUnread: async (conversationId) => {
     const response = await api.put(`/chat/conversations/${conversationId}/unread`, { unread: true });
     return response.data;
+  },
+  
+  // Update message reactions
+  updateReactions: async (messageId, reactions) => {
+    const response = await api.post(`/chat/messages/${messageId}/reactions`, { reactions });
+    return response.data;
+  },
+  
+  updateMessage: async (messageId, content) => {
+    console.log('=== API CALL ===');
+    console.log('URL:', `/chat/messages/${messageId}`);
+    console.log('Method: PUT');
+    console.log('Body:', { content });
+    const response = await api.put(`/chat/messages/${messageId}`, { content });
+    console.log('Response:', response.data);
+    return response.data;
+  },
+  
+  deleteMessage: async (messageId) => {
+    const response = await api.delete(`/chat/messages/${messageId}`);
+    return response.data;
   }
 };
 
@@ -174,7 +196,8 @@ export const newsfeedAPI = {
     }
     return api.post('/newsfeed/posts', formData, {
       headers: { 
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'multipart/form-data'
       }
     });
   },
@@ -183,7 +206,7 @@ export const newsfeedAPI = {
   sharePost: (postId) => api.post(`/newsfeed/posts/${postId}/share`),
   deletePost: (postId) => api.delete(`/newsfeed/posts/${postId}`),
   getPostComments: (postId, page = 1, limit = 10) => 
-    api.get(`/newsfeed/posts/${postId}/comments?page=${page}&limit=${limit}`)
+    api.get(`/newsfeed/posts/${postId}/comments?page=${page}&limit=${limit}`),
 };
 
 export const friendsAPI = {

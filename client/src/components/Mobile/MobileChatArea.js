@@ -9,6 +9,8 @@ import ChatOptionsMenu from '../Shared/Chat/ChatOptionsMenu';
 import MobileUserProfile from './MobileUserProfile';
 import VideoCall from '../Shared/Chat/VideoCall';
 import PermissionRequest from '../Shared/Chat/PermissionRequest';
+import ReplyBar from '../Shared/Chat/ReplyBar';
+import EditBar from '../Shared/Chat/EditBar';
 import { chatAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL } from '../../utils/imageUtils';
@@ -21,7 +23,7 @@ const MobileChatContainer = styled.div`
   flex-direction: column;
   height: 100vh;
   height: 100dvh; /* Dynamic viewport - excludes keyboard */
-  background: var(--bg-secondary, #f0f2f5);
+  background: var(--bg-primary, #000000);
   overflow: hidden;
   position: relative;
   width: 100%;
@@ -288,6 +290,7 @@ const LoadingContainer = styled.div`
   color: var(--text-secondary, #666);
 `;
 
+
 const MobileChatArea = ({
   conversation,
   currentUser,
@@ -314,6 +317,8 @@ const MobileChatArea = ({
   const [isVideoCall, setIsVideoCall] = useState(true);
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [showPermissionRequest, setShowPermissionRequest] = useState(false);
+  const [replyToMessage, setReplyToMessage] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
   
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -324,6 +329,13 @@ const MobileChatArea = ({
   
   // 🎹 CRITICAL: Hook để detect keyboard và adjust input position
   const { isKeyboardVisible, keyboardHeight } = useKeyboard();
+
+  // Debug: Log when component receives conversation prop
+  useEffect(() => {
+    console.log('📱 MobileChatArea - Component mounted/render with conversation:', conversation);
+    console.log('📱 MobileChatArea - currentUser:', currentUser);
+    console.log('📱 MobileChatArea - socket:', socket ? 'connected' : 'not connected');
+  }, []);
 
   // Check if user is near bottom (within 100px)
   const isNearBottom = () => {
@@ -356,9 +368,15 @@ const MobileChatArea = ({
 
   // Load messages when conversation changes
   useEffect(() => {
-    if (conversation) {
+    console.log('📱 MobileChatArea - useEffect triggered with conversation:', conversation);
+    console.log('📱 MobileChatArea - conversation?.id:', conversation?.id);
+    
+    if (conversation && conversation.id) {
+      console.log('📱 MobileChatArea - Calling fetchMessages and loadConversationSettings');
       fetchMessages();
       loadConversationSettings();
+    } else {
+      console.log('📱 MobileChatArea - No conversation or no conversation.id, skipping fetch');
     }
     
     // Cleanup scroll animation on unmount
@@ -432,7 +450,8 @@ const MobileChatArea = ({
           username: conversation.username,
           full_name: conversation.full_name,
           avatar_url: conversation.avatar_url,
-          status: 'read'
+          status: 'read',
+          reactions: data.reactions || [] // Add reactions field
         };
         
         setMessages(prev => [...prev, newMsg]);
@@ -454,10 +473,55 @@ const MobileChatArea = ({
       }
     });
 
+    socket.on('reactionUpdate', (data) => {
+      if (conversation && data.conversationId === conversation.id) {
+        console.log('Reaction updated:', data);
+        setMessages(prev => prev.map(msg => {
+          if (msg.id === data.messageId) {
+            // Ensure reactions is always an array for proper parsing
+            let reactions = data.reactions;
+            if (typeof reactions === 'string') {
+              try {
+                reactions = JSON.parse(reactions);
+              } catch (e) {
+                reactions = [];
+              }
+            }
+            return { ...msg, reactions };
+          }
+          return msg;
+        }));
+      }
+    });
+
+    // Listen for message edited
+    socket.on('messageEdited', (data) => {
+      if (conversation && data.conversationId === conversation.id) {
+        console.log('Message edited by other user:', data);
+        setMessages(prev => prev.map(msg => {
+          if (msg.id === data.messageId) {
+            return { ...msg, content: data.content };
+          }
+          return msg;
+        }));
+      }
+    });
+
+    // Listen for message deleted
+    socket.on('messageDeleted', (data) => {
+      if (conversation && data.conversationId === conversation.id) {
+        console.log('Message deleted by other user:', data);
+        setMessages(prev => prev.filter(msg => msg.id !== data.messageId));
+      }
+    });
+
     return () => {
       socket.off('receiveMessage');
       socket.off('userTyping');
       socket.off('userStoppedTyping');
+      socket.off('reactionUpdate');
+      socket.off('messageEdited');
+      socket.off('messageDeleted');
       
       // Stop typing when leaving
       if (isTyping) {
@@ -470,18 +534,51 @@ const MobileChatArea = ({
   }, [conversation, socket, currentUser.id]);
 
   const fetchMessages = async () => {
-    if (!conversation) return;
+    if (!conversation || !conversation.id) {
+      console.log('📱 MobileChatArea - No conversation provided');
+      setMessages([]);
+      setLoading(false);
+      return;
+    }
+    
+    console.log('📱 MobileChatArea - Fetching messages for conversation:', conversation.id);
+    console.log('📱 MobileChatArea - Current user:', currentUser?.id);
     
     try {
       setLoading(true);
       const data = await chatAPI.getMessages(conversation.id);
-      console.log('📱 MobileChatArea - Fetched messages:', data);
-      setMessages(data || []);
+      console.log('📱 MobileChatArea - API Response:', data);
+      console.log('📱 MobileChatArea - Number of messages:', data?.length || 0);
+      console.log('📱 MobileChatArea - Messages detail:', JSON.stringify(data, null, 2));
+      
+      // Parse reactions from database
+      const parseReactions = (reactions) => {
+        if (!reactions) return [];
+        if (typeof reactions === 'string') {
+          try {
+            return JSON.parse(reactions);
+          } catch (e) {
+            return [];
+          }
+        }
+        return reactions;
+      };
+      
+      // Process and parse reactions
+      const processedMessages = (data || []).map(msg => ({
+        ...msg,
+        reactions: parseReactions(msg.reactions)
+      }));
+      
+      console.log('📱 MobileChatArea - Processed messages count:', processedMessages.length);
+      setMessages(processedMessages);
       
       // Mark as read
       await markAllMessagesAsRead();
     } catch (error) {
       console.error('❌ Error fetching messages:', error);
+      console.error('❌ Error details:', error.response?.data || error.message);
+      setMessages([]);
     } finally {
       setLoading(false);
       // Single scroll after loading
@@ -534,30 +631,111 @@ const MobileChatArea = ({
       }
     }
 
+    // Handle edit message
+    if (editingMessage) {
+      try {
+        console.log('=== EDITING MESSAGE ===');
+        console.log('Full message object:', editingMessage);
+        console.log('Message ID:', editingMessage.id);
+        console.log('Message content:', messageText);
+        console.log('Current user ID:', currentUser.id);
+        
+        if (!editingMessage.id) {
+          alert('Không tìm thấy ID tin nhắn. Vui lòng refresh trang.');
+          return;
+        }
+        
+        // Update message on server
+        const result = await chatAPI.updateMessage(editingMessage.id, messageText);
+        console.log('Server response:', result);
+        
+        // Update message in local state
+        setMessages(prev => prev.map(msg => 
+          msg.id === editingMessage.id 
+            ? { ...msg, content: messageText } 
+            : msg
+        ));
+        
+        // Emit socket event to notify other user
+        if (socket) {
+          socket.emit('messageEdited', {
+            messageId: editingMessage.id,
+            content: messageText,
+            conversationId: conversation.id
+          });
+          console.log('Emitted messageEdited event');
+        }
+        
+        // Clear editing state
+        setEditingMessage(null);
+        setNewMessage('');
+        
+        console.log('Message edited successfully');
+      } catch (error) {
+        console.error('=== ERROR EDITING MESSAGE ===');
+        console.error('Error:', error);
+        console.error('Error response:', error.response);
+        console.error('Error data:', error.response?.data);
+        console.error('Message ID:', editingMessage.id);
+        console.error('Message content:', messageText);
+        
+        // Don't show error alert for 404 - message might not be saved yet
+        // Just log and clear editing state
+        if (error.response?.status === 404) {
+          console.log('Message not found in database (likely not saved yet)');
+          setEditingMessage(null);
+          setNewMessage('');
+        } else {
+          const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+          alert('Không thể chỉnh sửa tin nhắn: ' + errorMessage);
+        }
+      }
+      return;
+    }
+
     try {
-      await chatAPI.sendMessage(conversation.id, messageText, 'text');
+      // Prepare message with reply info if replying
+      const messageToSend = replyToMessage 
+        ? `Re: ${replyToMessage.content}\n\n${messageText}` 
+        : messageText;
+
+      console.log('📤 Sending message:', {
+        conversationId: conversation.id,
+        message: messageToSend,
+        currentUser: currentUser.id
+      });
+
+      const response = await chatAPI.sendMessage(conversation.id, messageToSend, 'text');
+      console.log('📤 Send message response:', response);
+      
+      const realMessageId = response.messageId || Date.now();
 
       if (socket) {
         socket.emit('sendMessage', {
-          receiverId: conversation.other_user_id,
-          message: messageText,
+          receiverId: conversation.other_user_id || conversation.participant_id,
+          message: messageToSend,
           senderId: currentUser.id,
-          conversationId: conversation.id
+          conversationId: conversation.id,
+          replyTo: replyToMessage ? replyToMessage.id : null
         });
       }
 
       const newMsg = {
-        id: Date.now(),
-        content: messageText,
+        id: realMessageId, // Use real ID from server
+        content: messageToSend,
         sender_id: currentUser.id,
         created_at: new Date().toISOString(),
         username: currentUser.username,
         full_name: currentUser.fullName,
         avatar_url: currentUser.avatar_url,
-        status: 'sent'
+        status: 'sent',
+        reply_to: replyToMessage ? replyToMessage.id : null
       };
 
       setMessages(prev => [...prev, newMsg]);
+      
+      // Clear reply after sending
+      setReplyToMessage(null);
       
       // Instant scroll to your own message
       scrollToBottom(true);
@@ -566,7 +744,10 @@ const MobileChatArea = ({
         onMessageSent(newMsg);
       }
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('❌ Error sending message:', error);
+      console.error('❌ Error details:', error.response?.data || error.message);
+      console.error('❌ Error stack:', error.stack);
+      alert('Không thể gửi tin nhắn: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -603,6 +784,123 @@ const MobileChatArea = ({
         });
       }
     }, 3000);
+  };
+
+  const handleReply = (message) => {
+    // Set the message to reply to
+    setReplyToMessage(message);
+    // Scroll to input and focus
+    setTimeout(() => {
+      const input = document.querySelector('textarea');
+      if (input) {
+        input.focus();
+      }
+    }, 100);
+  };
+
+  const handleCancelReply = () => {
+    setReplyToMessage(null);
+  };
+
+  const handleEdit = (message) => {
+    console.log('=== HANDLE EDIT ===');
+    console.log('Message object:', message);
+    console.log('Message ID:', message.id);
+    console.log('Message ID type:', typeof message.id);
+    console.log('Message ID number:', Number(message.id));
+    
+    // Set the message to edit
+    setEditingMessage(message);
+    // Pre-fill input with message content
+    setNewMessage(message.content);
+    // Clear any reply
+    setReplyToMessage(null);
+    // Scroll to input and focus
+    setTimeout(() => {
+      const input = document.querySelector('textarea');
+      if (input) {
+        input.focus();
+      }
+    }, 100);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessage(null);
+    setNewMessage('');
+  };
+
+  const handleDelete = async (message) => {
+    if (!window.confirm('Bạn có chắc muốn xóa tin nhắn này?')) {
+      return;
+    }
+
+    try {
+      console.log('Deleting message:', message.id);
+      
+      // Delete message on server
+      await chatAPI.deleteMessage(message.id);
+      
+      // Remove from local state
+      setMessages(prev => prev.filter(msg => msg.id !== message.id));
+      
+      // Emit socket event to notify other user
+      if (socket) {
+        socket.emit('messageDeleted', {
+          messageId: message.id,
+          conversationId: conversation.id
+        });
+        console.log('Emitted messageDeleted event');
+      }
+      
+      console.log('Message deleted successfully');
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      alert('Không thể xóa tin nhắn: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleForward = (message) => {
+    // TODO: Implement forward to another conversation
+    console.log('Forward message:', message);
+    alert('Tính năng chuyển tiếp sẽ được thêm sau');
+  };
+
+  const handleReaction = async (messageId, reaction) => {
+    try {
+      // Find the message and update its reactions
+      const message = messages.find(m => m.id === messageId);
+      if (!message) return;
+      
+      const currentReactions = message.reactions ? (typeof message.reactions === 'string' ? JSON.parse(message.reactions) : message.reactions) : [];
+      const newReactions = [...currentReactions];
+      const existingIndex = newReactions.indexOf(reaction);
+      
+      if (existingIndex > -1) {
+        newReactions.splice(existingIndex, 1);
+      } else {
+        newReactions.push(reaction);
+      }
+      
+      // Update local state
+      setMessages(prev => prev.map(msg => 
+        msg.id === messageId ? { ...msg, reactions: newReactions } : msg
+      ));
+      
+      // Save to database
+      await chatAPI.updateReactions(messageId, newReactions);
+      
+      // Emit via socket
+      if (socket && conversation) {
+        socket.emit('reactionUpdate', {
+          messageId,
+          reactions: newReactions,
+          conversationId: conversation.id,
+          userId: currentUser.id
+        });
+      }
+    } catch (error) {
+      console.error('Error updating reaction:', error);
+    }
   };
 
   const handleKeyPress = (e) => {
@@ -703,24 +1001,46 @@ const MobileChatArea = ({
       </MobileHeader>
 
       <MessagesContainer ref={messagesContainerRef} keyboardHeight={keyboardHeight}>
-        {messages.length === 0 ? (
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            height: '100%',
-            color: '#999',
-            fontSize: '14px'
-          }}>
-            Chưa có tin nhắn
-          </div>
-        ) : (
-          <MessageList 
-            messages={messages}
-            currentUserId={currentUser.id || currentUser.user_id}
-          />
-        )}
-        <div ref={messagesEndRef} />
+        {(() => {
+          console.log('📱 Rendering MessagesContainer - messages count:', messages.length);
+          console.log('📱 Loading state:', loading);
+          
+          if (loading) {
+            return (
+              <LoadingContainer>Đang tải tin nhắn...</LoadingContainer>
+            );
+          }
+          
+          if (messages.length === 0) {
+            return (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                height: '100%',
+                color: '#999',
+                fontSize: '14px'
+              }}>
+                Chưa có tin nhắn
+              </div>
+            );
+          }
+          
+          return (
+            <>
+              <MessageList 
+                messages={messages}
+                currentUserId={currentUser.id || currentUser.user_id}
+                onReply={handleReply}
+                onForward={handleForward}
+                onReaction={handleReaction}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+              <div ref={messagesEndRef} />
+            </>
+          );
+        })()}
         {otherUserTyping && conversation && (
           <TypingWrapper>
             <TypingIndicator 
@@ -735,6 +1055,20 @@ const MobileChatArea = ({
       </MessagesContainer>
 
       <MessageInputContainer keyboardHeight={keyboardHeight}>
+        {replyToMessage && (
+          <ReplyBar
+            replyMessage={replyToMessage}
+            onCancel={handleCancelReply}
+          />
+        )}
+        
+        {editingMessage && (
+          <EditBar
+            editingMessage={editingMessage}
+            onCancel={handleCancelEdit}
+          />
+        )}
+        
         <InputForm onSubmit={handleSendMessage}>
           <InputActionButton
             onClick={() => {

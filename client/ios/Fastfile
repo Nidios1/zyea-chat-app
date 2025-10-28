@@ -1,0 +1,43 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build iOS app"
+  lane :build do
+    # Clean
+    clean_build_artifacts
+    
+    # Build
+    gym(
+      workspace: "App.xcworkspace",
+      scheme: "App",
+      configuration: "Release",
+      export_method: "development", # or "ad-hoc", "app-store", "enterprise"
+      output_directory: "./build",
+      export_options: {
+        method: "development",
+        signingStyle: "automatic"
+      }
+    )
+    
+    # Optional: Upload to TestFlight
+    # pilot(skip_waiting_for_build_processing: true)
+  end
+
+  desc "Build and upload to TestFlight"
+  lane :beta do
+    build
+    # pilot
+  end
+
+  desc "Build for App Store"
+  lane :release do
+    gym(
+      workspace: "App.xcworkspace",
+      scheme: "App",
+      configuration: "Release",
+      export_method: "app-store"
+    )
+    # deliver(force: true)
+  end
+end
+

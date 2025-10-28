@@ -1,24 +1,17 @@
 /**
- * Image URL utilities for handling both web and native app
+ * Image URL utilities for web app
  */
-
-import { Capacitor } from '@capacitor/core';
 
 /**
  * Get server URL based on environment
  */
 export const getServerURL = () => {
-  // For Capacitor native apps, always use full server URL
-  if (Capacitor.isNativePlatform()) {
-    return process.env.REACT_APP_SERVER_URL || 'http://192.168.0.102:5000';
-  }
-  
-  // For web, can use relative URLs (handled by proxy) or full URL
+  // For web, use environment variable or return empty for relative URLs
   if (process.env.NODE_ENV === 'production') {
     return process.env.REACT_APP_SERVER_URL || '';
   }
   
-  // Development - use proxy
+  // Development - use proxy or relative URLs
   return '';
 };
 
@@ -33,13 +26,6 @@ export const getImageURL = (relativePath) => {
   // Already a full URL
   if (relativePath.startsWith('http://') || relativePath.startsWith('https://')) {
     return relativePath;
-  }
-  
-  // For Capacitor native apps, prepend server URL
-  if (Capacitor.isNativePlatform()) {
-    const serverURL = getServerURL();
-    const cleanPath = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
-    return `${serverURL}${cleanPath}`;
   }
   
   // For web, return as-is (will be handled by proxy or served directly)
@@ -68,10 +54,6 @@ export const getUploadedImageURL = (imagePath) => {
  * Get API URL
  */
 export const getAPIURL = () => {
-  if (Capacitor.isNativePlatform()) {
-    return process.env.REACT_APP_API_URL || 'http://192.168.0.102:5000/api';
-  }
-  
   if (process.env.NODE_ENV === 'production') {
     return process.env.REACT_APP_API_URL || '/api';
   }
@@ -86,4 +68,3 @@ export default {
   getUploadedImageURL,
   getAPIURL
 };
-

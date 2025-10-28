@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear Service Worker Cache - Zyea+</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        p {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Clear Service Worker Cache</h1>
+        <div id="status" class="status">
+            <p>Đang làm sạch cache và Service Worker...</p>
+        </div>
+        
+        <script>
+            async function clearCache() {
+                const statusDiv = document.getElementById('status');
+                
+                try {
+                    // Unregister all service workers
+                    if ('serviceWorker' in navigator) {
+                        const registrations = await navigator.serviceWorker.getRegistrations();
+                        for (const registration of registrations) {
+                            await registration.unregister();
+                            console.log('✅ Unregistered service worker:', registration.scope);
+                        }
+                        statusDiv.innerHTML = `<p>✅ Đã hủy đăng ký ${registrations.length} service worker(s)</p>`;
+                        statusDiv.className = 'status success';
+                    }
+                    
+                    // Clear all caches
+                    if ('caches' in window) {
+                        const cacheNames = await caches.keys();
+                        await Promise.all(cacheNames.map(cacheName => {
+                            console.log('🗑️ Đang xóa cache:', cacheName);
+                            return caches.delete(cacheName);
+                        }));
+                        statusDiv.innerHTML += `<p>✅ Đã xóa ${cacheNames.length} cache(s)</p>`;
+                        statusDiv.className = 'status success';
+                    }
+                    
+                    // Clear localStorage and sessionStorage
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    console.log('✅ Đã xóa localStorage và sessionStorage');
+                    
+                    // Final message
+                    setTimeout(() => {
+                        statusDiv.innerHTML = `
+                            <p>✅ Đã hoàn tất!</p>
+                            <p style="margin-top: 10px;">Có thể tải lại ứng dụng chính bây giờ.</p>
+                        `;
+                        statusDiv.className = 'status success';
+                        
+                        // Show button to redirect
+                        document.body.innerHTML += '<button onclick="window.location.href=\'/\'" style="margin-top: 20px;">Quay về trang chính</button>';
+                    }, 500);
+                    
+                } catch (error) {
+                    console.error('❌ Lỗi:', error);
+                    statusDiv.innerHTML = `<p>❌ Có lỗi xảy ra: ${error.message}</p>`;
+                    statusDiv.className = 'status info';
+                }
+            }
+            
+            // Run on load
+            window.addEventListener('load', clearCache);
+        </script>
+    </div>
+</body>
+</html>
+

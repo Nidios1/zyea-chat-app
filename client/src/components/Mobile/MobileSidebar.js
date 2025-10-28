@@ -16,6 +16,7 @@ import MobileTopBar from './MobileTopBar';
 import MobileTabBar from './MobileTabBar';
 import MobileBottomNav from './MobileBottomNav';
 import MobileConversationItem from './MobileConversationItem';
+import MobileFeedBoard from './MobileFeedBoard';
 import { chatAPI } from '../../utils/api';
 
 const MobileSidebarContainer = styled.div`
@@ -142,13 +143,14 @@ const MobileSidebar = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredConversations, setFilteredConversations] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [currentView, setCurrentView] = useState('messages');
+  const [currentView, setCurrentView] = useState('feedboard');
   const [activeTab, setActiveTab] = useState('all');
   const [showFriends, setShowFriends] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const [showUserSearch, setShowUserSearch] = useState(false);
   const [showFriendsList, setShowFriendsList] = useState(false);
+  const [showFeedBoard, setShowFeedBoard] = useState(true);
   const [hideBottomNav, setHideBottomNav] = useState(false);
   const [conversationSettings, setConversationSettings] = useState({});
   const [readConversations, setReadConversations] = useState(() => {
@@ -164,6 +166,37 @@ const MobileSidebar = ({
   const [showNewMessageModal, setShowNewMessageModal] = useState(false);
   const [toast, setToast] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
+  const [isScrollingDown, setIsScrollingDown] = useState(false);
+
+  // Debug: Log selectedConversation changes
+  useEffect(() => {
+    console.log('📱 MobileSidebar - selectedConversation changed:', selectedConversation);
+    console.log('📱 MobileSidebar - selectedConversation ID:', selectedConversation?.id);
+  }, [selectedConversation]);
+
+  // Sync currentView with active views - CRITICAL for proper tab highlighting
+  useEffect(() => {
+    if (selectedConversation) {
+      // When in a conversation, don't change currentView
+      return;
+    }
+    
+    if (showFriends) {
+      console.log('🔄 Syncing currentView to contacts');
+      setCurrentView('contacts');
+    } else if (showProfile) {
+      console.log('🔄 Syncing currentView to profile');
+      setCurrentView('profile');
+    } else if (showNotificationCenter) {
+      console.log('🔄 Syncing currentView to notifications');
+      setCurrentView('notifications');
+    } else if (showFeedBoard) {
+      console.log('🔄 Syncing currentView to feedboard');
+      setCurrentView('feedboard');
+    }
+    // Don't auto-set to messages - let handleNavClick handle it
+    // Otherwise it will interfere with reels/feedboard navigation
+  }, [showFriends, showProfile, showNotificationCenter, showFeedBoard, selectedConversation]);
 
   // Load conversations on mount
   useEffect(() => {
@@ -405,6 +438,7 @@ const MobileSidebar = ({
   };
 
   const handleNavClick = (view) => {
+    console.log('🎯 Nav clicked:', view, 'Current view:', currentView);
     setCurrentView(view);
     switch (view) {
       case 'messages':
@@ -413,6 +447,7 @@ const MobileSidebar = ({
         setShowNotificationCenter(false);
         setShowUserSearch(false);
         setShowFriendsList(false);
+        setShowFeedBoard(false);
         break;
       case 'contacts':
         setShowFriends(true);
@@ -420,6 +455,35 @@ const MobileSidebar = ({
         setShowNotificationCenter(false);
         setShowUserSearch(false);
         setShowFriendsList(false);
+        setShowFeedBoard(false);
+        break;
+      case 'reels':
+        // TODO: Implement reels view
+        console.log('Reels view clicked');
+        setShowFriends(false);
+        setShowProfile(false);
+        setShowNotificationCenter(false);
+        setShowUserSearch(false);
+        setShowFriendsList(false);
+        setShowFeedBoard(false);
+        break;
+      case 'feedboard':
+        // Show feedboard view
+        console.log('Feedboard view clicked');
+        setShowFeedBoard(true);
+        setShowFriends(false);
+        setShowProfile(false);
+        setShowNotificationCenter(false);
+        setShowUserSearch(false);
+        setShowFriendsList(false);
+        break;
+      case 'notifications':
+        setShowNotificationCenter(true);
+        setShowProfile(false);
+        setShowFriends(false);
+        setShowUserSearch(false);
+        setShowFriendsList(false);
+        setShowFeedBoard(false);
         break;
       case 'profile':
         setShowProfile(true);
@@ -427,6 +491,7 @@ const MobileSidebar = ({
         setShowNotificationCenter(false);
         setShowUserSearch(false);
         setShowFriendsList(false);
+        setShowFeedBoard(false);
         break;
       default:
         break;
@@ -435,7 +500,7 @@ const MobileSidebar = ({
 
   return (
     <MobileSidebarContainer>
-      {!selectedConversation && !showFriends && !showProfile && !showNotificationCenter && !showUserSearch && !showFriendsList && (
+      {!selectedConversation && !showFriends && !showProfile && !showUserSearch && !showFriendsList && !showFeedBoard && !showNotificationCenter && (
         <>
           <MobileTopBar 
             searchTerm={searchTerm}
@@ -453,12 +518,45 @@ const MobileSidebar = ({
       )}
 
       <Content>
-        {showFriends ? (
+        {showFeedBoard ? (
+          <ViewWrapper>
+            <MobileFeedBoard
+              currentUser={user}
+              onBack={() => {
+                setShowFeedBoard(false);
+                setCurrentView('feedboard');
+              }}
+              onGoToMessages={() => {
+                setShowFeedBoard(false);
+                setCurrentView('messages');
+              }}
+              onNavigateToContacts={() => {
+                setShowFeedBoard(false);
+                setCurrentView('contacts');
+                setShowFriends(true);
+              }}
+              onNavigateToExplore={() => {
+                setShowFeedBoard(false);
+                setCurrentView('reels');
+              }}
+              onNavigateToProfile={() => {
+                setShowFeedBoard(false);
+                setCurrentView('profile');
+                setShowProfile(true);
+              }}
+              onScrollDirectionChange={setIsScrollingDown}
+            />
+          </ViewWrapper>
+        ) : showFriends ? (
           <ViewWrapper>
             <MobileContacts 
               user={user}
               socket={socket}
-              onBack={() => setShowFriends(false)}
+              onBack={() => {
+                setShowFriends(false);
+                setShowFeedBoard(true);
+                setCurrentView('feedboard');
+              }}
               onCall={(friend) => console.log('Calling friend:', friend)}
               onVideoCall={(friend) => console.log('Video calling friend:', friend)}
               onAddFriend={() => {
@@ -519,13 +617,21 @@ const MobileSidebar = ({
           </ViewWrapper>
         ) : showNotificationCenter ? (
           <ViewWrapper>
-            <NotificationCenter onClose={() => setShowNotificationCenter(false)} />
+            <NotificationCenter onClose={() => {
+              setShowNotificationCenter(false);
+              setShowFeedBoard(true);
+              setCurrentView('feedboard');
+            }} />
           </ViewWrapper>
         ) : showProfile ? (
           <ViewWrapper>
             <PersonalProfilePage
               user={user}
-              onBack={() => setShowProfile(false)}
+              onBack={() => {
+                setShowProfile(false);
+                setShowFeedBoard(true);
+                setCurrentView('feedboard');
+              }}
               onShowProfile={() => console.log('View personal page clicked')}
               onNavigateToTab={(tabId) => {
                 setShowProfile(false);
@@ -602,6 +708,9 @@ const MobileSidebar = ({
                       selected={isCurrentlySelected}
                       hasUnread={displayHasUnread}
                       onClick={() => {
+                        console.log('📱 Clicked conversation:', conv);
+                        console.log('📱 Conversation ID:', conv.id);
+                        console.log('📱 Conversation object:', JSON.stringify(conv, null, 2));
                         setReadConversations(prev => new Set([...prev, conv.id]));
                         onConversationSelect?.(conv);
                       }}
@@ -630,11 +739,12 @@ const MobileSidebar = ({
         )}
       </Content>
 
-      {!selectedConversation && !showProfile && !hideBottomNav && (
+      {!selectedConversation && !hideBottomNav && (
         <MobileBottomNav 
           currentView={currentView}
           onViewChange={handleNavClick}
           unreadCount={unreadCount}
+          isScrollingDown={isScrollingDown}
         />
       )}
 

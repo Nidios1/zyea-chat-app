@@ -109,19 +109,22 @@ router.get('/posts', async (req, res) => {
 router.post('/posts', upload.single('image'), async (req, res) => {
   try {
     const userId = req.user.id;
-    const { content, type = 'text', privacy = 'public' } = req.body;
+    const { content, privacy = 'public' } = req.body;
     
-    console.log('Creating post:', { userId, content, type, privacy, file: req.file });
+    console.log('Creating post:', { userId, content, privacy, file: req.file });
+    console.log('Request body:', req.body);
     
     let imageUrl = null;
-    if (req.file && type === 'image') {
-      imageUrl = `/api/uploads/${req.file.filename}`;
+    if (req.file) {
+      imageUrl = `uploads/posts/${req.file.filename}`;
+      console.log('Image uploaded:', imageUrl);
     }
 
+    console.log('Executing INSERT query...');
     const [result] = await getConnection().execute(`
-      INSERT INTO posts (user_id, content, image_url, post_type, privacy)
-      VALUES (?, ?, ?, ?, ?)
-    `, [userId, content, imageUrl, type, privacy]);
+      INSERT INTO posts (user_id, content, image_url, privacy)
+      VALUES (?, ?, ?, ?)
+    `, [userId, content || '', imageUrl, privacy]);
 
     console.log('Post created with ID:', result.insertId);
 

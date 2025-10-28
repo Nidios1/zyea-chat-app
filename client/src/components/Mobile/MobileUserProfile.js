@@ -2,18 +2,28 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { 
   FiArrowLeft,
+  FiSearch,
   FiMessageCircle, 
-  FiPhone, 
-  FiUserPlus,
-  FiChevronRight,
-  FiUserCheck,
+  FiMoreHorizontal,
   FiCheck,
+  FiClock,
+  FiUsers,
+  FiMail,
+  FiBriefcase,
+  FiGitBranch,
+  FiRadio,
+  FiImage,
+  FiUserPlus,
+  FiUser,
   FiUserMinus,
-  FiMoreHorizontal
+  FiAlertTriangle,
+  FiUserX,
+  FiX
 } from 'react-icons/fi';
 import { friendsAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL } from '../../utils/imageUtils';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const PageContainer = styled.div`
   position: fixed;
@@ -21,12 +31,11 @@ const PageContainer = styled.div`
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 9999;
-  background: var(--bg-primary, white);
+  background: var(--bg-primary, #000000);
   display: flex;
   flex-direction: column;
+  z-index: 9999;
   animation: slideInFromRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
   transition: background-color 0.3s ease;
 
   @keyframes slideInFromRight {
@@ -40,591 +49,546 @@ const PageContainer = styled.div`
     }
   }
 
-  /* Tablet and larger */
   @media (min-width: 769px) {
-    max-width: clamp(380px, 40vw, 480px);
+    max-width: 450px;
     right: auto;
-    box-shadow: -4px 0 20px var(--shadow-color, rgba(0, 0, 0, 0.1));
-  }
-
-  /* Small mobile devices */
-  @media (max-width: 360px) {
-    font-size: 14px;
-  }
-`;
-
-const TopBar = styled.div`
-  background: transparent;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: clamp(12px, 3vw, 16px);
-  padding-top: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + clamp(12px, 3vw, 16px));
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  z-index: 10;
-  gap: clamp(8px, 2vw, 12px);
-
-  @media (max-width: 360px) {
-    padding: 10px;
-    padding-top: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 10px);
-  }
-`;
-
-const TopBarButton = styled.button`
-  background: rgba(0, 0, 0, 0.3);
-  border: none;
-  color: white;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: clamp(8px, 2vw, 10px);
-  border-radius: 50%;
-  transition: all 0.2s ease;
-  min-width: clamp(40px, 10vw, 48px);
-  min-height: clamp(40px, 10vw, 48px);
-  -webkit-tap-highlight-color: transparent;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-
-  /* Dark theme adjustments */
-  :root[data-theme="dark"] & {
-    background: rgba(255, 255, 255, 0.15);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  }
-
-  svg {
-    width: clamp(20px, 5vw, 24px);
-    height: clamp(20px, 5vw, 24px);
-  }
-
-  &:active {
-    background: rgba(0, 0, 0, 0.5);
-    transform: scale(0.95);
-
-    :root[data-theme="dark"] & {
-      background: rgba(255, 255, 255, 0.25);
-    }
-  }
-
-  @media (max-width: 360px) {
-    min-width: 36px;
-    min-height: 36px;
-    padding: 6px;
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
   }
 `;
 
 const Header = styled.div`
-  position: relative;
-  background: var(--primary-gradient, linear-gradient(135deg, #0084ff 0%, #00a651 100%));
-  padding: clamp(16px, 4vw, 20px);
-  padding-top: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + clamp(60px, 15vw, 70px));
-  padding-bottom: clamp(50px, 12.5vw, 60px);
-  text-align: center;
-  color: white;
-  flex-shrink: 0;
-  transition: background 0.3s ease;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-primary, rgba(255, 255, 255, 0.95));
+  backdrop-filter: blur(10px);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  height: 48px;
+  transition: background-color 0.3s ease;
+`;
 
-  @media (max-width: 360px) {
-    padding: 12px;
-    padding-top: calc(var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) + 56px);
-    padding-bottom: 45px;
+const HeaderButton = styled.button`
+  background: none;
+  border: none;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-primary, #333);
+  transition: color 0.3s ease;
+  
+  &:active {
+    opacity: 0.7;
+  }
+
+  svg {
+    width: 24px;
+    height: 24px;
   }
 `;
 
-const ProfileInfo = styled.div`
-  position: relative;
-  background: var(--bg-primary, white);
-  margin: 0 clamp(8px, 2vw, 12px);
-  margin-top: clamp(-48px, -12vw, -52px);
-  padding: clamp(56px, 14vw, 66px) clamp(16px, 4vw, 20px) clamp(16px, 4vw, 20px);
-  border-radius: clamp(12px, 3vw, 16px);
-  box-shadow: 0 1px 3px var(--shadow-color, rgba(0, 0, 0, 0.1));
-  text-align: center;
-  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+const HeaderTitle = styled.div`
+  flex: 1;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-primary, #333);
+  text-align: left;
+  padding-left: 8px;
+  transition: color 0.3s ease;
+`;
 
-  @media (max-width: 360px) {
-    margin: 0 8px;
-    margin-top: -42px;
-    padding: 48px 12px 12px;
-    border-radius: 10px;
+const ScrollContent = styled.div`
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: 48px;
+  -webkit-overflow-scrolling: touch;
+  background: var(--bg-primary, #000000);
+  transition: background-color 0.3s ease;
+`;
+
+const BannerContainer = styled.div`
+  position: relative;
+  width: 100%;
+  height: 200px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #ff9800 0%, #4caf50 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const BannerImage = styled.div`
+  width: 100%;
+  height: 100%;
+  background: ${props => props.background || 'transparent'};
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+`;
+
+const ProfileSection = styled.div`
+  position: relative;
+  padding: 60px 0 16px 0;
+  background: var(--bg-primary, white);
+  margin-bottom: 8px;
+  transition: background-color 0.3s ease;
+  
+  @media (max-width: 480px) {
+    padding: 50px 0 14px 0;
   }
 `;
 
 const AvatarContainer = styled.div`
   position: absolute;
-  top: clamp(-43px, -10.75vw, -50px);
-  left: 50%;
-  transform: translateX(-50%);
+  width: 100px;
+  height: 100px;
+  top: -50px;
+  left: 16px;
   z-index: 10;
-
-  @media (max-width: 360px) {
-    top: -38px;
+  display: flex;
+  
+  @media (max-width: 480px) {
+    width: 90px;
+    height: 90px;
+    top: -45px;
+    left: 12px;
   }
 `;
 
 const Avatar = styled.div`
-  width: clamp(90px, 22.5vw, 110px);
-  height: clamp(90px, 22.5vw, 110px);
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
-  background: ${props => props.color || '#0084ff'};
+  background: ${props => props.gradient || 'linear-gradient(135deg, #ff9800 0%, #ff5722 100%)'};
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(2rem, 5vw, 2.5rem);
+  font-size: 36px;
+  font-weight: 600;
   color: white;
-  font-weight: 700;
-  border: 4px solid white;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border: 4px solid var(--bg-primary, white);
   overflow: hidden;
-  transition: transform 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: border-color 0.3s ease;
 
   img {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
-
-  @media (max-width: 360px) {
-    width: 80px;
-    height: 80px;
-    font-size: 1.75rem;
-    border-width: 3px;
-  }
 `;
 
-const UserName = styled.h2`
-  margin: 0 0 clamp(6px, 1.5vw, 8px) 0;
-  font-size: clamp(1.15rem, 5vw, 1.4rem);
+const UserName = styled.div`
+  text-align: left;
+  font-size: 24px;
   font-weight: 700;
-  word-break: break-word;
-  color: var(--text-primary, #000);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(6px, 1.5vw, 8px);
+  color: var(--text-primary, #1a1a1a);
+  margin: 0 0 16px 16px;
   transition: color 0.3s ease;
 
-  @media (max-width: 360px) {
-    font-size: 1.05rem;
-    margin-bottom: 4px;
+  @media (max-width: 480px) {
+    font-size: 22px;
+    margin: 0 0 14px 12px;
   }
 `;
 
-const VerifiedBadge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: clamp(18px, 4.5vw, 22px);
-  height: clamp(18px, 4.5vw, 22px);
-  background: #0084ff;
-  border-radius: 50%;
-  color: white;
-  font-size: clamp(10px, 2.5vw, 12px);
-  flex-shrink: 0;
-
-  @media (max-width: 360px) {
-    width: 16px;
-    height: 16px;
-    font-size: 9px;
-  }
-`;
-
-const UserDescription = styled.p`
-  margin: 0;
-  font-size: clamp(0.8rem, 3.5vw, 0.9rem);
-  color: var(--text-secondary, #666);
-  font-weight: 400;
-  word-break: break-word;
-  line-height: 1.4;
-  transition: color 0.3s ease;
-
-  @media (max-width: 360px) {
-    font-size: 0.75rem;
-  }
-`;
-
-const ActionButtonsRow = styled.div`
+const ActionButtons = styled.div`
   display: flex;
-  gap: clamp(8px, 2vw, 12px);
-  padding-top: clamp(16px, 4vw, 20px);
-  margin-top: clamp(16px, 4vw, 20px);
-  border-top: 1px solid var(--border-color, #e8e8e8);
-  justify-content: space-evenly;
-  transition: border-color 0.3s ease;
-
-  @media (max-width: 360px) {
-    padding-top: 14px;
-    margin-top: 14px;
+  gap: 8px;
+  margin: 0 16px 16px 16px;
+  
+  @media (max-width: 480px) {
+    margin: 0 12px 12px 12px;
     gap: 6px;
   }
 `;
 
-const ActionButton = styled.button`
+const FollowButton = styled.button`
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: clamp(8px, 2vw, 10px);
-  padding: clamp(12px, 3vw, 16px) clamp(8px, 2vw, 12px);
-  background: transparent;
-  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 2px solid #ff9800;
+  background: ${props => props.following ? 'transparent' : '#ff9800'};
+  color: ${props => props.following ? '#ff9800' : 'white'};
+  font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
-  color: var(--text-primary, #333);
-  -webkit-tap-highlight-color: transparent;
-  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s;
 
   &:active {
-    transform: scale(0.95);
-    opacity: 0.7;
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    
-    &:active {
-      transform: none;
-    }
-  }
-
-  @media (max-width: 360px) {
-    padding: 10px 6px;
-    gap: 6px;
-  }
-`;
-
-const ActionIconWrapper = styled.div`
-  width: clamp(44px, 11vw, 52px);
-  height: clamp(44px, 11vw, 52px);
-  border-radius: 50%;
-  background: #e7f3ff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #0084ff;
-  font-size: clamp(20px, 5vw, 24px);
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-
-  :root[data-theme="dark"] & {
-    background: rgba(0, 132, 255, 0.15);
-    color: #4da3ff;
+    transform: scale(0.98);
+    opacity: 0.9;
   }
 
   svg {
-    width: clamp(20px, 5vw, 24px);
-    height: clamp(20px, 5vw, 24px);
-  }
-
-  @media (max-width: 360px) {
-    width: 40px;
-    height: 40px;
-    font-size: 18px;
+    width: 16px;
+    height: 16px;
   }
 `;
 
-const ActionLabel = styled.span`
-  font-size: clamp(0.75rem, 3vw, 0.85rem);
-  font-weight: 500;
-  color: var(--text-primary, #333);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-  transition: color 0.3s ease;
-  text-align: center;
+const IconButton = styled.button`
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--bg-secondary, #f0f2f5);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s, background-color 0.3s ease;
+  color: var(--text-primary, #1c1e21);
 
-  @media (max-width: 360px) {
-    font-size: 0.7rem;
+  &:active {
+    background: var(--bg-tertiary, #e4e6eb);
+    transform: scale(0.95);
+  }
+
+  svg {
+    width: 22px;
+    height: 22px;
   }
 `;
 
-const Content = styled.div`
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  background: #f0f2f5;
-  overscroll-behavior: contain;
-  transition: background-color 0.3s ease;
-  padding-top: 0;
-  padding-bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + clamp(16px, 4vw, 20px));
-
-  :root[data-theme="dark"] & {
-    background: #1a1a1c;
-  }
-
-  &::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: var(--text-tertiary, #c1c1c1);
-    border-radius: 2px;
-  }
-
-  @media (max-width: 360px) {
-    padding-bottom: calc(var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) + 12px);
-  }
-`;
-
-const Section = styled.div`
-  padding: clamp(14px, 3.5vw, 18px);
+const InfoSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px;
   background: var(--bg-primary, white);
-  margin: clamp(8px, 2vw, 12px) clamp(8px, 2vw, 12px);
-  border-radius: clamp(12px, 3vw, 16px);
-  box-shadow: 0 1px 3px var(--shadow-color, rgba(0, 0, 0, 0.1));
-  transition: background-color 0.3s ease, box-shadow 0.3s ease;
-
-  @media (max-width: 360px) {
-    padding: 12px;
-    margin: 6px 8px;
-    border-radius: 10px;
-  }
+  margin-bottom: 8px;
+  transition: background-color 0.3s ease;
 `;
 
-const HighlightSection = styled(Section)`
-  background: ${props => props.highlight ? '#fffbf0' : 'var(--bg-primary, white)'};
+const InfoItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary, #666);
+  font-size: 14px;
+  padding: 8px 0;
+  cursor: ${props => props.clickable ? 'pointer' : 'default'};
+  transition: background 0.2s, color 0.3s ease;
+  border-radius: 8px;
   
-  :root[data-theme="dark"] & {
-    background: ${props => props.highlight ? 'rgba(255, 193, 7, 0.1)' : 'var(--bg-primary, #1c1c1e)'};
+  &:active {
+    background: ${props => props.clickable ? 'var(--bg-secondary, #f5f6f8)' : 'transparent'};
   }
 `;
 
-const SectionHeader = styled.div`
+const InfoIcon = styled.div`
+  width: 32px;
+  height: 32px;
+  background: var(--bg-secondary, #f5f6f8);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary, #666);
+  flex-shrink: 0;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+`;
+
+const InfoText = styled.div`
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-secondary, #666);
+  transition: color 0.3s ease;
+`;
+
+const PostInputSection = styled.div`
+  background: var(--bg-primary, white);
+  margin: 0 0 8px 0;
+  padding: 16px;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.3s ease;
+`;
+
+const PostInput = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-secondary, #f5f6f8);
+  border-radius: 24px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: background 0.2s, background-color 0.3s ease;
+
+  &:active {
+    background: var(--bg-tertiary, #e8e8e8);
+  }
+`;
+
+const SmallAvatar = styled.div`
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: ${props => props.gradient || 'linear-gradient(135deg, #ff9800 0%, #ff5722 100%)'};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 2px solid var(--bg-primary, white);
+  transition: border-color 0.3s ease;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+`;
+
+const PostInputText = styled.div`
+  color: var(--text-tertiary, #999);
+  font-size: 15px;
+  flex: 1;
+  transition: color 0.3s ease;
+`;
+
+const MediaButton = styled.button`
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--bg-primary, white);
+  border: 1.5px solid #4caf50;
+  color: #4caf50;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s, background-color 0.3s ease;
+
+  &:active {
+    background: var(--bg-secondary, #f0f8f4);
+    opacity: 0.9;
+  }
+  
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+`;
+
+const EmptyPosts = styled.div`
+  text-align: center;
+  padding: 40px 20px;
+  background: var(--bg-primary, white);
+  margin-bottom: 8px;
+  color: var(--text-tertiary, #999);
+  transition: background-color 0.3s ease, color 0.3s ease;
+`;
+
+const EmptyPostsTitle = styled.div`
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text-secondary, #666);
+  transition: color 0.3s ease;
+`;
+
+const EmptyPostsMessage = styled.div`
+  font-size: 14px;
+  margin-bottom: 20px;
+  color: var(--text-tertiary, #999);
+  transition: color 0.3s ease;
+`;
+
+const BackToTopButton = styled.button`
+  background: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:active {
+    opacity: 0.85;
+    transform: scale(0.98);
+  }
+`;
+
+const PopupOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+  
+  @media (prefers-color-scheme: dark) {
+    background: rgba(0, 0, 0, 0.75);
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+`;
+
+const PopupMenu = styled.div`
+  background: var(--bg-primary, white);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 320px;
+  overflow: hidden;
+  animation: slideUp 0.2s ease-out;
+  transition: background-color 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  
+  @keyframes slideUp {
+    from {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+`;
+
+const PopupHeader = styled.div`
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color, #f0f0f0);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: clamp(10px, 2.5vw, 12px);
-
-  @media (max-width: 360px) {
-    margin-bottom: 8px;
-  }
+  background: var(--bg-secondary, #fafafa);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 `;
 
-const SectionTitle = styled.h3`
-  margin: 0;
-  font-size: clamp(0.85rem, 3.5vw, 0.95rem);
-  font-weight: 600;
-  color: var(--text-primary, #333);
+const PopupHeaderText = styled.div`
+  font-size: 14px;
+  color: var(--text-secondary, #666);
+  font-weight: 500;
   transition: color 0.3s ease;
-
-  @media (max-width: 360px) {
-    font-size: 0.8rem;
-  }
 `;
 
-const SeeMoreButton = styled.button`
+const PopupCloseButton = styled.button`
   background: none;
   border: none;
-  color: var(--primary-color, #0084ff);
-  font-size: clamp(0.7rem, 2.75vw, 0.8rem);
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  -webkit-tap-highlight-color: transparent;
-  transition: color 0.3s ease, opacity 0.2s ease;
-
-  svg {
-    width: clamp(12px, 3vw, 14px);
-    height: clamp(12px, 3vw, 14px);
-  }
-
-  &:active {
-    opacity: 0.7;
-  }
-
-  @media (max-width: 360px) {
-    font-size: 0.65rem;
-    padding: 3px 6px;
-  }
-`;
-
-const PhotoGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: clamp(4px, 1vw, 6px);
-
-  @media (max-width: 360px) {
-    gap: 3px;
-  }
-`;
-
-const PhotoItem = styled.div`
-  aspect-ratio: 1;
-  background: var(--bg-tertiary, #e0e0e0);
-  border-radius: clamp(6px, 1.5vw, 8px);
-  overflow: hidden;
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transition: transform 0.2s ease;
-  }
-
-  &:active {
-    transform: scale(0.95);
-
-    img {
-      transform: scale(1.05);
-    }
-  }
-`;
-
-const FriendSuggestionsList = styled.div`
-  display: flex;
-  gap: clamp(10px, 2.5vw, 12px);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
-  scroll-snap-type: x proximity;
-  padding-bottom: clamp(8px, 2vw, 10px);
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
-
-  @media (max-width: 360px) {
-    gap: 8px;
-    padding-bottom: 6px;
-  }
-`;
-
-const FriendSuggestionCard = styled.div`
-  flex-shrink: 0;
-  width: clamp(110px, 28vw, 130px);
-  background: var(--bg-primary, white);
-  border: 1px solid var(--border-color, #e0e0e0);
-  border-radius: clamp(10px, 2.5vw, 12px);
-  padding: clamp(10px, 2.5vw, 12px);
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  scroll-snap-align: start;
-
-  &:active {
-    transform: scale(0.97);
-    background: var(--bg-secondary, #f8f9fa);
-  }
-
-  @media (max-width: 360px) {
-    width: 100px;
-    padding: 8px;
-  }
-`;
-
-const FriendAvatar = styled.div`
-  width: clamp(56px, 14vw, 66px);
-  height: clamp(56px, 14vw, 66px);
-  border-radius: 50%;
-  background: ${props => props.color || '#0084ff'};
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(1.15rem, 3.75vw, 1.35rem);
-  color: white;
-  font-weight: 600;
-  margin: 0 auto clamp(8px, 2vw, 10px);
-  overflow: hidden;
-  border: 2px solid var(--bg-primary, white);
-  box-shadow: 0 2px 8px var(--shadow-color, rgba(0, 0, 0, 0.1));
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  @media (max-width: 360px) {
-    width: 50px;
-    height: 50px;
-    font-size: 1rem;
-    margin-bottom: 6px;
-    border-width: 1.5px;
-  }
-`;
-
-const FriendName = styled.div`
-  font-size: clamp(0.7rem, 2.75vw, 0.8rem);
-  font-weight: 600;
-  color: var(--text-primary, #333);
-  margin-bottom: clamp(6px, 1.5vw, 8px);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: color 0.3s ease;
-
-  @media (max-width: 360px) {
-    font-size: 0.65rem;
-    margin-bottom: 5px;
-  }
-`;
-
-const AddFriendButton = styled.button`
-  width: 100%;
-  padding: clamp(6px, 1.5vw, 8px);
-  background: #e3f2fd;
-  color: var(--primary-color, #0084ff);
-  border: none;
-  border-radius: clamp(5px, 1.25vw, 6px);
-  font-size: clamp(0.65rem, 2.25vw, 0.7rem);
-  font-weight: 600;
   cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition: all 0.2s ease;
-
+  color: var(--text-tertiary, #999);
+  transition: color 0.2s;
+  
   &:active {
-    background: #bbdefb;
-    transform: scale(0.98);
+    color: var(--text-primary, #333);
   }
-
-  @media (max-width: 360px) {
-    font-size: 0.6rem;
-    padding: 5px;
+  
+  svg {
+    width: 20px;
+    height: 20px;
   }
 `;
 
-const EmptyState = styled.div`
-  text-align: center;
-  padding: clamp(20px, 5vw, 30px);
-  color: var(--text-tertiary, #999);
-  font-size: clamp(0.75rem, 3.25vw, 0.85rem);
-  transition: color 0.3s ease;
-
-  @media (max-width: 360px) {
-    padding: 16px;
-    font-size: 0.7rem;
+const PopupMenuItem = styled.div`
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: ${props => props.disabled ? 'default' : 'pointer'};
+  transition: background 0.2s, background-color 0.3s ease, opacity 0.2s;
+  border-bottom: 1px solid var(--border-color, #f0f0f0);
+  opacity: ${props => props.disabled ? 0.6 : 1};
+  
+  &:last-child {
+    border-bottom: none;
   }
+  
+  &:active {
+    background: ${props => props.disabled ? 'transparent' : 'var(--bg-secondary, #f5f5f5)'};
+  }
+  
+  ${props => props.danger && !props.disabled && `
+    color: #ef4444;
+    
+    svg {
+      color: #ef4444;
+    }
+  `}
+`;
+
+const PopupMenuIcon = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  svg {
+    width: 20px;
+    height: 20px;
+    color: var(--text-primary, #333);
+    transition: color 0.3s ease;
+  }
+`;
+
+const PopupMenuText = styled.div`
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  color: ${props => props.color || 'var(--text-primary, #333)'};
+  transition: color 0.3s ease;
 `;
 
 const MobileUserProfile = ({ user, onClose, onStartChat, currentUserId }) => {
   const [friendshipStatus, setFriendshipStatus] = useState('none');
   const [isFollowing, setIsFollowing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
-  const [mutualFriends, setMutualFriends] = useState([]);
+  const [showPopupMenu, setShowPopupMenu] = useState(false);
 
-  // Generate avatar color based on name
   const getAvatarColor = (name) => {
-    if (!name) return '#0084ff';
+    if (!name) return 'linear-gradient(135deg, #ff9800 0%, #ff5722 100%)';
     const colors = [
-      '#0084ff', '#ff6b6b', '#4834d4', '#00d2d3',
-      '#ff9ff3', '#feca57', '#48dbfb', '#ff6348',
-      '#5f27cd', '#00d2d3'
+      'linear-gradient(135deg, #ff9800 0%, #ff5722 100%)',
+      'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)',
+      'linear-gradient(135deg, #4caf50 0%, #2e7d32 100%)',
+      'linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%)',
+      'linear-gradient(135deg, #e91e63 0%, #c2185b 100%)',
     ];
     const index = name.charCodeAt(0) % colors.length;
     return colors[index];
@@ -633,7 +597,6 @@ const MobileUserProfile = ({ user, onClose, onStartChat, currentUserId }) => {
   useEffect(() => {
     if (user?.id && currentUserId && user.id !== currentUserId) {
       checkFriendshipStatus();
-      fetchMutualFriends();
     }
   }, [user?.id, currentUserId]);
 
@@ -649,102 +612,20 @@ const MobileUserProfile = ({ user, onClose, onStartChat, currentUserId }) => {
     }
   };
 
-  const fetchMutualFriends = async () => {
-    try {
-      const response = await friendsAPI.getMutualFriends(user.id);
-      if (response.data && Array.isArray(response.data)) {
-        setMutualFriends(response.data.slice(0, 5)); // Limit to 5 suggestions
-      }
-    } catch (error) {
-      console.error('Error fetching mutual friends:', error);
-      setMutualFriends([]);
-    }
-  };
-
-  const handleSendFriendRequest = async () => {
-    if (actionLoading) return;
-    setActionLoading(true);
-    try {
-      const friendId = typeof user.id === 'string' ? parseInt(user.id) : user.id;
-      await friendsAPI.sendFriendRequest(friendId);
-      await checkFriendshipStatus();
-    } catch (error) {
-      console.error('Error sending friend request:', error);
-      alert('Lỗi khi gửi yêu cầu kết bạn');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleAcceptFriendRequest = async () => {
-    if (actionLoading) return;
-    setActionLoading(true);
-    try {
-      const friendId = typeof user.id === 'string' ? parseInt(user.id) : user.id;
-      await friendsAPI.acceptFriendRequest(friendId);
-      await checkFriendshipStatus();
-    } catch (error) {
-      console.error('Error accepting friend request:', error);
-      alert('Lỗi khi chấp nhận yêu cầu');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleRejectFriendRequest = async () => {
-    if (actionLoading) return;
-    setActionLoading(true);
-    try {
-      const friendId = typeof user.id === 'string' ? parseInt(user.id) : user.id;
-      await friendsAPI.rejectFriendRequest(friendId);
-      await checkFriendshipStatus();
-    } catch (error) {
-      console.error('Error rejecting friend request:', error);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUnfriend = async () => {
-    if (actionLoading) return;
-    if (!window.confirm(`Bạn có chắc muốn hủy kết bạn với ${user.full_name || user.username}?`)) {
-      return;
-    }
-    setActionLoading(true);
-    try {
-      const friendId = typeof user.id === 'string' ? parseInt(user.id) : user.id;
-      await friendsAPI.unfriend(friendId);
-      await checkFriendshipStatus();
-    } catch (error) {
-      console.error('Error unfriending:', error);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleFollow = async () => {
+  const handleFollowToggle = async () => {
     if (actionLoading) return;
     setActionLoading(true);
     try {
       const followingId = typeof user.id === 'string' ? parseInt(user.id) : user.id;
+      if (isFollowing) {
+        await friendsAPI.unfollow(followingId);
+        setIsFollowing(false);
+      } else {
       await friendsAPI.follow(followingId);
       setIsFollowing(true);
+      }
     } catch (error) {
-      console.error('Error following user:', error);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUnfollow = async () => {
-    if (actionLoading) return;
-    setActionLoading(true);
-    try {
-      const followingId = typeof user.id === 'string' ? parseInt(user.id) : user.id;
-      await friendsAPI.unfollow(followingId);
-      setIsFollowing(false);
-    } catch (error) {
-      console.error('Error unfollowing user:', error);
+      console.error('Error toggling follow:', error);
     } finally {
       setActionLoading(false);
     }
@@ -757,31 +638,117 @@ const MobileUserProfile = ({ user, onClose, onStartChat, currentUserId }) => {
     onClose();
   };
 
-  const handlePhoneCall = () => {
-    alert(`Tính năng gọi điện sẽ được phát triển trong tương lai`);
+  const handleOpenPopupMenu = () => {
+    setShowPopupMenu(true);
+  };
+
+  const handleClosePopupMenu = () => {
+    setShowPopupMenu(false);
+  };
+
+  const handleAddFriend = async () => {
+    if (actionLoading) return;
+    setActionLoading(true);
+    try {
+      await friendsAPI.sendFriendRequest(user.id);
+      setFriendshipStatus('pending_sent');
+      handleClosePopupMenu();
+    } catch (error) {
+      console.error('Error sending friend request:', error);
+      alert('Có lỗi xảy ra khi gửi lời mời kết bạn');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUnfriend = async () => {
+    const name = user.full_name || user.fullName || user.username || 'Người dùng';
+    if (window.confirm(`Bạn có chắc chắn muốn hủy kết bạn với ${name}?`)) {
+      if (actionLoading) return;
+      setActionLoading(true);
+      try {
+        await friendsAPI.unfriend(user.id);
+        setFriendshipStatus('none');
+        alert('Đã hủy kết bạn');
+        handleClosePopupMenu();
+      } catch (error) {
+        console.error('Error unfriending user:', error);
+        alert('Có lỗi xảy ra khi hủy kết bạn');
+      } finally {
+        setActionLoading(false);
+      }
+    } else {
+      handleClosePopupMenu();
+    }
+  };
+
+  const handleReport = () => {
+    handleClosePopupMenu();
+    alert('Tính năng báo cáo đang được phát triển');
+  };
+
+  const handleBlock = async () => {
+    if (window.confirm(`Bạn có chắc chắn muốn chặn người dùng này?`)) {
+      if (actionLoading) return;
+      setActionLoading(true);
+      try {
+        await friendsAPI.block(user.id);
+        alert('Đã chặn người dùng');
+        handleClosePopupMenu();
+        onClose();
+      } catch (error) {
+        console.error('Error blocking user:', error);
+        alert('Có lỗi xảy ra khi chặn người dùng');
+      } finally {
+        setActionLoading(false);
+      }
+    } else {
+      handleClosePopupMenu();
+    }
   };
 
   if (!user) return null;
 
   const userName = user.full_name || user.fullName || user.username || 'Người dùng';
-  const userDescription = user.bio || 'Bạn chưa có mối quan hệ với người này';
+  const avatarColor = getAvatarColor(userName);
+
+  const formatTime = () => {
+    const now = new Date();
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const isMorning = hours < 12;
+    const period = isMorning ? 'sáng' : now.getHours() < 18 ? 'chiều' : 'tối';
+    return `${hours}:${minutes} ${period} Giờ địa phương`;
+  };
 
   return (
     <PageContainer>
       <Header>
-        <TopBar>
-          <TopBarButton onClick={onClose}>
-            <FiArrowLeft size={24} />
-          </TopBarButton>
-          <TopBarButton onClick={() => console.log('Show more options')}>
-            <FiMoreHorizontal size={24} />
-          </TopBarButton>
-        </TopBar>
+        <HeaderButton onClick={onClose}>
+          <FiArrowLeft />
+        </HeaderButton>
+        <HeaderTitle>{userName}</HeaderTitle>
+        <HeaderButton>
+          <FiSearch />
+        </HeaderButton>
       </Header>
 
-      <ProfileInfo>
+      <ScrollContent>
+        <BannerContainer>
+          <BannerImage 
+            background={user.cover_url ? `url(${getAvatarURL(user.cover_url)})` : ''}
+            style={{
+              backgroundImage: user.cover_url ? `url(${getAvatarURL(user.cover_url)})` : 'none',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat'
+            }}
+          />
+        </BannerContainer>
+
+        <ProfileSection>
         <AvatarContainer>
-          <Avatar color={getAvatarColor(userName)}>
+            <Avatar gradient={avatarColor}>
             {user.avatar_url ? (
               <img src={getAvatarURL(user.avatar_url)} alt={userName} />
             ) : (
@@ -790,190 +757,163 @@ const MobileUserProfile = ({ user, onClose, onStartChat, currentUserId }) => {
           </Avatar>
         </AvatarContainer>
         
-        <UserName>
-          {userName}
-          <VerifiedBadge>✓</VerifiedBadge>
-        </UserName>
-        <UserDescription>{userDescription}</UserDescription>
+          <UserName>{userName}</UserName>
 
-        <ActionButtonsRow>
-          {/* Friends - Show 3 buttons */}
-          {friendshipStatus === 'friend' && (
-            <>
-              <ActionButton onClick={handleStartChat}>
-                <ActionIconWrapper>
+          <ActionButtons>
+            {currentUserId && user.id !== currentUserId && (
+              <>
+                <FollowButton 
+                  following={isFollowing}
+                  onClick={handleFollowToggle}
+                    disabled={actionLoading}
+                  >
+                  <FiCheck />
+                  {isFollowing ? 'Đang theo dõi' : 'Theo dõi'}
+                </FollowButton>
+                <IconButton onClick={handleStartChat}>
                   <FiMessageCircle />
-                </ActionIconWrapper>
-                <ActionLabel>Nhắn tin</ActionLabel>
-              </ActionButton>
-              
-              <ActionButton onClick={handlePhoneCall}>
-                <ActionIconWrapper>
-                  <FiPhone />
-                </ActionIconWrapper>
-                <ActionLabel>Gọi điện</ActionLabel>
-              </ActionButton>
-              
-              <ActionButton onClick={handleUnfriend} disabled={actionLoading}>
-                <ActionIconWrapper>
-                  <FiUserCheck />
-                </ActionIconWrapper>
-                <ActionLabel>Bạn bè</ActionLabel>
-              </ActionButton>
-            </>
+                </IconButton>
+                <IconButton onClick={handleOpenPopupMenu}>
+                  <FiMoreHorizontal />
+                </IconButton>
+              </>
+            )}
+          </ActionButtons>
+        </ProfileSection>
+
+        <InfoSection>
+          <InfoItem clickable>
+            <InfoIcon>
+              <FiImage />
+            </InfoIcon>
+            <InfoText>File phương tiện</InfoText>
+          </InfoItem>
+          
+          <InfoItem>
+            <InfoIcon>
+              <FiClock />
+            </InfoIcon>
+            <InfoText>{formatTime()}</InfoText>
+          </InfoItem>
+          
+          {user.department && (
+            <InfoItem>
+              <InfoIcon>
+                <FiBriefcase />
+              </InfoIcon>
+              <InfoText>{user.department}</InfoText>
+            </InfoItem>
           )}
+          
+          {user.email && (
+            <InfoItem>
+              <InfoIcon>
+                <FiMail />
+              </InfoIcon>
+              <InfoText>{user.email}</InfoText>
+            </InfoItem>
+          )}
+          
+          <InfoItem>
+            <InfoIcon>
+              <FiUsers />
+            </InfoIcon>
+            <InfoText>Có {user.followers?.length || 0} người theo dõi</InfoText>
+          </InfoItem>
+          
+          <InfoItem>
+            <InfoIcon>
+              <FiGitBranch />
+            </InfoIcon>
+            <InfoText>Sơ đồ tổ chức</InfoText>
+          </InfoItem>
+        </InfoSection>
 
-          {/* Not Friends - Show 3 buttons */}
-          {friendshipStatus === 'none' && (
-            <>
-              <ActionButton onClick={handleStartChat}>
-                <ActionIconWrapper>
-                  <FiMessageCircle />
-                </ActionIconWrapper>
-                <ActionLabel>Nhắn tin</ActionLabel>
-              </ActionButton>
-              
-              <ActionButton onClick={handlePhoneCall}>
-                <ActionIconWrapper>
-                  <FiPhone />
-                </ActionIconWrapper>
-                <ActionLabel>Gọi điện</ActionLabel>
-              </ActionButton>
-              
-              <ActionButton 
-                onClick={handleSendFriendRequest}
-                disabled={actionLoading}
-              >
-                <ActionIconWrapper>
+        {currentUserId && user.id === currentUserId && (
+          <PostInputSection>
+            <PostInput>
+              <SmallAvatar gradient={avatarColor}>
+                {user.avatar_url ? (
+                  <img src={getAvatarURL(user.avatar_url)} alt={userName} />
+                ) : (
+                  getInitials(userName)
+                )}
+              </SmallAvatar>
+              <PostInputText>Bạn đang nghĩ gì?</PostInputText>
+            </PostInput>
+            <MediaButton>
+              <FiImage />
+              <span>Hình ảnh / Video</span>
+            </MediaButton>
+          </PostInputSection>
+        )}
+
+        <EmptyPosts>
+          <EmptyPostsTitle>Đã xem hết các bài viết</EmptyPostsTitle>
+          <EmptyPostsMessage>
+            Bạn đã xem hết các bài viết hiện có. Tải lại trang để khám phá thêm!
+          </EmptyPostsMessage>
+          <BackToTopButton onClick={() => onClose()}>
+            Quay lại
+          </BackToTopButton>
+        </EmptyPosts>
+      </ScrollContent>
+
+      {/* Popup Menu */}
+      {showPopupMenu && currentUserId && user.id !== currentUserId && (
+        <PopupOverlay onClick={handleClosePopupMenu}>
+          <PopupMenu onClick={(e) => e.stopPropagation()}>
+            <PopupHeader>
+              <PopupHeaderText>Tùy chọn</PopupHeaderText>
+              <PopupCloseButton onClick={handleClosePopupMenu}>
+                <FiX />
+              </PopupCloseButton>
+            </PopupHeader>
+
+            {/* Hiển thị trạng thái kết bạn */}
+            {friendshipStatus === 'friend' ? (
+              <PopupMenuItem onClick={handleUnfriend} disabled={actionLoading}>
+                <PopupMenuIcon>
+                  <FiUser />
+                </PopupMenuIcon>
+                <PopupMenuText>
+                  {actionLoading ? 'Đang xử lý...' : 'Bạn bè'}
+                </PopupMenuText>
+              </PopupMenuItem>
+            ) : friendshipStatus === 'none' ? (
+              <PopupMenuItem onClick={handleAddFriend} disabled={actionLoading}>
+                <PopupMenuIcon>
                   <FiUserPlus />
-                </ActionIconWrapper>
-                <ActionLabel>
-                  {actionLoading ? 'Đang gửi...' : 'Kết bạn'}
-                </ActionLabel>
-              </ActionButton>
-            </>
-          )}
+                </PopupMenuIcon>
+                <PopupMenuText>{actionLoading ? 'Đang xử lý...' : 'Gửi yêu cầu kết bạn'}</PopupMenuText>
+              </PopupMenuItem>
+            ) : friendshipStatus === 'pending_sent' ? (
+              <PopupMenuItem disabled>
+                <PopupMenuIcon>
+                  <FiUserPlus />
+                </PopupMenuIcon>
+                <PopupMenuText>Đã gửi lời mời</PopupMenuText>
+              </PopupMenuItem>
+            ) : null}
 
-          {/* Pending Sent - Show 3 buttons */}
-          {friendshipStatus === 'pending_sent' && (
-            <>
-              <ActionButton onClick={handleStartChat}>
-                <ActionIconWrapper>
-                  <FiMessageCircle />
-                </ActionIconWrapper>
-                <ActionLabel>Nhắn tin</ActionLabel>
-              </ActionButton>
-              
-              <ActionButton onClick={handlePhoneCall}>
-                <ActionIconWrapper>
-                  <FiPhone />
-                </ActionIconWrapper>
-                <ActionLabel>Gọi điện</ActionLabel>
-              </ActionButton>
-              
-              <ActionButton disabled>
-                <ActionIconWrapper>
-                  <FiCheck />
-                </ActionIconWrapper>
-                <ActionLabel>Đã gửi lời mời</ActionLabel>
-              </ActionButton>
-            </>
-          )}
+            <PopupMenuItem onClick={handleReport}>
+              <PopupMenuIcon>
+                <FiAlertTriangle />
+              </PopupMenuIcon>
+              <PopupMenuText>Báo cáo</PopupMenuText>
+            </PopupMenuItem>
 
-          {/* Pending Received - Show 3 buttons */}
-          {friendshipStatus === 'pending_received' && (
-            <>
-              <ActionButton onClick={handleStartChat}>
-                <ActionIconWrapper>
-                  <FiMessageCircle />
-                </ActionIconWrapper>
-                <ActionLabel>Nhắn tin</ActionLabel>
-              </ActionButton>
-              
-              <ActionButton 
-                onClick={handleAcceptFriendRequest}
-                disabled={actionLoading}
-              >
-                <ActionIconWrapper>
-                  <FiCheck />
-                </ActionIconWrapper>
-                <ActionLabel>
-                  {actionLoading ? 'Đang xử lý...' : 'Chấp nhận'}
-                </ActionLabel>
-              </ActionButton>
-              
-              <ActionButton 
-                onClick={handleRejectFriendRequest}
-                disabled={actionLoading}
-              >
-                <ActionIconWrapper>
-                  <FiUserMinus />
-                </ActionIconWrapper>
-                <ActionLabel>Từ chối</ActionLabel>
-              </ActionButton>
-            </>
-          )}
-        </ActionButtonsRow>
-      </ProfileInfo>
-
-        <Content>
-          {/* Photo Section */}
-          <Section>
-            <SectionHeader>
-              <SectionTitle>Trang trí ảnh đại diện</SectionTitle>
-              <SeeMoreButton>
-                Xem thêm
-                <FiChevronRight size={14} />
-              </SeeMoreButton>
-            </SectionHeader>
-            {user.photos && user.photos.length > 0 ? (
-              <PhotoGrid>
-                {user.photos.slice(0, 6).map((photo, index) => (
-                  <PhotoItem key={index}>
-                    <img src={photo} alt={`Photo ${index + 1}`} />
-                  </PhotoItem>
-                ))}
-              </PhotoGrid>
-            ) : (
-              <EmptyState>Chưa có ảnh nào</EmptyState>
-            )}
-          </Section>
-
-          {/* Mutual Friends / Friend Suggestions */}
-          <HighlightSection highlight>
-            <SectionHeader>
-              <SectionTitle>🤝 Kết bạn mẫu, làm quen nhau</SectionTitle>
-              <SeeMoreButton>
-                Xem thêm
-                <FiChevronRight size={14} />
-              </SeeMoreButton>
-            </SectionHeader>
-            {mutualFriends.length > 0 ? (
-              <FriendSuggestionsList>
-                {mutualFriends.map((friend) => (
-                  <FriendSuggestionCard key={friend.id}>
-                    <FriendAvatar color={getAvatarColor(friend.full_name || friend.username)}>
-                      {friend.avatar_url ? (
-                        <img src={getAvatarURL(friend.avatar_url)} alt={friend.full_name} />
-                      ) : (
-                        getInitials(friend.full_name || friend.username)
-                      )}
-                    </FriendAvatar>
-                    <FriendName>{friend.full_name || friend.username}</FriendName>
-                    <AddFriendButton onClick={() => console.log('Add friend:', friend.id)}>
-                      Kết bạn
-                    </AddFriendButton>
-                  </FriendSuggestionCard>
-                ))}
-              </FriendSuggestionsList>
-            ) : (
-              <EmptyState>Không có gợi ý bạn bè</EmptyState>
-            )}
-          </HighlightSection>
-        </Content>
+            <PopupMenuItem onClick={handleBlock} danger>
+              <PopupMenuIcon>
+                <FiUserX />
+              </PopupMenuIcon>
+              <PopupMenuText color="#ef4444">Chặn</PopupMenuText>
+            </PopupMenuItem>
+          </PopupMenu>
+        </PopupOverlay>
+      )}
     </PageContainer>
   );
 };
 
 export default MobileUserProfile;
-

@@ -21,7 +21,7 @@ const NETWORK_CONFIG = {
   mode: 'manual', // 'auto' = tự động lấy IP WiFi, 'manual' = dùng IP bên dưới
   
   // IP thủ công (chỉ dùng khi mode = 'manual')
-  manualIP: '192.168.0.102',
+  manualIP: '192.168.0.104',
   
   // Port
   clientPort: 3000,

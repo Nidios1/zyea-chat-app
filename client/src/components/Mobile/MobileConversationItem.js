@@ -408,7 +408,11 @@ const MobileConversationItem = ({
             <img 
               src={getAvatarURL(conversation.avatar_url)} 
               alt={name} 
-              style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+              style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+              onError={(e) => {
+                // Hide image on error to show initials instead
+                e.target.style.display = 'none';
+              }}
             />
           ) : (
             getInitials(name)
@@ -420,7 +424,9 @@ const MobileConversationItem = ({
             {name}
           </ConversationName>
           <LastMessage hasUnread={hasUnread}>
-            {conversation.last_message || conversation.lastMessage || 'Chưa có tin nhắn'}
+            {(conversation.last_message || conversation.lastMessage) ? 
+              (conversation.last_message || conversation.lastMessage) : 
+              'Chưa có tin nhắn'}
           </LastMessage>
         </ConversationInfo>
         <TimeStamp>

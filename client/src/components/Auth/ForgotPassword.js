@@ -63,7 +63,7 @@ const Logo = styled.div`
     width: 60px;
     height: 60px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 50%;
+    border-radius: 13px;
     display: flex;
     align-items: center;
     justify-content: center;

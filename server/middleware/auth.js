@@ -15,7 +15,7 @@ const authenticateToken = async (req, res, next) => {
     // Get user from database
     const connection = getConnection();
     const [users] = await connection.execute(
-      'SELECT id, username, email, full_name, avatar_url, status FROM users WHERE id = ?',
+      'SELECT id, username, email, full_name, avatar_url, cover_url, status FROM users WHERE id = ?',
       [decoded.userId]
     );
 

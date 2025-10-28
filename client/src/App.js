@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { Capacitor } from '@capacitor/core';
-import { SplashScreen as CapacitorSplash } from '@capacitor/splash-screen';
 
 import AuthContext from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -12,6 +10,8 @@ import Login from './components/Auth/Login';
 import MobileLogin from './components/Mobile/MobileLogin';
 import MobileRegister from './components/Mobile/MobileRegister';
 import MobileForgotPassword from './components/Mobile/MobileForgotPassword';
+import MobileTerms from './components/Mobile/MobileTerms';
+import MobileSocialTerms from './components/Mobile/MobileSocialTerms';
 import Register from './components/Auth/Register';
 import ForgotPassword from './components/Auth/ForgotPassword';
 import DesktopChat from './components/Desktop/DesktopChat';
@@ -23,7 +23,7 @@ import UpdatePrompt from './components/Common/UpdatePrompt';
 import SuccessToast from './components/Common/SuccessToast';
 import BundleProtectionError from './components/Common/BundleProtectionError';
 // import PerformanceMonitor from './components/Common/PerformanceMonitor';
-import { getToken, removeToken } from './utils/auth';
+import { getToken, removeToken, getTokenAsync } from './utils/auth';
 import { initCopyProtection, preventDevTools } from './utils/copyProtection';
 import { initBundleProtection, startContinuousValidation } from './utils/bundleProtection';
 import { useOfflineSync } from './hooks/useOfflineSync';
@@ -66,8 +66,8 @@ function App() {
       try {
         console.log('[Security] Initializing Bundle Protection...');
         
-        // Only enable bundle protection in production builds
-        if (process.env.NODE_ENV === 'production' && Capacitor.isNativePlatform()) {
+        // Only enable bundle protection in production builds (disabled for web)
+        if (false && process.env.NODE_ENV === 'production') {
           const isValid = await initBundleProtection();
           
           if (!isValid) {
@@ -161,8 +161,8 @@ function App() {
     
     // CRITICAL DEBUG: Log app state
     console.log('🚀 App starting...');
-    console.log('📱 Platform:', Capacitor.getPlatform());
-    console.log('🌐 Is Capacitor:', isCapacitor());
+    console.log('📱 Platform: web');
+    console.log('🌐 Is Capacitor: false');
     console.log('📱 Is Mobile:', isMobile);
     console.log('👤 User:', user);
     console.log('⏳ Loading:', loading);
@@ -182,69 +182,22 @@ function App() {
       }
     }, 3000);
     
-    return () => clearTimeout(safetyTimeout);
-    
     // Thêm class để hiển thị app ngay lập tức (ngăn flash)
     const rootElement = document.getElementById('root');
     if (rootElement) {
       rootElement.classList.add('app-ready');
-      
-      // Add platform-specific classes
-      if (isCapacitor()) {
-        rootElement.classList.add('capacitor-app');
-        if (Capacitor.getPlatform() === 'ios') {
-          rootElement.classList.add('ios-app');
-        } else if (Capacitor.getPlatform() === 'android') {
-          rootElement.classList.add('android-app');
-        }
-        
-        // Hide Capacitor splash screen with smooth transition
-        // Wait a bit to ensure app is ready
-        setTimeout(() => {
-          CapacitorSplash.hide({
-            fadeOutDuration: 300
-          }).catch(err => {
-            console.log('Splash hide error:', err);
-            // Force hide nếu có lỗi
-            setTimeout(() => {
-              CapacitorSplash.hide().catch(() => {});
-            }, 100);
-          });
-        }, 100);
-      } else {
-        rootElement.classList.add('web-app');
-      }
+      rootElement.classList.add('web-app');
     }
     
     // Khởi tạo copy protection
-    const cleanupCopyProtection = initCopyProtection();
+    initCopyProtection();
     preventDevTools();
 
-    // Register service worker ONLY for PWA (not for Capacitor native apps)
-    if ('serviceWorker' in navigator && !isCapacitor()) {
-      console.log('📱 Running as PWA - Registering service worker...');
-      navigator.serviceWorker.register('/sw.js')
-        .then((registration) => {
-          console.log('SW registered: ', registration);
-          
-          // Check for updates
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                // New content is available, prompt user to refresh
-                if (window.confirm('Có phiên bản mới của ứng dụng. Bạn có muốn cập nhật?')) {
-                  window.location.reload();
-                }
-              }
-            });
-          });
-        })
-        .catch((registrationError) => {
-          console.log('SW registration failed: ', registrationError);
-        });
-    } else if (isCapacitor()) {
-      console.log('📱 Running as Capacitor native app - Skipping service worker');
+    // Service Worker registration is handled in index.js to avoid duplicates
+    if (isCapacitor()) {
+      console.log('📱 Running as Capacitor native app - Service worker registration skipped');
+    } else {
+      console.log('📱 Running as PWA - Service worker registration handled in index.js');
     }
 
     // Request notification permission
@@ -285,8 +238,40 @@ function App() {
       console.log('📱 Capacitor app - PWA install prompt disabled');
     }
 
-    const token = getToken();
-    console.log('🔍 Token check:', token ? 'Token exists' : 'No token found');
+    let token = getToken();
+    console.log('🔍 Token check (localStorage):', token ? 'Token exists' : 'No token found');
+    if (token) {
+      console.log('🔍 Token length:', token.length, 'characters');
+      console.log('🔍 Token preview:', token.substring(0, 30) + '...');
+    }
+    
+    // DEBUG: Check all localStorage keys to see if token is being cleared
+    const allKeys = Object.keys(localStorage);
+    console.log('🔍 All localStorage keys:', allKeys);
+    console.log('🔍 localStorage size:', localStorage.length, 'items');
+    allKeys.forEach(key => {
+      console.log(`🔍 localStorage['${key}']:`, localStorage.getItem(key)?.substring(0, 50));
+    });
+    
+    // CRITICAL FOR iOS: If no token in localStorage, try to restore from IndexedDB
+    if (!token) {
+      console.log('⚠️ No token in localStorage, trying to restore from IndexedDB...');
+      
+      // Try async restore
+      getTokenAsync().then(restoredToken => {
+        if (restoredToken) {
+          console.log('✅ Token restored from IndexedDB! Reloading...');
+          window.location.reload();
+        } else {
+          console.log('❌ No token in any storage, showing login screen');
+          // Let the app continue to show login screen
+        }
+      });
+    }
+    
+    // DEBUG: Log user state
+    console.log('👤 Current user state:', user);
+    console.log('🔍 Will verify token?', token && !user);
     
     // CHỈ verify token khi app khởi động lần đầu, KHÔNG verify khi đang login
     if (token && !user) {
@@ -307,14 +292,19 @@ function App() {
         },
         signal: controller.signal
       })
-      .then(res => {
+      .then(async (res) => {
         clearTimeout(timeoutId);
         console.log('📡 API Response status:', res.status);
         
         if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
+          // CRITICAL: Save status before throwing error
+          const errorData = {
+            status: res.status,
+            statusText: res.statusText
+          };
+          throw errorData;
         }
-        return res.json();
+        return await res.json();
       })
       .then(async (userData) => {
         if (userData && (userData.id || userData.userId)) {
@@ -386,25 +376,44 @@ function App() {
         if (error.name === 'AbortError') {
           console.log('⏰ Request timeout - API server may be unreachable');
           console.log('🌐 Check if API server is running on:', apiUrl);
+          console.log('🔍 Keeping token for now, will retry on next app start');
           // Don't clear token on timeout, just show login screen
           setUser(null);
+        } else if (error.message && error.message.includes('Failed to fetch')) {
+          // Network error - server might be down
+          console.log('🌐 Network error - server may be unreachable');
+          console.log('🔍 Keeping token for now, will retry on next app start');
+          setUser(null);
         } else {
-          console.log('🔄 Token invalid or expired, clearing state');
+          // CRITICAL: Check error status from fetch
+          const status = error.status;
+          console.log('🔄 Error loading user, status:', status);
           console.log('🔍 Error details:', {
+            status: status,
             message: error.message,
             name: error.name,
-            stack: error.stack
+            errorObject: error
           });
           
-          // Clear token và user state
-          removeToken();
+          // TEMPORARY FIX: Don't remove token unless we're 100% sure it's unauthorized
+          // Only remove token if we have a valid error status that indicates auth failure
+          if (status && (status === 401 || status === 403)) {
+            console.log('🔒 Unauthorized (401/403), removing token');
+            removeToken();
+          } else {
+            console.log('⚠️ Non-auth error or unknown error type, keeping token for retry');
+            console.log('⚠️ This might be network error, server down, or CORS issue');
+          }
           setUser(null);
         }
       })
       .finally(() => {
         // Đảm bảo splash screen hiển thị ít nhất 2 giây (mượt mà)
+        // CRITICAL: Có user đăng nhập rồi thì hiển thị splash mỗi khi mở app
         const loadDuration = Date.now() - loadStartTime;
-        const remainingTime = Math.max(0, 2000 - loadDuration);
+        const minSplashTime = 1500; // 
+        // 5 giây cho UX mượt mà
+        const remainingTime = Math.max(0, minSplashTime - loadDuration);
         
         console.log(`⏱️ Loading took ${loadDuration}ms, waiting ${remainingTime}ms more`);
         
@@ -432,7 +441,7 @@ function App() {
         // Nếu không cần download prompt → hiển thị splash screen bình thường
         console.log('⏱️ No token found, showing splash screen for minimum time');
         const elapsed = Date.now() - appStartTime;
-        const minSplashTime = 2000; // 2 giây để hiển thị custom splash screen đẹp
+        const minSplashTime = 1500; // 1.5 giây để hiển thị custom splash screen đẹp
         const remainingTime = Math.max(0, minSplashTime - elapsed);
         
         console.log(`⏱️ Elapsed: ${elapsed}ms, waiting ${remainingTime}ms more for splash`);
@@ -443,6 +452,11 @@ function App() {
         }, remainingTime);
       }
     }
+    
+    // Cleanup function
+    return () => {
+      clearTimeout(safetyTimeout);
+    };
     
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // ← QUAN TRỌNG: Chỉ chạy 1 lần khi mount, không phụ thuộc vào isLoggingIn
@@ -471,23 +485,16 @@ function App() {
   };
 
   const login = (userData, token) => {
-    console.log('🔐 Login called with user:', userData);
-    console.log('🔐 Token received:', token ? 'Token exists' : 'No token');
-    
     // Lưu token vào localStorage
     localStorage.setItem('token', token);
-    console.log('💾 Token saved to localStorage');
     
-    // Verify token was saved
-    const savedToken = localStorage.getItem('token');
-    console.log('✅ Token verification:', savedToken ? 'Token saved successfully' : 'Token save failed');
+    // Lưu user data vào localStorage để persistence
+    localStorage.setItem('user', JSON.stringify(userData));
     
     // Tạo object mới để trigger re-render
     const newUserData = { ...userData };
     setUser(newUserData);
-    console.log('✅ Setting loading to false after login');
     setLoading(false); // Đảm bảo loading screen được tắt
-    console.log('✅ User logged in successfully');
   };
 
   const logout = () => {
@@ -506,18 +513,24 @@ function App() {
   }
 
   if (loading) {
-    // CRITICAL: Show custom splash screen
-    console.log('🔄 Showing custom splash screen...');
-    return (
-      <SplashScreen 
-        isVisible={true}
-        loadingProgress={dataLoadingProgress}
-        onComplete={() => {
-          console.log('✅ Splash screen completed');
-          setLoading(false);
-        }}
-      />
-    );
+    // CRITICAL: Show custom splash screen ONLY on mobile devices
+    if (isMobile) {
+      console.log('🔄 Showing custom splash screen (mobile only)...');
+      return (
+        <SplashScreen 
+          isVisible={true}
+          loadingProgress={dataLoadingProgress}
+          onComplete={() => {
+            console.log('✅ Splash screen completed');
+            setLoading(false);
+          }}
+        />
+      );
+    } else {
+      // PC: Show minimal loading (no splash screen)
+      console.log('💻 PC device - skipping splash screen');
+      return null;
+    }
   }
 
   // Show download prompt on mobile ONLY when not logged in
@@ -562,35 +575,45 @@ function App() {
               {/* Mobile Auth Routes - Tách biệt hoàn toàn cho Mobile */}
               <Route 
                 path="/m/login" 
-                element={!user ? <MobileLogin /> : <Navigate to="/" />} 
+                element={!user ? <MobileLogin /> : <Navigate to="/" replace />} 
               />
               <Route 
                 path="/m/register" 
-                element={!user ? <MobileRegister /> : <Navigate to="/" />} 
+                element={!user ? <MobileRegister /> : <Navigate to="/" replace />} 
               />
               <Route 
                 path="/m/forgot-password" 
-                element={!user ? <MobileForgotPassword /> : <Navigate to="/" />} 
+                element={!user ? <MobileForgotPassword /> : <Navigate to="/" replace />} 
+              />
+              
+              {/* Mobile Terms Routes */}
+              <Route 
+                path="/m/terms" 
+                element={<MobileTerms />} 
+              />
+              <Route 
+                path="/m/social-terms" 
+                element={<MobileSocialTerms />} 
               />
               
               {/* PC Auth Routes - Tách biệt hoàn toàn cho PC */}
               <Route 
                 path="/login" 
-                element={!user ? (isMobile ? <Navigate to="/m/login" /> : <Login />) : <Navigate to="/" />} 
+                element={!user ? (isMobile ? <Navigate to="/m/login" replace /> : <Login />) : <Navigate to="/" replace />} 
               />
               <Route 
                 path="/register" 
-                element={!user ? (isMobile ? <Navigate to="/m/register" /> : <Register />) : <Navigate to="/" />} 
+                element={!user ? (isMobile ? <Navigate to="/m/register" replace /> : <Register />) : <Navigate to="/" replace />} 
               />
               <Route 
                 path="/forgot-password" 
-                element={!user ? (isMobile ? <Navigate to="/m/forgot-password" /> : <ForgotPassword />) : <Navigate to="/" />} 
+                element={!user ? (isMobile ? <Navigate to="/m/forgot-password" replace /> : <ForgotPassword />) : <Navigate to="/" replace />} 
               />
               
               {/* Main Route - Auto detect device */}
               <Route 
                 path="/" 
-                element={user ? (isMobile ? <MobileChat /> : <DesktopChat />) : (isMobile ? <Navigate to="/m/login" /> : <Navigate to="/login" />)} 
+                element={user ? (isMobile ? <MobileChat /> : <DesktopChat />) : (isMobile ? <Navigate to="/m/login" replace /> : <Navigate to="/login" replace />)} 
               />
             </Routes>
             

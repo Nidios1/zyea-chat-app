@@ -33,6 +33,8 @@ const createTables = async () => {
         password VARCHAR(255) NOT NULL,
         full_name VARCHAR(100) NOT NULL,
         avatar VARCHAR(255) DEFAULT NULL,
+        avatar_url VARCHAR(500) DEFAULT NULL,
+        cover_url VARCHAR(500) DEFAULT NULL,
         phone VARCHAR(20) DEFAULT NULL,
         status ENUM('online', 'recently_active', 'away', 'offline') DEFAULT 'offline',
         last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -77,12 +79,28 @@ const createTables = async () => {
         message_type ENUM('text', 'image', 'file') DEFAULT 'text',
         file_url VARCHAR(255) DEFAULT NULL,
         deleted_for_user INT,
+        reactions TEXT DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
         FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (deleted_for_user) REFERENCES users(id) ON DELETE CASCADE
       )
     `);
+    
+    // Add reactions column if it doesn't exist (for existing databases)
+    try {
+      const [columns] = await connection.execute(`
+        SHOW COLUMNS FROM messages LIKE 'reactions'
+      `);
+      if (columns.length === 0) {
+        await connection.execute(`
+          ALTER TABLE messages ADD COLUMN reactions TEXT DEFAULT NULL
+        `);
+      }
+    } catch (e) {
+      // Ignore if column already exists
+      console.log('Could not add reactions column (may already exist):', e.message);
+    }
 
     // Friends table (first definition - will be removed later)
 

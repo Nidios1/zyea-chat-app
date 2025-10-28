@@ -93,7 +93,7 @@ const Logo = styled.div`
     width: 32px;
     height: 32px;
     background: white;
-    border-radius: 8px;
+    border-radius: 7px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -392,6 +392,12 @@ const Chat = () => {
       socket.on('receiveMessage', (data) => {
         console.log('Received new message:', data);
         
+        // Safety check for data and required properties
+        if (!data || !data.senderId) {
+          console.error('Invalid receiveMessage data:', data);
+          return;
+        }
+        
         // Update conversations list with new message
         setConversations(prev => {
           const updated = prev.map(conv => {
@@ -399,9 +405,9 @@ const Chat = () => {
               console.log('Updating conversation:', conv.id, 'with new message');
               return {
                 ...conv,
-                last_message: data.message,
-                last_message_time: data.timestamp,
-                updated_at: data.timestamp
+                last_message: data.message || '',
+                last_message_time: data.timestamp || new Date().toISOString(),
+                updated_at: data.timestamp || new Date().toISOString()
               };
             }
             return conv;
@@ -424,6 +430,12 @@ const Chat = () => {
       socket.on('conversationUpdated', (data) => {
         console.log('Conversation updated event received:', data);
         
+        // Safety check for data and required properties
+        if (!data || !data.conversationId) {
+          console.error('Invalid conversationUpdated data:', data);
+          return;
+        }
+        
         // Update conversations list with new message
         setConversations(prev => {
           const updated = prev.map(conv => {
@@ -431,9 +443,9 @@ const Chat = () => {
               console.log('Updating conversation:', conv.id, 'with new message:', data.lastMessage);
               return {
                 ...conv,
-                last_message: data.lastMessage,
-                last_message_time: data.timestamp,
-                updated_at: data.timestamp
+                last_message: data.lastMessage || '',
+                last_message_time: data.timestamp || new Date().toISOString(),
+                updated_at: data.timestamp || new Date().toISOString()
               };
             }
             return conv;
@@ -448,6 +460,12 @@ const Chat = () => {
       socket.on('userStatusChanged', (data) => {
         console.log('User status changed:', data);
         
+        // Safety check for data and required properties
+        if (!data || !data.userId) {
+          console.error('Invalid userStatusChanged data:', data);
+          return;
+        }
+        
         // Update conversations list with new status
         setConversations(prev => {
           const updated = prev.map(conv => {
@@ -455,8 +473,8 @@ const Chat = () => {
               console.log('Updating user status:', data.userId, 'to', data.status);
               return {
                 ...conv,
-                status: data.status,
-                last_seen: data.lastSeen
+                status: data.status || 'offline',
+                last_seen: data.lastSeen || new Date().toISOString()
               };
             }
             return conv;

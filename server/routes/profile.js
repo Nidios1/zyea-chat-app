@@ -12,6 +12,12 @@ if (!fs.existsSync(avatarsDir)) {
   fs.mkdirSync(avatarsDir, { recursive: true });
 }
 
+// Create uploads/covers directory if it doesn't exist
+const coversDir = path.join(__dirname, '../uploads/covers');
+if (!fs.existsSync(coversDir)) {
+  fs.mkdirSync(coversDir, { recursive: true });
+}
+
 // Configure multer for avatar uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -39,6 +45,25 @@ const upload = multer({
   fileFilter: fileFilter
 });
 
+// Configure multer for cover uploads
+const coverStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, coversDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'cover-' + req.user.id + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const coverUpload = multer({
+  storage: coverStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  },
+  fileFilter: fileFilter
+});
+
 // Get user profile
 router.get('/', authenticateToken, async (req, res) => {
   try {
@@ -46,7 +71,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const db = getConnection();
     
     const [rows] = await db.execute(
-      'SELECT id, username, full_name, avatar_url, email, phone, bio, location, website, status, created_at FROM users WHERE id = ?',
+      'SELECT id, username, full_name, avatar_url, cover_url, email, phone, bio, location, website, status, created_at FROM users WHERE id = ?',
       [userId]
     );
     
@@ -143,7 +168,7 @@ router.put('/', authenticateToken, async (req, res) => {
     
     // Fetch updated user data
     const [updatedUser] = await db.execute(
-      'SELECT id, username, full_name, avatar_url, email, phone, bio, location, website, status, created_at, updated_at FROM users WHERE id = ?',
+      'SELECT id, username, full_name, avatar_url, cover_url, email, phone, bio, location, website, status, created_at, updated_at FROM users WHERE id = ?',
       [userId]
     );
     
@@ -305,6 +330,86 @@ router.post('/avatar', authenticateToken, (req, res, next) => {
     
     res.status(500).json({ 
       message: 'Error uploading avatar',
+      error: error.message 
+    });
+  }
+});
+
+// Upload cover photo with error handling
+router.post('/cover', authenticateToken, (req, res, next) => {
+  coverUpload.single('cover')(req, res, (err) => {
+    if (err) {
+      console.error('❌ Multer error:', err);
+      return res.status(400).json({ 
+        message: err.message || 'Error uploading file',
+        error: err.toString()
+      });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    console.log('📸 Cover photo upload request received');
+    console.log('User ID:', req.user?.id);
+    console.log('File:', req.file);
+    
+    if (!req.file) {
+      console.error('❌ No file provided');
+      return res.status(400).json({ message: 'No cover file provided' });
+    }
+
+    const userId = req.user.id;
+    const db = getConnection();
+    
+    console.log('📋 Getting old cover for user:', userId);
+    // Get old cover to delete it
+    const [users] = await db.execute(
+      'SELECT cover_url FROM users WHERE id = ?',
+      [userId]
+    );
+    
+    const oldCoverUrl = users[0]?.cover_url;
+    console.log('🗑️ Old cover:', oldCoverUrl);
+    
+    // Delete old cover file if exists
+    if (oldCoverUrl) {
+      const oldCoverPath = path.join(__dirname, '..', oldCoverUrl);
+      if (fs.existsSync(oldCoverPath)) {
+        console.log('🗑️ Deleting old cover:', oldCoverPath);
+        fs.unlinkSync(oldCoverPath);
+      }
+    }
+
+    // Generate URL for the uploaded cover
+    const coverUrl = `/uploads/covers/${req.file.filename}`;
+    console.log('💾 New cover URL:', coverUrl);
+    
+    // Update cover URL in database
+    await db.execute(
+      'UPDATE users SET cover_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [coverUrl, userId]
+    );
+    
+    console.log('✅ Cover photo uploaded successfully');
+    res.json({
+      message: 'Cover photo uploaded successfully',
+      cover_url: coverUrl,
+      filename: req.file.filename
+    });
+  } catch (error) {
+    console.error('❌ Error uploading cover photo:', error);
+    
+    // Delete uploaded file if database update failed
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting file:', unlinkError);
+      }
+    }
+    
+    res.status(500).json({ 
+      message: 'Error uploading cover photo',
       error: error.message 
     });
   }

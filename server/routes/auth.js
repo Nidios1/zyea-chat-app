@@ -10,6 +10,7 @@ const router = express.Router();
 // In-memory store for email verification codes (dev/demo)
 // In production, persist to DB or cache and send via an email provider
 const emailVerificationStore = new Map(); // key: email, value: { code, expiresAt }
+const phoneVerificationStore = new Map(); // key: phone, value: { code, expiresAt }
 
 // In-memory store for QR login sessions
 // Structure: { qrToken: { userId: null, status: 'pending'|'confirmed'|'expired', expiresAt: timestamp, token: null } }
@@ -17,11 +18,20 @@ const qrLoginSessions = new Map();
 
 // Email transporter configuration
 const createTransporter = () => {
-  return nodemailer.createTransporter({
-    service: 'gmail', // You can change to other services like 'outlook', 'yahoo', etc.
+  const emailUser = process.env.EMAIL_USER;
+  const emailPass = process.env.EMAIL_PASS;
+  
+  // Only create transporter if credentials are provided
+  if (!emailUser || !emailPass || emailUser === 'your_email@gmail.com' || emailPass === 'your_app_password_here') {
+    console.log('⚠️  Email credentials not configured. Email verification will log to console only.');
+    return null;
+  }
+  
+  return nodemailer.createTransport({
+    service: 'gmail',
     auth: {
-      user: process.env.EMAIL_USER || 'your-email@gmail.com',
-      pass: process.env.EMAIL_PASS || 'your-app-password' // Use App Password for Gmail
+      user: emailUser,
+      pass: emailPass
     }
   });
 };
@@ -154,6 +164,7 @@ router.post('/login', [
         full_name: user.full_name,
         fullName: user.full_name, // Keep both for compatibility
         avatar_url: user.avatar_url,
+        cover_url: user.cover_url,
         phone: user.phone,
         status: 'online'
       }
@@ -275,49 +286,65 @@ router.post('/logout', async (req, res) => {
 
 module.exports = router;
 
-// -- Email Verification (DEV) --
-// Send verification code to email
-router.post('/send-verification', [
-  body('email').isEmail().withMessage('Please provide a valid email')
-], async (req, res) => {
+// -- Email/Phone Verification (DEV) --
+// Send verification code to email or phone
+router.post('/send-verification', async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+    const { email, phone } = req.body;
+    
+    if (!email && !phone) {
+      return res.status(400).json({ message: 'Email or phone is required' });
     }
 
-    const { email } = req.body;
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-    emailVerificationStore.set(email, { code, expiresAt });
 
-    // Send real email with OTP
-    try {
-      const transporter = createTransporter();
-      await transporter.sendMail({
-        from: process.env.EMAIL_USER || 'your-email@gmail.com',
-        to: email,
-        subject: 'Mã xác thực tài khoản Zyea+',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #0a66ff;">Xác thực tài khoản Zyea+</h2>
-            <p>Xin chào,</p>
-            <p>Bạn đang đăng ký tài khoản Zyea+. Vui lòng sử dụng mã xác thực sau:</p>
-            <div style="background: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0;">
-              <h1 style="color: #0a66ff; font-size: 32px; margin: 0; letter-spacing: 5px;">${code}</h1>
-            </div>
-            <p>Mã này có hiệu lực trong 10 phút.</p>
-            <p>Nếu bạn không yêu cầu đăng ký tài khoản này, vui lòng bỏ qua email này.</p>
-            <hr style="margin: 20px 0;">
-            <p style="color: #666; font-size: 12px;">Email này được gửi tự động từ hệ thống Zyea+</p>
-          </div>
-        `
-      });
-      console.log(`Verification email sent to ${email}`);
-    } catch (emailError) {
-      console.error('Email sending failed:', emailError);
-      // Still return success to user, but log the error
-      console.log(`Fallback: Verification code for ${email}: ${code} (expires in 10m)`);
+    // Send to email
+    if (email) {
+      emailVerificationStore.set(email, { code, expiresAt });
+
+      // Send real email with OTP
+      try {
+        const transporter = createTransporter();
+        if (transporter) {
+          await transporter.sendMail({
+            from: process.env.EMAIL_USER || 'your-email@gmail.com',
+            to: email,
+            subject: 'Mã xác thực tài khoản Zyea+',
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #0a66ff;">Xác thực tài khoản Zyea+</h2>
+                <p>Xin chào,</p>
+                <p>Bạn đang đăng ký tài khoản Zyea+. Vui lòng sử dụng mã xác thực sau:</p>
+                <div style="background: #f5f5f5; padding: 20px; text-align: center; margin: 20px 0;">
+                  <h1 style="color: #0a66ff; font-size: 32px; margin: 0; letter-spacing: 5px;">${code}</h1>
+                </div>
+                <p>Mã này có hiệu lực trong 10 phút.</p>
+                <p>Nếu bạn không yêu cầu đăng ký tài khoản này, vui lòng bỏ qua email này.</p>
+                <hr style="margin: 20px 0;">
+                <p style="color: #666; font-size: 12px;">Email này được gửi tự động từ hệ thống Zyea+</p>
+              </div>
+            `
+          });
+          console.log(`📧 Verification email sent to ${email}`);
+        } else {
+          // Email config not setup, log to console
+          console.log(`📧 Verification code for ${email}: ${code} (expires in 10m)`);
+          console.log(`   --- Copy this code and paste it in the app ---`);
+        }
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+        // Still return success to user, but log the error
+        console.log(`📧 Fallback: Verification code for ${email}: ${code} (expires in 10m)`);
+        console.log(`   --- Copy this code and paste it in the app ---`);
+      }
+    }
+
+    // Send to phone (DEV: log to console)
+    if (phone) {
+      phoneVerificationStore.set(phone, { code, expiresAt });
+      console.log(`📱 Verification code for ${phone}: ${code} (expires in 10m)`);
+      console.log(`--- Copy this code and paste it in the app ---`);
     }
 
     return res.json({ message: 'Verification code sent' });
@@ -327,9 +354,8 @@ router.post('/send-verification', [
   }
 });
 
-// Verify email code
+// Verify code (email or phone)
 router.post('/verify-code', [
-  body('email').isEmail().withMessage('Please provide a valid email'),
   body('code').isLength({ min: 6, max: 6 }).withMessage('Invalid code')
 ], async (req, res) => {
   try {
@@ -338,18 +364,43 @@ router.post('/verify-code', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, code } = req.body;
-    const record = emailVerificationStore.get(email);
-    if (!record) return res.status(400).json({ message: 'Code not found' });
-    if (Date.now() > record.expiresAt) {
-      emailVerificationStore.delete(email);
-      return res.status(400).json({ message: 'Code expired' });
+    const { email, phone, code } = req.body;
+    
+    if (!email && !phone) {
+      return res.status(400).json({ message: 'Email or phone is required' });
     }
-    if (record.code !== code) return res.status(400).json({ message: 'Invalid code' });
 
-    // Mark verified (dev): remove record
-    emailVerificationStore.delete(email);
-    return res.json({ message: 'Email verified' });
+    // Check email verification
+    if (email) {
+      const record = emailVerificationStore.get(email);
+      if (!record) return res.status(400).json({ message: 'Code not found' });
+      if (Date.now() > record.expiresAt) {
+        emailVerificationStore.delete(email);
+        return res.status(400).json({ message: 'Code expired' });
+      }
+      if (record.code !== code) return res.status(400).json({ message: 'Invalid code' });
+
+      // Mark verified (dev): remove record
+      emailVerificationStore.delete(email);
+      return res.json({ message: 'Email verified' });
+    }
+
+    // Check phone verification
+    if (phone) {
+      const record = phoneVerificationStore.get(phone);
+      if (!record) return res.status(400).json({ message: 'Code not found' });
+      if (Date.now() > record.expiresAt) {
+        phoneVerificationStore.delete(phone);
+        return res.status(400).json({ message: 'Code expired' });
+      }
+      if (record.code !== code) return res.status(400).json({ message: 'Invalid code' });
+
+      // Mark verified (dev): remove record
+      phoneVerificationStore.delete(phone);
+      return res.json({ message: 'Phone verified' });
+    }
+
+    return res.status(400).json({ message: 'Email or phone is required' });
   } catch (error) {
     console.error('verify-code error:', error);
     return res.status(500).json({ message: 'Server error' });
@@ -432,7 +483,7 @@ router.post('/qr-login-confirm', async (req, res) => {
     // Get user data
     const connection = getConnection();
     const [users] = await connection.execute(
-      'SELECT id, username, email, full_name, avatar_url, phone, status FROM users WHERE id = ?',
+      'SELECT id, username, email, full_name, avatar_url, cover_url, phone, status FROM users WHERE id = ?',
       [userId]
     );
 
@@ -460,6 +511,7 @@ router.post('/qr-login-confirm', async (req, res) => {
       full_name: user.full_name,
       fullName: user.full_name,
       avatar_url: user.avatar_url,
+      cover_url: user.cover_url,
       phone: user.phone,
       status: user.status
     };

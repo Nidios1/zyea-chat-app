@@ -301,7 +301,7 @@ const UserSearch = ({ onUserSelect, onClose }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isDarkMode] = useState(false); // You can get this from ThemeContext if needed
-  const [searchType, setSearchType] = useState('all'); // all, email, username
+  const [searchType, setSearchType] = useState('all'); // all, email, phone
   const [friendRequests, setFriendRequests] = useState(new Set());
   const [sendingRequests, setSendingRequests] = useState(new Set());
 
@@ -325,8 +325,8 @@ const UserSearch = ({ onUserSelect, onClose }) => {
       let response;
       if (searchType === 'email') {
         response = await api.get(`/users/search/email?email=${encodeURIComponent(searchTerm)}`);
-      } else if (searchType === 'username') {
-        response = await api.get(`/users/search/username?username=${encodeURIComponent(searchTerm)}`);
+      } else if (searchType === 'phone') {
+        response = await api.get(`/users/search/phone?phone=${encodeURIComponent(searchTerm)}`);
       } else {
         response = await api.get(`/users/search?q=${encodeURIComponent(searchTerm)}`);
       }
@@ -390,16 +390,16 @@ const UserSearch = ({ onUserSelect, onClose }) => {
             Tất cả
           </SearchTypeTab>
           <SearchTypeTab 
+            active={searchType === 'phone'} 
+            onClick={() => setSearchType('phone')}
+          >
+            Số điện thoại
+          </SearchTypeTab>
+          <SearchTypeTab 
             active={searchType === 'email'} 
             onClick={() => setSearchType('email')}
           >
             Email
-          </SearchTypeTab>
-          <SearchTypeTab 
-            active={searchType === 'username'} 
-            onClick={() => setSearchType('username')}
-          >
-            Username
           </SearchTypeTab>
         </SearchTypeTabs>
         
@@ -411,9 +411,9 @@ const UserSearch = ({ onUserSelect, onClose }) => {
           placeholder={
             searchType === 'email' 
               ? "Nhập email để tìm kiếm..." 
-              : searchType === 'username'
-              ? "Nhập username để tìm kiếm..."
-              : "Nhập tên, username hoặc email để tìm kiếm..."
+              : searchType === 'phone'
+              ? "Nhập số điện thoại để tìm kiếm..."
+              : "Nhập tên, số điện thoại hoặc email để tìm kiếm..."
           }
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
@@ -453,8 +453,8 @@ const UserSearch = ({ onUserSelect, onClose }) => {
                   {user.full_name || user.username}
                 </UserName>
                 <UserStatus>
-                  {user.status === 'online' ? 'Đang hoạt động' : 'Không hoạt động'}
-                  {user.email && ` • ${user.email}`}
+                  {user.phone && `Số điện thoại: ${user.phone}`}
+                  {!user.phone && user.email && `Email: ${user.email}`}
                 </UserStatus>
               </UserInfo>
               <ActionButtons>

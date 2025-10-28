@@ -9,7 +9,6 @@ import { initDatabase } from './sqlite';
 // Critical resources to preload
 const criticalResources = [
   { url: '/Zyea.jpg', type: 'image' },
-  { url: '/app.jpg', type: 'image' },
   { url: '/manifest.json', type: 'fetch' }
 ];
 

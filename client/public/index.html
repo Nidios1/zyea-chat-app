@@ -5,27 +5,16 @@
     <link rel="icon" href="%PUBLIC_URL%/favicon.png" type="image/png" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/apple-touch-icon.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="%PUBLIC_URL%/apple-touch-icon.png" />
-    <!-- CRITICAL: Enhanced viewport for iPhone optimization -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, shrink-to-fit=no, interactive-widget=resizes-content" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     
-    <!-- Theme colors -->
-    <meta name="theme-color" content="#0084ff" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#0084ff" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1a1a1c" />
+    <!-- Theme colors - Auto update based on system/user preference -->
+    <meta name="theme-color" content="#ffffff" id="theme-color-default" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" id="theme-color-light" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1c1c1e" id="theme-color-dark" />
     
-    <!-- iOS-specific meta tags -->
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Zyea+" />
-    
-    <!-- Android/Chrome -->
-    <meta name="mobile-web-app-capable" content="yes" />
-    
-    <!-- Disable auto-detection of possible phone numbers -->
-    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
-    
-    <!-- Optimize for iPhone X and newer with notch/Dynamic Island -->
-    <meta name="apple-touch-fullscreen" content="yes" />
+    <!-- iOS Status Bar Style -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" media="(prefers-color-scheme: dark)" content="black-translucent" />
     
     <!-- Prerender/prefetch optimization -->
     <meta http-equiv="x-dns-prefetch-control" content="on" />
@@ -69,64 +58,107 @@
         margin: 0;
         padding: 0;
         overflow-x: hidden;
-        /* Mobile: white background for seamless safe area */
-        background: white;
-        width: 100vw;
+        /* Splash screen gradient background để tránh flash trắng */
+        background: linear-gradient(135deg, #0084ff 0%, #00a651 100%);
+        width: 100%;
         min-height: 100vh;
-        min-height: -webkit-fill-available;
-        /* DISABLE iOS bounce/overscroll */
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        overflow: hidden;
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior: none;
-        touch-action: pan-y;
-        /* NO PADDING - full screen edge to edge */
       }
       
-      /* Chỉ desktop mới có background xám */
+      /* Desktop background */
       @media (min-width: 769px) {
         html, body {
           background-color: #f0f2f5;
-          position: static;
-          overflow: visible;
         }
       }
       
       #root {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
         width: 100%;
-        height: 100%;
-        background: white;
-        overflow: hidden;
+        min-height: 100vh;
+        /* Splash screen gradient background để tránh flash trắng */
+        background: linear-gradient(135deg, #0084ff 0%, #00a651 100%);
       }
     </style>
   </head>
-  <body oncontextmenu="return false" onselectstart="return false" ondragstart="return false" oncopy="return false" onpaste="return false" style="margin:0;padding:0;position:fixed;top:0;left:0;right:0;bottom:0;touch-action:manipulation;overflow:hidden;background:white;">
+  <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     
     <div id="root"></div>
     
-    <!-- Set body and html background based on device -->
+    <!-- Set body and html background based on device and theme -->
     <script>
-      // Immediately set background to prevent flash
       (function() {
-        if (window.innerWidth > 768) {
-          // Desktop: light gray
-          document.documentElement.style.background = '#f0f2f5';
-          document.body.style.background = '#f0f2f5';
-        } else {
-          // Mobile: WHITE to match bottom nav (auto fills safe area)
-          document.documentElement.style.background = '#ffffff';
-          document.body.style.background = '#ffffff';
+        // Get current theme from localStorage or system preference
+        function getCurrentTheme() {
+          const savedTheme = localStorage.getItem('theme');
+          if (savedTheme) {
+            return savedTheme;
+          }
+          // Fallback to system preference
+          return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         }
+
+        // Get theme color based on theme
+        function getThemeColor(theme) {
+          if (theme === 'dark') {
+            return '#1c1c1e'; // Dark mode background
+          }
+          return '#ffffff'; // Light mode background
+        }
+
+        // Update theme-color meta tag
+        function updateThemeColor(theme) {
+          const themeColorMeta = document.querySelector('#theme-color-default');
+          if (themeColorMeta) {
+            themeColorMeta.content = getThemeColor(theme);
+          }
+        }
+
+        // Set initial theme and background
+        const currentTheme = getCurrentTheme();
+        
+        // Set body background based on theme and device
+        function setBackground(theme, isMobile) {
+          if (isMobile) {
+            // Mobile: Use splash screen gradient initially, then switch to theme color after splash
+            const bgGradient = 'linear-gradient(135deg, #0084ff 0%, #00a651 100%)';
+            document.documentElement.style.background = bgGradient;
+            document.body.style.background = bgGradient;
+            
+            // After app loads, switch to theme color
+            setTimeout(() => {
+              const bgColor = theme === 'dark' ? '#1c1c1e' : '#ffffff';
+              document.documentElement.style.background = bgColor;
+              document.body.style.background = bgColor;
+            }, 2000); // Wait for splash screen to finish
+          } else {
+            // Desktop: light gray or dark gray
+            const bgColor = theme === 'dark' ? '#1a1a1c' : '#f0f2f5';
+            document.documentElement.style.background = bgColor;
+            document.body.style.background = bgColor;
+          }
+        }
+
+        const isMobile = window.innerWidth <= 768;
+        setBackground(currentTheme, isMobile);
+        updateThemeColor(currentTheme);
+
+        // Listen for theme changes from localStorage
+        window.addEventListener('storage', function(e) {
+          if (e.key === 'theme') {
+            const newTheme = localStorage.getItem('theme') || 'light';
+            updateThemeColor(newTheme);
+            setBackground(newTheme, isMobile);
+          }
+        });
+
+        // Listen for system preference changes
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+          if (!localStorage.getItem('theme')) {
+            const systemTheme = e.matches ? 'dark' : 'light';
+            updateThemeColor(systemTheme);
+            setBackground(systemTheme, isMobile);
+          }
+        });
       })();
     </script>
   </body>

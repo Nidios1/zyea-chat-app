@@ -1,9 +1,7 @@
 /**
- * Live Update System for Capacitor App
- * Cho phép update code React mà không cần build lại IPA
+ * Live Update System for Web App
+ * Cho phép update code React
  */
-
-import { Capacitor } from '@capacitor/core';
 
 // Version hiện tại của app (tăng mỗi khi có update)
 const BASE_VERSION = '1.1.6'; // Force update - version badge removed

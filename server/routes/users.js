@@ -16,19 +16,20 @@ router.get('/search', async (req, res) => {
 
     const searchTerm = `%${q}%`;
     const [users] = await connection.execute(
-      `SELECT id, username, full_name, email, avatar_url, status, last_seen 
+      `SELECT id, username, full_name, email, phone, avatar_url, status, last_seen 
        FROM users 
-       WHERE (username LIKE ? OR full_name LIKE ? OR email LIKE ?) 
+       WHERE (username LIKE ? OR full_name LIKE ? OR email LIKE ? OR phone LIKE ?) 
        AND id != ? 
        ORDER BY 
          CASE 
            WHEN username LIKE ? THEN 1
            WHEN full_name LIKE ? THEN 2
-           WHEN email LIKE ? THEN 3
-           ELSE 4
+           WHEN phone LIKE ? THEN 3
+           WHEN email LIKE ? THEN 4
+           ELSE 5
          END,
          full_name`,
-      [searchTerm, searchTerm, searchTerm, req.user.id, searchTerm, searchTerm, searchTerm]
+      [searchTerm, searchTerm, searchTerm, searchTerm, req.user.id, searchTerm, searchTerm, searchTerm, searchTerm]
     );
 
     res.json(users);
@@ -49,7 +50,7 @@ router.get('/search/email', async (req, res) => {
     }
 
     const [users] = await connection.execute(
-      `SELECT id, username, full_name, email, avatar_url, status, last_seen 
+      `SELECT id, username, full_name, email, phone, avatar_url, status, last_seen 
        FROM users 
        WHERE email = ? AND id != ?`,
       [email, req.user.id]
@@ -73,7 +74,7 @@ router.get('/search/username', async (req, res) => {
     }
 
     const [users] = await connection.execute(
-      `SELECT id, username, full_name, email, avatar_url, status, last_seen 
+      `SELECT id, username, full_name, email, phone, avatar_url, status, last_seen 
        FROM users 
        WHERE username = ? AND id != ?`,
       [username, req.user.id]
@@ -82,6 +83,49 @@ router.get('/search/username', async (req, res) => {
     res.json(users);
   } catch (error) {
     console.error('Search user by username error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Search user by phone number
+router.get('/search/phone', async (req, res) => {
+  try {
+    const { phone } = req.query;
+    const connection = getConnection();
+
+    if (!phone) {
+      return res.status(400).json({ message: 'Số điện thoại là bắt buộc' });
+    }
+
+    // Normalize phone: remove +, spaces, dashes, and leading zeros
+    const normalizedPhone = phone.replace(/[\+\s\-]/g, '').replace(/^0+/, '');
+    
+    // Try multiple formats:
+    // 1. Exact match
+    // 2. With leading zero
+    // 3. Without + prefix
+    // 4. With + prefix
+    
+    const [users] = await connection.execute(
+      `SELECT id, username, full_name, email, phone, avatar_url, status, last_seen 
+       FROM users 
+       WHERE (phone = ? OR phone = ? OR phone = ? OR phone = ? OR phone LIKE ? OR phone LIKE ?)
+       AND id != ?
+       LIMIT 10`,
+      [
+        phone,                      // Original format
+        phone.replace(/^\+/, '0'),  // +84... -> 0...
+        phone.replace(/^0/, '+84'), // 0... -> +84...
+        normalizedPhone,            // Normalized
+        `%${normalizedPhone}%`,      // Partial match
+        `%${phone}%`,               // Partial match original
+        req.user.id
+      ]
+    );
+
+    res.json(users);
+  } catch (error) {
+    console.error('Search user by phone error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

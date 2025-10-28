@@ -1,36 +1,34 @@
 /**
- * Platform Detection Utilities
- * Detect if app is running as Capacitor native app or PWA
+ * Platform Detection Utilities (Web only)
+ * Detect if app is running as PWA or regular web
  */
-
-import { Capacitor } from '@capacitor/core';
 
 /**
- * Check if running in Capacitor native app
+ * Check if running in web browser
  */
 export const isCapacitor = () => {
-  return Capacitor.isNativePlatform();
+  return false;
 };
 
 /**
  * Check if running on iOS
  */
 export const isIOS = () => {
-  return Capacitor.getPlatform() === 'ios';
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
 };
 
 /**
  * Check if running on Android
  */
 export const isAndroid = () => {
-  return Capacitor.getPlatform() === 'android';
+  return /Android/.test(navigator.userAgent);
 };
 
 /**
- * Check if running in web browser (PWA)
+ * Check if running in web browser (always true)
  */
 export const isWeb = () => {
-  return Capacitor.getPlatform() === 'web';
+  return true;
 };
 
 /**
@@ -64,9 +62,6 @@ export const isMobileDevice = () => {
  * Get platform name
  */
 export const getPlatformName = () => {
-  if (isCapacitor()) {
-    return `Capacitor ${Capacitor.getPlatform()}`;
-  }
   if (isInstalledPWA()) {
     return 'PWA (Installed)';
   }
@@ -78,11 +73,11 @@ export const getPlatformName = () => {
  */
 export const logPlatformInfo = () => {
   console.log('🔍 Platform Detection:');
-  console.log('  - isCapacitor:', isCapacitor());
-  console.log('  - Platform:', Capacitor.getPlatform());
+  console.log('  - isCapacitor: false');
+  console.log('  - Platform: web');
   console.log('  - isIOS:', isIOS());
   console.log('  - isAndroid:', isAndroid());
-  console.log('  - isWeb:', isWeb());
+  console.log('  - isWeb: true');
   console.log('  - isInstalledPWA:', isInstalledPWA());
   console.log('  - isMobileDevice:', isMobileDevice());
   console.log('  - Platform Name:', getPlatformName());
@@ -98,4 +93,3 @@ export default {
   getPlatformName,
   logPlatformInfo
 };
-

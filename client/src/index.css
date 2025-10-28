@@ -28,7 +28,8 @@
     -webkit-overflow-scrolling: touch;
     margin: 0 !important;
     padding: 0 !important;
-    background: transparent;
+    /* Use splash screen gradient để tránh flash trắng */
+    background: linear-gradient(135deg, #0084ff 0%, #00a651 100%);
   }
   
   #root {

@@ -9,6 +9,8 @@ import ChatOptionsMenu from './ChatOptionsMenu';
 import ProfilePage from '../Profile/ProfilePage';
 import VideoCall from './VideoCall';
 import PermissionRequest from './PermissionRequest';
+import ReplyBar from './ReplyBar';
+import EditBar from './EditBar';
 import { chatAPI } from '../../utils/api';
 import useSwipeNavigation from '../../hooks/useSwipeNavigation';
 import useKeyboard from '../../hooks/useKeyboard';
@@ -523,6 +525,8 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
   const [isVideoCall, setIsVideoCall] = useState(true);
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [showPermissionRequest, setShowPermissionRequest] = useState(false);
+  const [replyToMessage, setReplyToMessage] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
   
   // Keyboard handling for Native
   const { isKeyboardVisible, keyboardHeight, hideKeyboard } = useKeyboard();
@@ -678,7 +682,8 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
             username: conversation.username,
             full_name: conversation.full_name,
             avatar_url: conversation.avatar_url,
-            status: 'read' // Mark as read immediately since user is viewing
+            status: 'read', // Mark as read immediately since user is viewing
+            reactions: data.reactions || [] // Add reactions field
           };
           
           // Update messages once with the new message and mark all received messages as read
@@ -708,6 +713,48 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         setMessages(prev => prev.map(msg => 
           msg.id === data.messageId ? { ...msg, status: 'read' } : msg
         ));
+      });
+
+      socket.on('reactionUpdate', (data) => {
+        if (conversation && data.conversationId === conversation.id) {
+          console.log('Reaction updated:', data);
+          setMessages(prev => prev.map(msg => {
+            if (msg.id === data.messageId) {
+              // Ensure reactions is always an array for proper parsing
+              let reactions = data.reactions;
+              if (typeof reactions === 'string') {
+                try {
+                  reactions = JSON.parse(reactions);
+                } catch (e) {
+                  reactions = [];
+                }
+              }
+              return { ...msg, reactions };
+            }
+            return msg;
+          }));
+        }
+      });
+
+      // Listen for message edited
+      socket.on('messageEdited', (data) => {
+        if (conversation && data.conversationId === conversation.id) {
+          console.log('Message edited by other user:', data);
+          setMessages(prev => prev.map(msg => {
+            if (msg.id === data.messageId) {
+              return { ...msg, content: data.content };
+            }
+            return msg;
+          }));
+        }
+      });
+
+      // Listen for message deleted
+      socket.on('messageDeleted', (data) => {
+        if (conversation && data.conversationId === conversation.id) {
+          console.log('Message deleted by other user:', data);
+          setMessages(prev => prev.filter(msg => msg.id !== data.messageId));
+        }
       });
 
       // Listen for user viewing conversation (read receipts)
@@ -773,7 +820,8 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         if (conversation && data.conversationId === conversation.id) {
           console.log('Messages marked as read by other user:', data);
           
-          if (data.messageIds.length === 0) {
+          // Check if messageIds exists and is an array
+          if (!data.messageIds || data.messageIds.length === 0) {
             // All messages marked as read
             setMessages(prev => prev.map(msg => 
               msg.sender_id === currentUser.id ? { ...msg, status: 'read' } : msg
@@ -849,6 +897,9 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         socket.off('userStoppedTyping');
         socket.off('userStatusChanged');
         socket.off('call-offer');
+        socket.off('reactionUpdate');
+        socket.off('messageEdited');
+        socket.off('messageDeleted');
         
         // Clear timeouts on cleanup
         if (viewingTimeoutRef.current) {
@@ -945,10 +996,24 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
     try {
       const data = await chatAPI.getMessages(conversation.id);
       
+      // Parse reactions from database
+      const parseReactions = (reactions) => {
+        if (!reactions) return [];
+        if (typeof reactions === 'string') {
+          try {
+            return JSON.parse(reactions);
+          } catch (e) {
+            return [];
+          }
+        }
+        return reactions;
+      };
+      
       // Process messages once and set them
       const processedMessages = data.map(msg => ({
         ...msg,
-        status: msg.sender_id !== currentUser.id ? 'read' : msg.status
+        status: msg.sender_id !== currentUser.id ? 'read' : msg.status,
+        reactions: parseReactions(msg.reactions)
       }));
       
       setMessages(processedMessages);
@@ -1007,39 +1072,113 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
       clearTimeout(typingTimeoutRef.current);
     }
 
+    // Handle edit message
+    if (editingMessage) {
+      try {
+        console.log('=== EDITING MESSAGE ===');
+        console.log('Full message object:', editingMessage);
+        console.log('Message ID:', editingMessage.id);
+        console.log('Message content:', messageText);
+        console.log('Current user ID:', currentUser.id);
+        
+        if (!editingMessage.id) {
+          alert('Không tìm thấy ID tin nhắn. Vui lòng refresh trang.');
+          return;
+        }
+        
+        // Update message on server
+        const result = await chatAPI.updateMessage(editingMessage.id, messageText);
+        console.log('Server response:', result);
+        
+        // Update message in local state
+        setMessages(prev => prev.map(msg => 
+          msg.id === editingMessage.id 
+            ? { ...msg, content: messageText } 
+            : msg
+        ));
+        
+        // Emit socket event to notify other user
+        if (socket) {
+          socket.emit('messageEdited', {
+            messageId: editingMessage.id,
+            content: messageText,
+            conversationId: conversation.id
+          });
+          console.log('Emitted messageEdited event');
+        }
+        
+        // Clear editing state
+        setEditingMessage(null);
+        setNewMessage('');
+        
+        console.log('Message edited successfully');
+      } catch (error) {
+        console.error('=== ERROR EDITING MESSAGE ===');
+        console.error('Error:', error);
+        console.error('Error response:', error.response);
+        console.error('Error data:', error.response?.data);
+        console.error('Message ID:', editingMessage.id);
+        console.error('Message content:', messageText);
+        
+        // Don't show error alert for 404 - message might not be saved yet
+        // Just log and clear editing state
+        if (error.response?.status === 404) {
+          console.log('Message not found in database (likely not saved yet)');
+          setEditingMessage(null);
+          setNewMessage('');
+        } else {
+          const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+          alert('Không thể chỉnh sửa tin nhắn: ' + errorMessage);
+        }
+      }
+      return;
+    }
+
     try {
+      // Prepare message with reply info if replying
+      const messageToSend = replyToMessage 
+        ? `Re: ${replyToMessage.content}\n\n${messageText}` 
+        : messageText;
+
       // Send message via API
-      await chatAPI.sendMessage(conversation.id, messageText, 'text');
+      const response = await chatAPI.sendMessage(conversation.id, messageToSend, 'text');
+      const realMessageId = response.messageId || Date.now();
 
       // Send message via socket for real-time delivery
       if (socket) {
         socket.emit('sendMessage', {
           receiverId: conversation.other_user_id,
-          message: messageText,
+          message: messageToSend,
           senderId: currentUser.id,
-          conversationId: conversation.id
+          conversationId: conversation.id,
+          replyTo: replyToMessage ? replyToMessage.id : null
         });
         console.log('Sent message via socket:', {
           receiverId: conversation.other_user_id,
-          message: messageText,
+          message: messageToSend,
           senderId: currentUser.id,
-          conversationId: conversation.id
+          conversationId: conversation.id,
+          replyTo: replyToMessage ? replyToMessage.id : null
         });
       }
 
       // Add message to local state immediately
       const newMsg = {
-        id: Date.now(), // Temporary ID
-        content: messageText,
+        id: realMessageId, // Use real ID from server
+        content: messageToSend,
         sender_id: currentUser.id,
         created_at: new Date().toISOString(),
         username: currentUser.username,
         full_name: currentUser.fullName,
         avatar_url: currentUser.avatar_url,
-        status: 'sent' // Initial status
+        status: 'sent', // Initial status
+        reply_to: replyToMessage ? replyToMessage.id : null
       };
 
       setMessages(prev => [...prev, newMsg]);
+      
+      // Clear reply after sending
+      setReplyToMessage(null);
 
       // Auto scroll to bottom when sending new message
       setTimeout(() => {
@@ -1066,6 +1205,123 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
       }
     } catch (error) {
       console.error('Error sending message:', error);
+    }
+  };
+
+  const handleReply = (message) => {
+    // Set the message to reply to
+    setReplyToMessage(message);
+    // Scroll to input and focus
+    setTimeout(() => {
+      const input = document.querySelector('textarea[placeholder*="nhắn"]');
+      if (input) {
+        input.focus();
+      }
+    }, 100);
+  };
+
+  const handleCancelReply = () => {
+    setReplyToMessage(null);
+  };
+
+  const handleEdit = (message) => {
+    console.log('=== HANDLE EDIT ===');
+    console.log('Message object:', message);
+    console.log('Message ID:', message.id);
+    console.log('Message ID type:', typeof message.id);
+    console.log('Message ID number:', Number(message.id));
+    
+    // Set the message to edit
+    setEditingMessage(message);
+    // Pre-fill input with message content
+    setNewMessage(message.content);
+    // Clear any reply
+    setReplyToMessage(null);
+    // Scroll to input and focus
+    setTimeout(() => {
+      const input = document.querySelector('textarea[placeholder*="nhắn"]');
+      if (input) {
+        input.focus();
+      }
+    }, 100);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessage(null);
+    setNewMessage('');
+  };
+
+  const handleDelete = async (message) => {
+    if (!window.confirm('Bạn có chắc muốn xóa tin nhắn này?')) {
+      return;
+    }
+
+    try {
+      console.log('Deleting message:', message.id);
+      
+      // Delete message on server
+      await chatAPI.deleteMessage(message.id);
+      
+      // Remove from local state
+      setMessages(prev => prev.filter(msg => msg.id !== message.id));
+      
+      // Emit socket event to notify other user
+      if (socket) {
+        socket.emit('messageDeleted', {
+          messageId: message.id,
+          conversationId: conversation.id
+        });
+        console.log('Emitted messageDeleted event');
+      }
+      
+      console.log('Message deleted successfully');
+    } catch (error) {
+      console.error('Error deleting message:', error);
+      alert('Không thể xóa tin nhắn: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleForward = (message) => {
+    // TODO: Implement forward to another conversation
+    console.log('Forward message:', message);
+    alert('Tính năng chuyển tiếp sẽ được thêm sau');
+  };
+
+  const handleReaction = async (messageId, reaction) => {
+    try {
+      // Find the message and update its reactions
+      const message = messages.find(m => m.id === messageId);
+      if (!message) return;
+      
+      const currentReactions = message.reactions ? (typeof message.reactions === 'string' ? JSON.parse(message.reactions) : message.reactions) : [];
+      const newReactions = [...currentReactions];
+      const existingIndex = newReactions.indexOf(reaction);
+      
+      if (existingIndex > -1) {
+        newReactions.splice(existingIndex, 1);
+      } else {
+        newReactions.push(reaction);
+      }
+      
+      // Update local state
+      setMessages(prev => prev.map(msg => 
+        msg.id === messageId ? { ...msg, reactions: newReactions } : msg
+      ));
+      
+      // Save to database
+      await chatAPI.updateReactions(messageId, newReactions);
+      
+      // Emit via socket
+      if (socket && conversation) {
+        socket.emit('reactionUpdate', {
+          messageId,
+          reactions: newReactions,
+          conversationId: conversation.id,
+          userId: currentUser.id
+        });
+      }
+    } catch (error) {
+      console.error('Error updating reaction:', error);
     }
   };
 
@@ -1158,7 +1414,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
       formData.append('conversationId', conversation.id);
 
       // Upload image
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://192.168.0.102:5000/api'}/chat/upload-image`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://192.168.0.104:5000/api'}/chat/upload-image`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -1384,6 +1640,11 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
             <MessageList 
               messages={messages} 
               currentUserId={currentUser.id}
+              onReply={handleReply}
+              onForward={handleForward}
+              onReaction={handleReaction}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
             />
             <TypingIndicator 
               typingUsers={typingUsers} 
@@ -1395,6 +1656,20 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
       </MessagesContainer>
 
       <MessageInputContainer keyboardOffset={keyboardHeight}>
+        {replyToMessage && (
+          <ReplyBar
+            replyMessage={replyToMessage}
+            onCancel={handleCancelReply}
+          />
+        )}
+        
+        {editingMessage && (
+          <EditBar
+            editingMessage={editingMessage}
+            onCancel={handleCancelEdit}
+          />
+        )}
+        
         {selectedImage && (
           <ImageUpload
             onImageSelect={handleImageSelect}

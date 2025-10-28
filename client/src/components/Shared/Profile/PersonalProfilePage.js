@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useContext } from 'react';
+import React, { useState, useRef, useEffect, useContext, useMemo, useCallback } from 'react';
 import styled from 'styled-components';
 import { 
   FiUser, 
@@ -29,6 +29,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { getAvatarURL, getUploadedImageURL } from '../../../utils/imageUtils';
 import { getApiBaseUrl } from '../../../utils/platformConfig';
 import { getCurrentVersion } from '../../../utils/liveUpdate';
+import MobileProfileInformation from '../../Mobile/MobileProfileInformation';
 
 const PersonalProfileContainer = styled.div`
   position: fixed;
@@ -41,7 +42,7 @@ const PersonalProfileContainer = styled.div`
   /* Use dynamic viewport height */
   height: calc(var(--vh, 1vh) * 100);
   min-height: 100vh;
-  background: var(--bg-secondary, #f5f5f5);
+  background: var(--bg-primary, #000000);
   z-index: 1000;
   overflow: hidden;
   
@@ -56,10 +57,19 @@ const Header = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
   
   /* Safe area for iPhone notch/Dynamic Island */
   @media (max-width: 768px) {
     padding-top: calc(16px + env(safe-area-inset-top));
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  
+  @media (max-width: 480px) {
+    padding-left: 8px;
+    padding-right: 8px;
+    gap: 8px;
   }
 `;
 
@@ -70,7 +80,12 @@ const HeaderProfile = styled.div`
   align-items: center;
   justify-content: center;
   gap: ${props => props.isScrolled ? '0px' : '8px'};
-  transition: gap 0.25s ease-out;
+  transition: gap 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateZ(0);
+  
+  @media (max-width: 480px) {
+    gap: ${props => props.isScrolled ? '0px' : '6px'};
+  }
 `;
 
 const AvatarWrapper = styled.div`
@@ -78,7 +93,17 @@ const AvatarWrapper = styled.div`
   width: ${props => props.isScrolled ? '0px' : '64px'};
   height: ${props => props.isScrolled ? '0px' : '64px'};
   opacity: ${props => props.isScrolled ? '0' : '1'};
-  transition: width 0.25s ease-out, height 0.25s ease-out, opacity 0.25s ease-out;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
+              height 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
+              opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translateZ(0);
+  will-change: width, height, opacity;
+  backface-visibility: hidden;
+  
+  @media (max-width: 480px) {
+    width: ${props => props.isScrolled ? '0px' : '56px'};
+    height: ${props => props.isScrolled ? '0px' : '56px'};
+  }
 `;
 
 const HeaderAvatar = styled.div`
@@ -153,6 +178,11 @@ const HeaderName = styled.div`
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 200px;
+  
+  @media (max-width: 480px) {
+    font-size: 16px;
+    max-width: 160px;
+  }
 `;
 
 const HeaderUsername = styled.div`
@@ -162,6 +192,11 @@ const HeaderUsername = styled.div`
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 200px;
+  
+  @media (max-width: 480px) {
+    font-size: 12px;
+    max-width: 160px;
+  }
 `;
 
 const BackButton = styled.button`
@@ -198,17 +233,27 @@ const QRButton = styled.button`
 const MenuSection = styled.div`
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--bg-secondary, #f5f5f5);
   padding: 8px 16px 20px;
   -webkit-overflow-scrolling: touch;
   will-change: scroll-position;
   transform: translateZ(0);
   overscroll-behavior: contain;
+  contain: layout style paint;
   
   /* Add extra padding on mobile to prevent BottomNav overlap */
   @media (max-width: 768px) {
     padding-bottom: calc(68px + env(safe-area-inset-bottom, 0));
     /* 68px = BottomNav height + spacing */
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  
+  @media (max-width: 480px) {
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 4px;
   }
 `;
 
@@ -217,6 +262,11 @@ const MenuGroup = styled.div`
   border-radius: 12px;
   margin-bottom: 12px;
   overflow: hidden;
+  
+  @media (max-width: 480px) {
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
 `;
 
 const MenuItem = styled.div`
@@ -226,9 +276,17 @@ const MenuItem = styled.div`
   gap: 12px;
   cursor: pointer;
   background: var(--bg-primary, white);
-  transition: background 0.1s ease-out;
+  transition: background 0.15s ease-out;
   border-bottom: ${props => props.isLast ? 'none' : '1px solid var(--border-color, #f0f0f0)'};
   -webkit-tap-highlight-color: transparent;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: background;
+  
+  @media (max-width: 480px) {
+    padding: 12px 14px;
+    gap: 10px;
+  }
   
   &:active {
     background: var(--bg-secondary, #f8f8f8);
@@ -242,6 +300,12 @@ const MenuIcon = styled.div`
   font-size: 20px;
   color: var(--text-primary, #333);
   width: 24px;
+  flex-shrink: 0;
+  
+  @media (max-width: 480px) {
+    font-size: 18px;
+    width: 20px;
+  }
 `;
 
 const MenuTitle = styled.div`
@@ -249,6 +313,11 @@ const MenuTitle = styled.div`
   font-size: 15px;
   color: var(--text-primary, #000);
   font-weight: 400;
+  min-width: 0;
+  
+  @media (max-width: 480px) {
+    font-size: 14px;
+  }
 `;
 
 const MenuRight = styled.div`
@@ -257,6 +326,12 @@ const MenuRight = styled.div`
   gap: 8px;
   font-size: 14px;
   color: var(--text-tertiary, #999);
+  flex-shrink: 0;
+  
+  @media (max-width: 480px) {
+    font-size: 12px;
+    gap: 6px;
+  }
 `;
 
 const StatusBadge = styled.span`
@@ -353,6 +428,12 @@ const ToggleSwitch = styled.label`
   width: 51px;
   height: 31px;
   flex-shrink: 0;
+  cursor: pointer;
+  
+  @media (max-width: 480px) {
+    width: 48px;
+    height: 28px;
+  }
 `;
 
 const ToggleInput = styled.input`
@@ -377,7 +458,7 @@ const ToggleSlider = styled.span`
   right: 0;
   bottom: 0;
   background-color: #ccc;
-  transition: 0.3s;
+  transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border-radius: 31px;
 
   &:before {
@@ -388,8 +469,16 @@ const ToggleSlider = styled.span`
     left: 2px;
     bottom: 2px;
     background-color: white;
-    transition: 0.3s;
+    transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+  
+  @media (max-width: 480px) {
+    &:before {
+      height: 24px;
+      width: 24px;
+    }
   }
 `;
 
@@ -653,17 +742,42 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
   // Ưu tiên dùng user từ AuthContext, fallback sang prop
   const user = authContext?.user || userProp;
   
+  // Load initial avatar from localStorage to prevent flash
+  const getInitialAvatarUrl = () => {
+    if (userProp?.avatar_url) return userProp.avatar_url;
+    if (authContext?.user?.avatar_url) return authContext.user.avatar_url;
+    try {
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        return parsed.avatar_url || '';
+      }
+    } catch (e) {}
+    return '';
+  };
+  
   const [activityStatus, setActivityStatus] = useState(true);
   const [isScrolled, setIsScrolled] = useState(false);
   const [showActivityStatusPage, setShowActivityStatusPage] = useState(false);
   const [showInterfaceSettings, setShowInterfaceSettings] = useState(false);
   const [showTimeOptions, setShowTimeOptions] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState('');
+  const [showProfileInformation, setShowProfileInformation] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(getInitialAvatarUrl());
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const menuSectionRef = useRef(null);
   const fileInputRef = useRef(null);
+  
+  // Memoize user data to prevent unnecessary re-renders
+  const userData = useMemo(() => ({
+    name: user?.full_name || user?.fullName || user?.username || 'Người dùng',
+    username: user?.username || 'FEC',
+    userId: user?.id
+  }), [user?.full_name, user?.fullName, user?.username, user?.id]);
+  
+  // Memoize initial avatar
+  const initialAvatarUrl = useMemo(() => getInitialAvatarUrl(), [user?.avatar_url]);
 
-  // Set initial avatar URL on mount and when user changes
+  // Update avatar URL when user changes
   useEffect(() => {
     if (user?.avatar_url) {
       // Add cache busting if URL doesn't already have query params
@@ -679,22 +793,29 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
   }, [user?.id, user?.avatar_url]); // Run when user ID or avatar URL changes
 
   useEffect(() => {
+    const menuElement = menuSectionRef.current;
+    if (!menuElement) return;
+    
     let ticking = false;
+    let lastScrollTop = 0;
     
     const handleScroll = () => {
       if (!ticking) {
-        window.requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
           if (menuSectionRef.current) {
             const scrollTop = menuSectionRef.current.scrollTop;
             const shouldScroll = scrollTop > 30;
             
-            // Only update state if it actually changed
-            setIsScrolled(prevState => {
-              if (prevState !== shouldScroll) {
-                return shouldScroll;
-              }
-              return prevState;
-            });
+            // Only update state if it actually changed and scroll direction changed significantly
+            if (Math.abs(scrollTop - lastScrollTop) > 5) {
+              setIsScrolled(prevState => {
+                if (prevState !== shouldScroll) {
+                  return shouldScroll;
+                }
+                return prevState;
+              });
+            }
+            lastScrollTop = scrollTop;
           }
           ticking = false;
         });
@@ -702,34 +823,23 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
       }
     };
 
-    const menuElement = menuSectionRef.current;
-    if (menuElement) {
-      menuElement.addEventListener('scroll', handleScroll, { passive: true });
-    }
-
+    menuElement.addEventListener('scroll', handleScroll, { passive: true });
+    
     return () => {
-      if (menuElement) {
-        menuElement.removeEventListener('scroll', handleScroll);
-      }
+      menuElement.removeEventListener('scroll', handleScroll);
     };
   }, []);
 
   // Notify parent when ActivityStatusPage or InterfaceSettings opens/closes
   useEffect(() => {
     if (onActivityStatusChange) {
-      onActivityStatusChange(showActivityStatusPage || showTimeOptions || showInterfaceSettings);
+      onActivityStatusChange(showActivityStatusPage || showTimeOptions || showInterfaceSettings || showProfileInformation);
     }
-  }, [showActivityStatusPage, showTimeOptions, showInterfaceSettings, onActivityStatusChange]);
+  }, [showActivityStatusPage, showTimeOptions, showInterfaceSettings, showProfileInformation, onActivityStatusChange]);
 
-  const handleAvatarChange = async (event) => {
+  const handleAvatarChange = useCallback(async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
-    console.log('📸 Avatar upload started:', {
-      name: file.name,
-      size: file.size,
-      type: file.type
-    });
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
@@ -752,13 +862,6 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
       // Use platformConfig to get correct API URL
       const API_BASE_URL = getApiBaseUrl();
       const uploadUrl = `${API_BASE_URL}/profile/avatar`;
-      
-      console.log('📤 Uploading to:', uploadUrl);
-      console.log('📱 Platform detection:', {
-        protocol: window.location.protocol,
-        hostname: window.location.hostname,
-        apiUrl: API_BASE_URL
-      });
 
       const response = await fetch(uploadUrl, {
         method: 'POST',
@@ -768,8 +871,6 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
         body: formData
       });
 
-      console.log('📥 Response status:', response.status);
-
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ Upload failed:', errorText);
@@ -777,7 +878,6 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
       }
 
       const data = await response.json();
-      console.log('✅ Upload success:', data);
       
       if (data.avatar_url) {
         // Construct full URL for avatar with cache busting
@@ -795,8 +895,6 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
         // Add cache busting timestamp
         const cacheBuster = `?t=${Date.now()}`;
         const urlWithCache = fullAvatarUrl + cacheBuster;
-        
-        console.log('🖼️ New avatar URL:', urlWithCache);
         
         // Force update avatar URL - this triggers re-render
         setAvatarUrl(urlWithCache);
@@ -839,9 +937,9 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
         fileInputRef.current.value = '';
       }
     }
-  };
+  }, [authContext]);
 
-  const handleActivityStatusToggle = (checked) => {
+  const handleActivityStatusToggle = useCallback((checked) => {
     if (!checked) {
       // Khi tắt, hiển thị bottom sheet với các tùy chọn thời gian
       setShowTimeOptions(true);
@@ -849,19 +947,19 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
       // Khi bật, trực tiếp bật lại
       setActivityStatus(true);
     }
-  };
+  }, []);
 
-  const handleTimeOptionSelect = (option) => {
+  const handleTimeOptionSelect = useCallback((option) => {
     console.log(`Tắt trạng thái hoạt động trong: ${option}`);
     setActivityStatus(false);
     setShowTimeOptions(false);
     // TODO: Implement logic to schedule turning back on after selected time
-  };
+  }, []);
 
-  const handleMenuClick = (menuId) => {
+  const handleMenuClick = useCallback((menuId) => {
     switch (menuId) {
       case 'profile-info':
-        console.log('Hồ sơ thông tin clicked');
+        setShowProfileInformation(true);
         break;
       case 'status-feed':
         console.log('Dòng trạng thái clicked');
@@ -912,9 +1010,10 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
       default:
         console.log(`Menu item ${menuId} clicked`);
     }
-  };
+  }, []);
 
-  const menuGroups = [
+  // Memoize menu groups to prevent recreation on every render
+  const menuGroups = useMemo(() => [
     {
       items: [
         {
@@ -1015,7 +1114,7 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
         },
       ]
     },
-  ];
+  ], [themeMode]);
 
   return (
     <>
@@ -1048,10 +1147,10 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
             </AvatarWrapper>
             <HeaderInfo>
               <HeaderName>
-                {user?.full_name || user?.fullName || user?.username || 'Người dùng'}
+                {userData.name}
               </HeaderName>
               <HeaderUsername>
-                @{user?.username || 'FEC'}
+                @{userData.username}
               </HeaderUsername>
             </HeaderInfo>
           </HeaderProfile>
@@ -1252,6 +1351,17 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
             </SettingsSection>
           </InterfaceSettingsContent>
         </InterfaceSettingsPage>
+      )}
+
+      {showProfileInformation && (
+        <MobileProfileInformation
+          user={user}
+          onBack={() => setShowProfileInformation(false)}
+          onShowEdit={() => {
+            setShowProfileInformation(false);
+            // Could navigate to edit profile page here
+          }}
+        />
       )}
     </>
   );

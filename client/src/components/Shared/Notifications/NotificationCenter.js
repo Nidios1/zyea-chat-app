@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
+import { useTheme } from '../../../contexts/ThemeContext';
 import { 
   FiBell, 
   FiX, 
@@ -21,7 +22,7 @@ const NotificationContainer = styled.div`
   left: 0;
   right: 0;
   bottom: 0;
-  background: #f5f5f5;
+  background: var(--bg-primary);
   z-index: 1000;
   display: flex;
   flex-direction: column;
@@ -33,7 +34,7 @@ const NotificationContainer = styled.div`
 `;
 
 const Header = styled.div`
-  background: #0084ff;
+  background: var(--primary-color, #0084ff);
   color: white;
   padding: 8px 12px;
   display: flex;
@@ -103,11 +104,11 @@ const Content = styled.div`
 
 const Tabs = styled.div`
   display: flex;
-  background: white;
+  background: var(--bg-primary);
   border-radius: 12px;
   padding: 4px;
   margin-bottom: 20px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px var(--shadow-color);
 
   @media (max-width: 768px) {
     margin-bottom: 16px;
@@ -123,8 +124,11 @@ const Tab = styled.button`
   flex: 1;
   padding: 12px 16px;
   border: none;
-  background: ${props => props.active ? '#0084ff' : 'transparent'};
-  color: ${props => props.active ? 'white' : '#666'};
+  background: ${props => props.active ? 'var(--primary-color, #0084ff)' : 'transparent'};
+  color: ${props => {
+    if (props.active) return 'white';
+    return 'var(--text-secondary)';
+  }};
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
@@ -135,7 +139,10 @@ const Tab = styled.button`
   gap: 8px;
 
   &:hover {
-    background: ${props => props.active ? '#0073e6' : '#f0f0f0'};
+    background: ${props => {
+      if (props.active) return 'var(--primary-color, #0084ff)';
+      return 'var(--bg-secondary)';
+    }};
   }
 
   @media (max-width: 768px) {
@@ -152,10 +159,10 @@ const Tab = styled.button`
 `;
 
 const NotificationList = styled.div`
-  background: white;
+  background: var(--bg-primary);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 8px var(--shadow-color);
 
   @media (max-width: 480px) {
     border-radius: 8px;
@@ -166,12 +173,12 @@ const NotificationItem = styled.div`
   display: flex;
   align-items: flex-start;
   padding: 16px 20px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-color);
   transition: background-color 0.2s;
   position: relative;
 
   &:hover {
-    background-color: #f8f9fa;
+    background-color: var(--bg-secondary);
   }
 
   &:last-child {
@@ -179,8 +186,8 @@ const NotificationItem = styled.div`
   }
 
   ${props => !props.read && `
-    background-color: #f0f8ff;
-    border-left: 4px solid #0084ff;
+    background-color: var(--bg-secondary);
+    border-left: 4px solid var(--primary-color, #0084ff);
   `}
 
   @media (max-width: 768px) {
@@ -229,13 +236,13 @@ const NotificationContent = styled.div`
 const NotificationText = styled.p`
   margin: 0 0 4px 0;
   font-size: 14px;
-  color: #333;
+  color: var(--text-primary);
   line-height: 1.4;
 `;
 
 const NotificationTime = styled.span`
   font-size: 12px;
-  color: #666;
+  color: var(--text-secondary);
 `;
 
 const NotificationActions = styled.div`
@@ -260,27 +267,27 @@ const ActionButton = styled.button`
     switch (props.variant) {
       case 'primary':
         return `
-          background: #0084ff;
+          background: var(--primary-color, #0084ff);
           color: white;
-          &:hover { background: #0073e6; }
+          &:hover { opacity: 0.9; }
         `;
       case 'success':
         return `
           background: #28a745;
           color: white;
-          &:hover { background: #218838; }
+          &:hover { opacity: 0.9; }
         `;
       case 'secondary':
         return `
-          background: #6c757d;
-          color: white;
-          &:hover { background: #5a6268; }
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+          &:hover { background: var(--bg-tertiary); }
         `;
       default:
         return `
-          background: #e9ecef;
-          color: #495057;
-          &:hover { background: #dee2e6; }
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+          &:hover { background: var(--bg-secondary); }
         `;
     }
   }}
@@ -289,25 +296,26 @@ const ActionButton = styled.button`
 const MoreButton = styled.button`
   background: none;
   border: none;
-  color: #666;
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px;
   border-radius: 50%;
   transition: background-color 0.2s;
 
   &:hover {
-    background-color: #f0f0f0;
+    background-color: var(--bg-secondary);
   }
 `;
 
 const EmptyState = styled.div`
   text-align: center;
   padding: 40px 20px;
-  color: #666;
+  color: var(--text-secondary);
 
   h3 {
     margin: 0 0 8px 0;
     font-size: 18px;
+    color: var(--text-primary);
   }
 
   p {
@@ -321,7 +329,7 @@ const LoadingState = styled.div`
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
-  color: #666;
+  color: var(--text-secondary);
 `;
 
 const getNotificationIcon = (type) => {
@@ -367,6 +375,7 @@ const formatTimeAgo = (timestamp) => {
 };
 
 const NotificationCenter = ({ onBack }) => {
+  const { isDarkMode } = useTheme();
   const [activeTab, setActiveTab] = useState('all');
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);

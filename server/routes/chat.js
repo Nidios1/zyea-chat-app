@@ -22,18 +22,34 @@ router.get('/conversations', async (req, res) => {
         SELECT conversation_id, content, created_at,
                ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY created_at DESC) as rn
         FROM messages
+        WHERE NOT EXISTS (
+          SELECT 1 FROM message_deletions md 
+          WHERE md.message_id = messages.id AND md.user_id = ?
+        )
       ) m ON c.id = m.conversation_id AND m.rn = 1
       LEFT JOIN (
         SELECT m.conversation_id, COUNT(*) as unread_count
         FROM messages m
         LEFT JOIN message_read_status mrs ON m.id = mrs.message_id AND mrs.user_id = ?
         WHERE m.sender_id != ? AND mrs.read_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM message_deletions md 
+            WHERE md.message_id = m.id AND md.user_id = ?
+          )
         GROUP BY m.conversation_id
       ) unread ON c.id = unread.conversation_id
       WHERE cp1.user_id = ? AND cp2.user_id != ?
         AND (cs.hidden IS NULL OR cs.hidden = FALSE)
       ORDER BY c.updated_at DESC
-    `, [req.user.id, req.user.id, req.user.id, req.user.id, req.user.id]);
+    `, [
+      req.user.id,  // cs.user_id
+      req.user.id,  // md.user_id trong LEFT JOIN subquery
+      req.user.id,  // mrs.user_id trong unread subquery
+      req.user.id,  // m.sender_id != ?
+      req.user.id,  // md.user_id trong unread subquery
+      req.user.id,  // cp1.user_id
+      req.user.id   // cp2.user_id != ?
+    ]);
 
     console.log('Found conversations:', conversations.length);
     console.log('Conversations data:', conversations);
@@ -128,7 +144,7 @@ router.get('/conversations/:id/messages', async (req, res) => {
 
     // Get messages with read status, excluding messages deleted by this user
     const [messages] = await connection.execute(`
-      SELECT m.id, m.content, m.message_type, m.file_url, m.created_at,
+      SELECT m.id, m.content, m.message_type, m.file_url, m.created_at, m.reactions,
              u.id as sender_id, u.username, u.full_name, u.avatar_url,
              CASE 
                WHEN mrs.read_at IS NOT NULL THEN 'read'
@@ -140,11 +156,60 @@ router.get('/conversations/:id/messages', async (req, res) => {
       JOIN users u ON m.sender_id = u.id
       LEFT JOIN message_read_status mrs ON m.id = mrs.message_id AND mrs.user_id = ?
       LEFT JOIN message_deletions md ON m.id = md.message_id AND md.user_id = ?
-      WHERE m.conversation_id = ? AND md.id IS NULL
+      WHERE m.conversation_id = ? 
+        AND md.id IS NULL
       ORDER BY m.created_at DESC
       LIMIT ? OFFSET ?
-    `, [req.user.id, req.user.id, req.user.id, id, parseInt(limit), offset]);
+    `, [
+      req.user.id,       // ?1: sender_id != ? in CASE
+      req.user.id,       // ?2: mrs.user_id in LEFT JOIN
+      req.user.id,       // ?3: md.user_id in LEFT JOIN  
+      id,                // ?4: conversation_id in WHERE
+      parseInt(limit),   // ?5: LIMIT
+      offset             // ?6: OFFSET
+    ]);
 
+    console.log(`📥 Found ${messages.length} messages for conversation ${id} and user ${req.user.id}`);
+    console.log(`📥 Query returned ${messages.length} messages`);
+    
+    // Debug: Log first message details if exists
+    if (messages.length > 0) {
+      console.log('First message:', {
+        id: messages[0].id,
+        content: messages[0].content,
+        sender: messages[0].full_name
+      });
+    }
+    
+    // Debug: Log if no messages
+    if (messages.length === 0) {
+      console.log(`⚠️ NO MESSAGES FOUND for conversation ${id}`);
+      
+      // Check if conversation exists
+      const [convCheck] = await connection.execute(
+        'SELECT id FROM conversations WHERE id = ?',
+        [id]
+      );
+      console.log(`Conversation ${id} exists:`, convCheck.length > 0);
+      
+      // Check if user is participant
+      console.log(`User ${req.user.id} is participant:`, participants.length > 0);
+      
+      // Check total messages in conversation (for any user)
+      const [allMsgs] = await connection.execute(
+        'SELECT COUNT(*) as count FROM messages WHERE conversation_id = ?',
+        [id]
+      );
+      console.log(`Total messages in conversation ${id}:`, allMsgs[0].count);
+      
+      // Check deleted messages for this user
+      const [deletedCount] = await connection.execute(
+        'SELECT COUNT(*) as count FROM message_deletions md JOIN messages m ON md.message_id = m.id WHERE md.user_id = ? AND m.conversation_id = ?',
+        [req.user.id, id]
+      );
+      console.log(`Deleted messages for user ${req.user.id}:`, deletedCount[0].count);
+    }
+    
     res.json(messages.reverse());
   } catch (error) {
     console.error('Get messages error:', error);
@@ -170,10 +235,16 @@ router.post('/conversations/:id/messages', async (req, res) => {
     }
 
     // Insert message
+    console.log('📤 Sending message to conversation:', id);
+    console.log('📤 Content:', content);
+    console.log('📤 Sender:', req.user.id);
+    
     const [result] = await connection.execute(
       'INSERT INTO messages (conversation_id, sender_id, content, message_type, file_url) VALUES (?, ?, ?, ?, ?)',
       [id, req.user.id, content, messageType, fileUrl || null]
     );
+    
+    console.log('📤 Message inserted with ID:', result.insertId);
 
     // Update conversation timestamp
     await connection.execute(
@@ -611,6 +682,137 @@ router.put('/conversations/:id/unread', async (req, res) => {
     }
   } catch (error) {
     console.error('Mark as unread error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Update message reactions
+router.post('/messages/:messageId/reactions', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { reactions } = req.body;
+    const connection = getConnection();
+
+    // Check if user can access this message
+    const [messages] = await connection.execute(`
+      SELECT m.*, cp.conversation_id 
+      FROM messages m
+      JOIN conversation_participants cp ON m.conversation_id = cp.conversation_id
+      WHERE m.id = ? AND cp.user_id = ?
+    `, [messageId, req.user.id]);
+
+    if (messages.length === 0) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Update reactions
+    await connection.execute(
+      'UPDATE messages SET reactions = ? WHERE id = ?',
+      [JSON.stringify(reactions), messageId]
+    );
+
+    res.json({ success: true, reactions });
+  } catch (error) {
+    console.error('Update reactions error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Update message content
+router.put('/messages/:messageId', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { content } = req.body;
+    const connection = getConnection();
+
+    // Convert messageId to integer
+    const messageIdInt = parseInt(messageId);
+    
+    if (isNaN(messageIdInt)) {
+      return res.status(400).json({ message: 'Invalid message ID' });
+    }
+
+    console.log('Update message request:', { messageId: messageIdInt, content, userId: req.user.id });
+
+    // Check if message exists and user is the sender
+    const [messages] = await connection.execute(`
+      SELECT m.* 
+      FROM messages m
+      WHERE m.id = ?
+    `, [messageIdInt]);
+
+    if (messages.length === 0) {
+      console.log('Message not found:', messageIdInt);
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    const message = messages[0];
+
+    // Only allow editing own messages
+    if (message.sender_id !== req.user.id) {
+      console.log('Access denied - not sender:', { messageSenderId: message.sender_id, currentUserId: req.user.id });
+      return res.status(403).json({ message: 'You can only edit your own messages' });
+    }
+
+    // Update message content
+    await connection.execute(
+      'UPDATE messages SET content = ? WHERE id = ?',
+      [content, messageIdInt]
+    );
+
+    console.log('Message updated successfully:', messageIdInt);
+    res.json({ success: true, message: 'Message updated successfully' });
+  } catch (error) {
+    console.error('Update message error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Delete message
+router.delete('/messages/:messageId', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const connection = getConnection();
+
+    // Convert messageId to integer
+    const messageIdInt = parseInt(messageId);
+    
+    if (isNaN(messageIdInt)) {
+      return res.status(400).json({ message: 'Invalid message ID' });
+    }
+
+    console.log('Delete message request:', { messageId: messageIdInt, userId: req.user.id });
+
+    // Check if message exists and user is the sender
+    const [messages] = await connection.execute(`
+      SELECT m.* 
+      FROM messages m
+      WHERE m.id = ?
+    `, [messageIdInt]);
+
+    if (messages.length === 0) {
+      console.log('Message not found:', messageIdInt);
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    const message = messages[0];
+
+    // Only allow deleting own messages
+    if (message.sender_id !== req.user.id) {
+      console.log('Access denied - not sender:', { messageSenderId: message.sender_id, currentUserId: req.user.id });
+      return res.status(403).json({ message: 'You can only delete your own messages' });
+    }
+
+    // Soft delete - add to message_deletions table
+    await connection.execute(
+      'INSERT INTO message_deletions (message_id, user_id) VALUES (?, ?)',
+      [messageIdInt, req.user.id]
+    );
+
+    console.log('Message deleted successfully:', messageIdInt);
+    res.json({ success: true, message: 'Message deleted successfully' });
+  } catch (error) {
+    console.error('Delete message error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

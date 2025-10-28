@@ -98,7 +98,7 @@ const isDifferentDay = (date1, date2) => {
          d1.getFullYear() !== d2.getFullYear();
 };
 
-const MessageList = ({ messages, currentUserId }) => {
+const MessageList = ({ messages, currentUserId, onReply, onForward, onReaction, onEdit, onDelete }) => {
   if (messages.length === 0) {
     return (
       <EmptyState>
@@ -141,6 +141,12 @@ const MessageList = ({ messages, currentUserId }) => {
               isOwn={message.sender_id === currentUserId}
               showAvatar={showAvatar}
               showTime={showTime}
+              onReply={onReply}
+              onForward={onForward}
+              onReaction={onReaction}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              allMessages={messages}
             />
           </React.Fragment>
         );
