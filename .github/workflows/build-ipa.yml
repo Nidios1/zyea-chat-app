@@ -12,42 +12,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Install dependencies
-        run: |
+      - run: |
           cd client
           npm ci --legacy-peer-deps
 
-      - name: Build web app
-        run: |
+      - run: |
           cd client
           npm run build
 
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
+      - uses: maxim-lobanov/setup-xcode@v1
 
-      - name: Create iOS project
-        run: |
+      - run: |
           cd client
           npm install @capacitor/ios
           npx cap add ios
           npx cap sync ios
 
-      - name: Install CocoaPods
-        run: |
+      - run: |
           cd client/ios/App
           pod install
 
-      - nn: Build IPA
-        run: |
+      - run: |
           cd client/ios/App
-          xcodebuild clean archive \
+          xcodebuild archive \
             -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
@@ -60,10 +51,9 @@ jobs:
             -exportPath build/ipa \
             -exportOptionsPlist exportOptions.plist
 
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: ios-ipa
+          name: ipa
           path: client/ios/App/build/ipa/*.ipa
-          retention-days: 30
+          retention-days: 7
 
