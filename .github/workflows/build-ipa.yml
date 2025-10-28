@@ -6,12 +6,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-ipa:
+  build:
     runs-on: macos-latest
     
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -23,7 +22,7 @@ jobs:
           cd client
           npm ci --legacy-peer-deps
 
-      - name: Build React app
+      - nn: Build web app
         run: |
           cd client
           npm run build
@@ -33,7 +32,7 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Create iOS project (Capacitor)
+      - name: Create iOS project
         run: |
           cd client
           npm install @capacitor/ios
@@ -45,7 +44,7 @@ jobs:
           cd client/ios/App
           pod install
 
-      - name: Build and export IPA
+      - nn: Build IPA
         run: |
           cd client/ios/App
           xcodebuild clean archive \
@@ -54,8 +53,7 @@ jobs:
             -configuration Release \
             -archivePath build/App.xcarchive \
             CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_REQUIRED=NO
           
           xcodebuild -exportArchive \
             -archivePath build/App.xcarchive \
