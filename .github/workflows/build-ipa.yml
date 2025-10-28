@@ -31,14 +31,15 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
 
-      - name: Setup CocoaPods
-        uses: cocoapods/setup-cocoapods@v1
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods
 
-      - name: Create iOS project (Capacitor)
+      - name: Create iOS project
         run: |
           cd client
           npm install @capacitor/ios @capacitor/core @capacitor/cli
-          npx cap add ios --yes || echo "iOS already added"
+          npx cap add ios --yes || echo "iOS already exists"
           npx cap sync ios
 
       - name: Install Pods
@@ -63,7 +64,6 @@ jobs:
         run: |
           cd client/ios/App
           
-          # Tạo exportOptions.plist
           cat > exportOptions.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -92,6 +92,4 @@ jobs:
           retention-days: 30
 
       - name: Done
-        run: |
-          echo "✅ IPA build thành công!"
-          echo "📦 Download from Artifacts: unsigned-ipa"
+        run: echo "✅ IPA build thành công!"
