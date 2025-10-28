@@ -37,12 +37,22 @@ jobs:
       - name: Create Capacitor iOS project
         run: |
           cd client
+          
+          # Remove iOS folder if exists
           rm -rf ios
+          
+          # Install Capacitor
           npm install @capacitor/ios @capacitor/core @capacitor/cli
+          
+          # Initialize Capacitor if no config
           if [ ! -f "capacitor.config.json" ]; then
             npx cap init "Zyea+" "com.zyea.chatapp" --web-dir=build
           fi
+          
+          # Add iOS platform
           npx cap add ios
+          
+          # Sync web assets
           npx cap sync ios
 
       - name: Install Pods
@@ -54,8 +64,9 @@ jobs:
         run: |
           cd client/ios/App
           xcodebuild clean
+          
           xcodebuild archive \
-            -workspace App.xcretworkspace \
+            -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
             -archivePath build/App.xcarchive \
@@ -66,6 +77,7 @@ jobs:
       - name: Export IPA
         run: |
           cd client/ios/App
+          
           cat > exportOptions.plist << 'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -80,6 +92,7 @@ jobs:
           </dict>
           </plist>
           EOF
+          
           xcodebuild -exportArchive \
             -archivePath build/App.xcarchive \
             -exportOptionsPlist exportOptions.plist \
@@ -89,9 +102,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-ipa
-          path: client/ios/App/build交流/ipa/*.ipa
-          retention-MS
--days: 7
+          path: client/ios/App/build/ipa/*.ipa
+          retention-days: 7
 
       - name: Success
         run: echo "✅ IPA build thành công!"
+
