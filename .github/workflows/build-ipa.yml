@@ -27,6 +27,11 @@ jobs:
         run: |
           cd client
           npm run build
+          
+      - name: Verify build output
+        run: |
+          ls -la client/build
+          echo "Build completed successfully"
 
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -35,11 +40,21 @@ jobs:
         run: |
           sudo gem install cocoapods
 
-      - name: Create iOS project
+      - name: Check for iOS folder
+        run: |
+          if [ -d "client/ios" ]; then
+            echo "iOS folder exists"
+          else
+            echo "Creating iOS folder"
+            cd client
+            npm install @capacitor/ios @capacitor/core @capacitor/cli
+          fi
+
+      - name: Add iOS platform
         run: |
           cd client
           npm install @capacitor/ios @capacitor/core @capacitor/cli
-          npx cap add ios --yes || echo "iOS already exists"
+          npx cap add ios || echo "iOS already added"
           npx cap sync ios
 
       - name: Install Pods
