@@ -55,7 +55,7 @@ jobs:
           cd client/ios/App
           xcodebuild clean
           xcodebuild archive \
-            -workspace App.xcretworkspace \
+            -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
             -archivePath build/App.xcarchive \
