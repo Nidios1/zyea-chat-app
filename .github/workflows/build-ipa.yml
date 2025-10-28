@@ -22,7 +22,7 @@ jobs:
           cd client
           npm ci --legacy-peer-deps
 
-      - nn: Build web app
+      - name: Build web app
         run: |
           cd client
           npm run build
