@@ -24,8 +24,7 @@
         "simulator": false,
         "autoIncrement": true,
         "buildConfiguration": "Release",
-        "distribution": "internal",
-        "credentialsSource": "local"
+        "distribution": "internal"
       }
     },
     "production": {
