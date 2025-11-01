@@ -58,18 +58,40 @@ jobs:
         run: |
           PROFILE="${{ github.event.inputs.profile || 'unsigned' }}"
           echo "Building IPA with profile: $PROFILE"
+          echo "Platform: iOS"
+          echo "Project ID: fa5c683f-f9c5-459e-85a5-98f1856c4d2d"
           
-          # Start build and capture output
-          BUILD_OUTPUT=$(eas build --platform ios --profile $PROFILE --non-interactive --json)
-          BUILD_ID=$(echo "$BUILD_OUTPUT" | jq -r '.id // empty')
+          # Start build and capture output - handle both JSON and text output
+          echo "Starting EAS build..."
+          BUILD_OUTPUT=$(eas build --platform ios --profile $PROFILE --non-interactive --json 2>&1 || true)
           
+          echo "Raw build output:"
+          echo "$BUILD_OUTPUT"
+          
+          # Try to extract BUILD_ID from JSON output
+          BUILD_ID=$(echo "$BUILD_OUTPUT" | jq -r '.id // empty' 2>/dev/null || echo "")
+          
+          # If no ID in JSON, try to find build URL or ID in text
           if [ -z "$BUILD_ID" ]; then
-            echo "Failed to get build ID from output"
-            echo "Build output: $BUILD_OUTPUT"
+            echo "Trying to extract BUILD_ID from text output..."
+            BUILD_ID=$(echo "$BUILD_OUTPUT" | grep -oP 'Build ID: \K[a-zA-Z0-9-]+' || echo "")
+          fi
+          
+          # If still no ID, try getting latest build
+          if [ -z "$BUILD_ID" ]; then
+            echo "Getting latest build from list..."
+            BUILD_LIST=$(eas build:list --platform ios --profile $PROFILE --limit 1 --json 2>&1 || echo "[]")
+            BUILD_ID=$(echo "$BUILD_LIST" | jq -r '.[0].id // empty' 2>/dev/null || echo "")
+          fi
+          
+          if [ -z "$BUILD_ID" ] || [ "$BUILD_ID" = "null" ]; then
+            echo "❌ Failed to get build ID"
+            echo "Build output was:"
+            echo "$BUILD_OUTPUT"
             exit 1
           fi
           
-          echo "Build ID: $BUILD_ID"
+          echo "✅ Build ID: $BUILD_ID"
           echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
           echo "profile=$PROFILE" >> $GITHUB_OUTPUT
 
@@ -77,39 +99,55 @@ jobs:
         id: wait
         run: |
           BUILD_ID="${{ steps.build.outputs.build_id }}"
-          echo "Waiting for build $BUILD_ID to complete..."
+          echo "⏳ Waiting for build $BUILD_ID to complete..."
           
           # Poll build status with timeout (max 2 hours)
           MAX_WAIT=7200
           ELAPSED=0
-          STATUS="in-progress"
+          STATUS="unknown"
+          ATTEMPTS=0
+          MAX_ATTEMPTS=240  # 2 hours / 30 seconds
           
-          while [ "$STATUS" = "in-progress" ] || [ "$STATUS" = "in-queue" ] || [ "$STATUS" = "new" ]; do
-            if [ $ELAPSED -ge $MAX_WAIT ]; then
-              echo "Build timeout after 2 hours"
-              exit 1
-            fi
+          while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
+            ATTEMPTS=$((ATTEMPTS + 1))
             
-            BUILD_INFO=$(eas build:view $BUILD_ID --json)
-            STATUS=$(echo "$BUILD_INFO" | jq -r '.status // "unknown"')
-            echo "Build status: $STATUS (waited ${ELAPSED}s)"
+            # Get build info
+            BUILD_INFO=$(eas build:view $BUILD_ID --json 2>&1)
+            STATUS=$(echo "$BUILD_INFO" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
             
-            if [ "$STATUS" = "errored" ] || [ "$STATUS" = "canceled" ]; then
-              echo "Build failed with status: $STATUS"
+            echo "📊 Build status (attempt $ATTEMPTS): $STATUS (waited ${ELAPSED}s)"
+            
+            # Check if finished
+            if [ "$STATUS" = "finished" ]; then
+              echo "✅ Build completed successfully!"
               echo "$BUILD_INFO" | jq '.'
+              break
+            fi
+            
+            # Check if failed
+            if [ "$STATUS" = "errored" ] || [ "$STATUS" = "canceled" ]; then
+              echo "❌ Build failed with status: $STATUS"
+              echo "$BUILD_INFO" | jq '.' || echo "$BUILD_INFO"
               exit 1
             fi
             
-            sleep 30
-            ELAPSED=$((ELAPSED + 30))
+            # Continue waiting
+            if [ "$STATUS" = "in-progress" ] || [ "$STATUS" = "in-queue" ] || [ "$STATUS" = "new" ] || [ "$STATUS" = "unknown" ]; then
+              sleep 30
+              ELAPSED=$((ELAPSED + 30))
+            else
+              echo "⚠️  Unknown status: $STATUS, continuing to wait..."
+              sleep 30
+              ELAPSED=$((ELAPSED + 30))
+            fi
           done
           
           if [ "$STATUS" != "finished" ]; then
-            echo "Unexpected build status: $STATUS"
+            echo "❌ Build did not finish. Final status: $STATUS"
+            echo "Build info:"
+            echo "$BUILD_INFO"
             exit 1
           fi
-          
-          echo "Build completed successfully!"
 
       - name: Download IPA
         run: |
