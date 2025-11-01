@@ -1,0 +1,101 @@
+name: Build IPA (macOS Direct)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+    paths:
+      - 'mobile-expo/src/**'
+      - 'mobile-expo/App.tsx'
+      - 'mobile-expo/app.json'
+      - 'mobile-expo/package.json'
+      - '.github/workflows/build-ipa-macos.yml'
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    name: Build iOS IPA (macOS)
+    runs-on: macos-latest
+    
+    defaults:
+      run:
+        working-directory: ./mobile-expo
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: mobile-expo/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./mobile-expo
+        run: npm ci
+
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+
+      - name: Prebuild iOS project
+        working-directory: ./mobile-expo
+        run: |
+          npx expo prebuild --platform ios --clean
+
+      - name: Build IPA with xcodebuild (unsigned)
+        working-directory: ./mobile-expo
+        run: |
+          cd ios
+          
+          # Build archive
+          xcodebuild clean archive \
+            -workspace *.xcworkspace \
+            -scheme zyea-mobile \
+            -configuration Release \
+            -archivePath build/App.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            -allowProvisioningUpdates
+          
+          # Export IPA (unsigned)
+          xcodebuild -exportArchive \
+            -archivePath build/App.xcarchive \
+            -exportOptionsPlist exportOptions.plist \
+            -exportPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Create exportOptions.plist
+        working-directory: ./mobile-expo/ios
+        run: |
+          cat > exportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Find and upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa-${{ github.run_number }}-${{ github.sha }}
+          path: mobile-expo/ios/build/*.ipa
+          retention-days: 30
+          if-no-files-found: warn
+
