@@ -1,0 +1,47 @@
+name: Build iOS IPA - Simple EAS Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'mobile-expo/**'
+
+jobs:
+  build-ios:
+    name: Build iOS IPA với EAS (Dễ nhất)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        working-directory: ./mobile-expo
+        run: npm ci
+
+      - name: Build iOS IPA với EAS (Unsigned)
+        working-directory: ./mobile-expo
+        run: |
+          eas build --platform ios \
+            --profile unsigned \
+            --non-interactive \
+            --no-wait
+
+      - name: Build status
+        run: |
+          echo "✅ Build đã được khởi động!"
+          echo "📱 Kiểm tra tại: https://expo.dev/accounts/hieukka/projects/zyea-mobile/builds"
+
