@@ -70,20 +70,86 @@ jobs:
             echo "⚠️  No Podfile found, skipping pod install"
           fi
 
-      - name: List available schemes
+      - name: List available schemes and targets
         working-directory: ./mobile-expo/ios
         id: list_schemes
         run: |
           WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
-          echo "Found workspace: $WORKSPACE"
-          echo "Available schemes:"
-          xcodebuild -list -workspace "$WORKSPACE" || xcodebuild -list -project "$(find . -name "*.xcodeproj" | head -1)"
+          if [ -z "$WORKSPACE" ]; then
+            PROJECT=$(find . -name "*.xcodeproj" | head -1)
+            echo "Using project: $PROJECT"
+            echo "workspace_path=" >> $GITHUB_OUTPUT
+            echo "project_path=$PROJECT" >> $GITHUB_OUTPUT
+            LIST_CMD="xcodebuild -list -project \"$PROJECT\""
+          else
+            echo "Found workspace: $WORKSPACE"
+            echo "workspace_path=$WORKSPACE" >> $GITHUB_OUTPUT
+            echo "project_path=" >> $GITHUB_OUTPUT
+            LIST_CMD="xcodebuild -list -workspace \"$WORKSPACE\""
+          fi
           
-          # Try to find the scheme name automatically
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | head -1 | xargs || echo "App")
+          echo "Available schemes:"
+          eval $LIST_CMD
+          
+          # Find main app scheme (not Pods, not frameworks)
+          if [ -n "$WORKSPACE" ]; then
+            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | \
+              grep -A 100 "Schemes:" | \
+              grep -v "Schemes:" | \
+              grep -v "Pods" | \
+              grep -v "EX" | \
+              head -1 | \
+              xargs || \
+              xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | \
+              grep -A 100 "Schemes:" | \
+              grep -v "Schemes:" | \
+              head -1 | \
+              xargs)
+          else
+            SCHEME=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | \
+              grep -A 100 "Schemes:" | \
+              grep -v "Schemes:" | \
+              grep -v "Pods" | \
+              grep -v "EX" | \
+              head -1 | \
+              xargs || \
+              xcodebuild -list -project "$PROJECT" 2>/dev/null | \
+              grep -A 100 "Schemes:" | \
+              grep -v "Schemes:" | \
+              head -1 | \
+              xargs)
+          fi
+          
+          if [ -z "$SCHEME" ]; then
+            SCHEME="App"
+          fi
+          
           echo "Using scheme: $SCHEME"
           echo "scheme_name=$SCHEME" >> $GITHUB_OUTPUT
-          echo "workspace_path=$WORKSPACE" >> $GITHUB_OUTPUT
+          
+          # Also get the target name for building
+          TARGET=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | \
+            grep -A 100 "Targets:" | \
+            grep -v "Targets:" | \
+            grep -v "Pods" | \
+            grep -v "EX" | \
+            head -1 | \
+            xargs || \
+            echo "")
+          
+          if [ -z "$TARGET" ] && [ -n "$PROJECT" ]; then
+            TARGET=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | \
+              grep -A 100 "Targets:" | \
+              grep -v "Targets:" | \
+              grep -v "Pods" | \
+              grep -v "EX" | \
+              head -1 | \
+              xargs || \
+              echo "")
+          fi
+          
+          echo "Main target: $TARGET"
+          echo "target_name=$TARGET" >> $GITHUB_OUTPUT
 
       - name: Create exportOptions.plist
         working-directory: ./mobile-expo/ios
@@ -120,32 +186,55 @@ jobs:
         working-directory: ./mobile-expo/ios
         run: |
           WORKSPACE="${{ steps.list_schemes.outputs.workspace_path }}"
+          PROJECT="${{ steps.list_schemes.outputs.project_path }}"
           SCHEME="${{ steps.list_schemes.outputs.scheme_name }}"
+          TARGET="${{ steps.list_schemes.outputs.target_name }}"
           
-          echo "Building with workspace: $WORKSPACE"
           echo "Building with scheme: $SCHEME"
+          if [ -n "$TARGET" ]; then
+            echo "Building with target: $TARGET"
+          fi
           
           mkdir -p build-artifacts
           
+          # Determine build command based on workspace or project
+          if [ -n "$WORKSPACE" ]; then
+            BUILD_CMD="xcodebuild clean build -workspace \"$WORKSPACE\" -scheme \"$SCHEME\""
+          else
+            BUILD_CMD="xcodebuild clean build -project \"$PROJECT\" -scheme \"$SCHEME\""
+          fi
+          
           # Get build output path before building
           echo "Getting build settings..."
-          BUILT_PRODUCTS_DIR=$(xcodebuild -showBuildSettings \
-            -workspace "$WORKSPACE" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -sdk iphoneos 2>/dev/null | \
-            grep "BUILT_PRODUCTS_DIR" | \
-            head -1 | \
-            sed 's/.*= *//' | \
-            xargs)
+          if [ -n "$WORKSPACE" ]; then
+            BUILT_PRODUCTS_DIR=$(xcodebuild -showBuildSettings \
+              -workspace "$WORKSPACE" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -sdk iphoneos 2>/dev/null | \
+              grep "BUILT_PRODUCTS_DIR" | \
+              grep -v "Pods\|EX" | \
+              head -1 | \
+              sed 's/.*= *//' | \
+              xargs)
+          else
+            BUILT_PRODUCTS_DIR=$(xcodebuild -showBuildSettings \
+              -project "$PROJECT" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -sdk iphoneos 2>/dev/null | \
+              grep "BUILT_PRODUCTS_DIR" | \
+              grep -v "Pods\|EX" | \
+              head -1 | \
+              sed 's/.*= *//' | \
+              xargs)
+          fi
           
           echo "Expected build output: $BUILT_PRODUCTS_DIR"
           
           # Build app directly (no archive needed for unsigned)
           echo "Step 1: Building app..."
-          xcodebuild clean build \
-            -workspace "$WORKSPACE" \
-            -scheme "$SCHEME" \
+          eval $BUILD_CMD \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath ./build \
@@ -161,28 +250,47 @@ jobs:
           
           APP_BUNDLE=""
           
-          # Method 1: Use the expected build path
+          # Method 1: Use the expected build path (filter out Pods and frameworks)
           if [ -n "$BUILT_PRODUCTS_DIR" ] && [ -d "$BUILT_PRODUCTS_DIR" ]; then
             echo "Checking expected path: $BUILT_PRODUCTS_DIR"
-            APP_BUNDLE=$(find "$BUILT_PRODUCTS_DIR" -name "*.app" -type d 2>/dev/null | head -1)
+            APP_BUNDLE=$(find "$BUILT_PRODUCTS_DIR" -name "*.app" -type d 2>/dev/null | \
+              grep -v "Pods\|\.framework\|EX" | \
+              head -1)
           fi
           
-          # Method 2: Look in build/Build/Products
+          # Method 2: Look in build/Build/Products (filter main app)
           if [ -z "$APP_BUNDLE" ]; then
             echo "Checking build/Build/Products..."
-            APP_BUNDLE=$(find build/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
+            # Look for app with scheme name or common app names
+            APP_BUNDLE=$(find build/Build/Products -name "$SCHEME.app" -type d 2>/dev/null | head -1)
+            if [ -z "$APP_BUNDLE" ]; then
+              APP_BUNDLE=$(find build/Build/Products -name "*.app" -type d 2>/dev/null | \
+                grep -v "Pods\|\.framework\|EX\|Test" | \
+                head -1)
+            fi
           fi
           
-          # Method 3: Look in build directory recursively
+          # Method 3: Look in build directory recursively (filter frameworks)
           if [ -z "$APP_BUNDLE" ]; then
-            echo "Searching entire build directory..."
-            APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | head -1)
+            echo "Searching entire build directory (excluding frameworks)..."
+            APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | \
+              grep -v "Pods\|\.framework\|EX\|Test" | \
+              head -1)
           fi
           
           # Method 4: Look in current directory
           if [ -z "$APP_BUNDLE" ]; then
             echo "Searching current directory..."
-            APP_BUNDLE=$(find . -name "*.app" -type d -not -path "./build-artifacts/*" 2>/dev/null | head -1)
+            APP_BUNDLE=$(find . -name "*.app" -type d -not -path "./build-artifacts/*" -not -path "./Pods/*" 2>/dev/null | head -1)
+          fi
+          
+          # Method 5: Look for app with project/scheme name
+          if [ -z "$APP_BUNDLE" ]; then
+            echo "Searching for app matching scheme name..."
+            APP_BUNDLE=$(find build -name "$SCHEME.app" -type d 2>/dev/null | head -1)
+            if [ -z "$APP_BUNDLE" ] && [ -n "$TARGET" ]; then
+              APP_BUNDLE=$(find build -name "$TARGET.app" -type d 2>/dev/null | head -1)
+            fi
           fi
           
           # Debug output
