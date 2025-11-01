@@ -68,19 +68,37 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
+      - name: Set EXPO_TOKEN environment variable
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "❌ EXPO_TOKEN is not set!"
+            exit 1
+          else
+            echo "✅ EXPO_TOKEN is set (length: ${#EXPO_TOKEN} characters)"
+            echo "Token starts with: ${EXPO_TOKEN:0:10}..."
+          fi
+
       - name: Install jq for JSON parsing
         run: sudo apt-get update && sudo apt-get install -y jq
 
       - name: Verify EAS CLI
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         working-directory: ./mobile-expo
         run: |
           echo "EAS CLI version:"
           eas --version || echo "EAS CLI not found"
           echo "Expo CLI version:"
           expo --version || echo "Expo CLI not found"
+          echo "Verifying authentication..."
+          eas whoami || echo "Not authenticated"
 
       - name: Build IPA with EAS
         id: build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         working-directory: ./mobile-expo
         run: |
           PROFILE="${{ github.event.inputs.profile || 'unsigned' }}"
@@ -124,6 +142,8 @@ jobs:
 
       - name: Wait for build to complete
         id: wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         working-directory: ./mobile-expo
         run: |
           BUILD_ID="${{ steps.build.outputs.build_id }}"
@@ -178,6 +198,8 @@ jobs:
           fi
 
       - name: Download IPA
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         working-directory: ./mobile-expo
         run: |
           BUILD_ID="${{ steps.build.outputs.build_id }}"
