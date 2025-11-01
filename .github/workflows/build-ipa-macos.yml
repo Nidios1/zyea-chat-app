@@ -46,7 +46,29 @@ jobs:
       - name: Prebuild iOS project
         working-directory: ./mobile-expo
         run: |
+          echo "Running expo prebuild..."
           npx expo prebuild --platform ios --clean
+          
+          echo "Checking prebuild output..."
+          if [ -d "ios" ]; then
+            echo "✅ iOS directory created"
+            ls -la ios/ | head -10
+          else
+            echo "❌ iOS directory not found!"
+            exit 1
+          fi
+          
+      - name: Install CocoaPods dependencies
+        working-directory: ./mobile-expo/ios
+        run: |
+          echo "Installing CocoaPods dependencies..."
+          if [ -f "Podfile" ]; then
+            echo "Podfile found, running pod install..."
+            pod install --repo-update
+            echo "✅ CocoaPods installed"
+          else
+            echo "⚠️  No Podfile found, skipping pod install"
+          fi
 
       - name: List available schemes
         working-directory: ./mobile-expo/ios
@@ -105,6 +127,20 @@ jobs:
           
           mkdir -p build-artifacts
           
+          # Get build output path before building
+          echo "Getting build settings..."
+          BUILT_PRODUCTS_DIR=$(xcodebuild -showBuildSettings \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos 2>/dev/null | \
+            grep "BUILT_PRODUCTS_DIR" | \
+            head -1 | \
+            sed 's/.*= *//' | \
+            xargs)
+          
+          echo "Expected build output: $BUILT_PRODUCTS_DIR"
+          
           # Build app directly (no archive needed for unsigned)
           echo "Step 1: Building app..."
           xcodebuild clean build \
@@ -112,55 +148,73 @@ jobs:
             -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphoneos \
-            -derivedDataPath build \
+            -derivedDataPath ./build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             -allowProvisioningUpdates
           
-          echo "Build completed. Finding .app bundle..."
+          echo "Build completed!"
           
-          # Find the .app bundle - check multiple locations
-          echo "Searching for .app bundle..."
+          # Find the .app bundle - comprehensive search
+          echo "Step 2: Searching for .app bundle..."
           
-          # Method 1: Look in DerivedData/Build/Products
-          APP_BUNDLE=$(find build/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
+          APP_BUNDLE=""
           
-          # Method 2: Look in build directory recursively
-          if [ -z "$APP_BUNDLE" ]; then
-            APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | grep -i "$SCHEME\|App" | head -1)
+          # Method 1: Use the expected build path
+          if [ -n "$BUILT_PRODUCTS_DIR" ] && [ -d "$BUILT_PRODUCTS_DIR" ]; then
+            echo "Checking expected path: $BUILT_PRODUCTS_DIR"
+            APP_BUNDLE=$(find "$BUILT_PRODUCTS_DIR" -name "*.app" -type d 2>/dev/null | head -1)
           fi
           
-          # Method 3: Look for any .app bundle
+          # Method 2: Look in build/Build/Products
           if [ -z "$APP_BUNDLE" ]; then
+            echo "Checking build/Build/Products..."
+            APP_BUNDLE=$(find build/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
+          fi
+          
+          # Method 3: Look in build directory recursively
+          if [ -z "$APP_BUNDLE" ]; then
+            echo "Searching entire build directory..."
             APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | head -1)
           fi
           
-          # Method 4: Look in DerivedData at standard location
+          # Method 4: Look in current directory
           if [ -z "$APP_BUNDLE" ]; then
-            DERIVED_DATA=$(xcodebuild -showBuildSettings -workspace "$WORKSPACE" -scheme "$SCHEME" 2>/dev/null | grep "BUILT_PRODUCTS_DIR" | head -1 | sed 's/.*= *//')
-            if [ -n "$DERIVED_DATA" ]; then
-              APP_BUNDLE=$(find "$DERIVED_DATA" -name "*.app" -type d 2>/dev/null | head -1)
-            fi
+            echo "Searching current directory..."
+            APP_BUNDLE=$(find . -name "*.app" -type d -not -path "./build-artifacts/*" 2>/dev/null | head -1)
           fi
           
-          # Debug: List all .app files found
-          echo "All .app files found:"
-          find build -name "*.app" -type d 2>/dev/null || echo "No .app in build/"
+          # Debug output
+          echo ""
+          echo "=== DEBUG INFO ==="
+          echo "Build directory exists: $(test -d build && echo 'YES' || echo 'NO')"
+          if [ -d build ]; then
+            echo "Build directory contents:"
+            ls -la build/ | head -20
+            echo ""
+            echo "Searching for .app recursively in build/:"
+            find build -name "*.app" -type d 2>/dev/null || echo "No .app found in build/"
+          fi
+          echo "=================="
+          echo ""
           
-          if [ -z "$APP_BUNDLE" ]; then
-            echo "ERROR: No .app bundle found!"
-            echo "Build directory structure:"
-            ls -la build/ || echo "Build directory doesn't exist"
-            echo "Checking DerivedData:"
-            ls -la ~/Library/Developer/Xcode/DerivedData/ 2>/dev/null || echo "Cannot access DerivedData"
+          if [ -z "$APP_BUNDLE" ] || [ ! -d "$APP_BUNDLE" ]; then
+            echo "❌ ERROR: No .app bundle found!"
+            echo "Tried searching in:"
+            echo "  - $BUILT_PRODUCTS_DIR"
+            echo "  - build/Build/Products"
+            echo "  - build/ (recursive)"
+            echo "  - ./ (recursive)"
             exit 1
           fi
           
-          echo "Found app bundle: $APP_BUNDLE"
+          echo "✅ Found app bundle: $APP_BUNDLE"
+          ls -la "$APP_BUNDLE" | head -5
           
           # Create Payload directory for IPA
-          echo "Step 2: Creating IPA package..."
+          echo ""
+          echo "Step 3: Creating IPA package..."
           mkdir -p build-artifacts/Payload
           cp -R "$APP_BUNDLE" build-artifacts/Payload/
           
@@ -169,7 +223,8 @@ jobs:
           zip -r app.ipa Payload
           cd ..
           
-          echo "IPA created: build-artifacts/app.ipa"
+          echo ""
+          echo "✅ IPA created successfully!"
           ls -lh build-artifacts/app.ipa
 
       - name: Find and upload IPA
