@@ -80,7 +80,7 @@ jobs:
           echo "Building IPA with profile: $PROFILE"
           
           set +e
-          BUILD_OUTPUT=$(eas build --platform ios --profile $PROFILE --non-interactive --json 2>&1)
+          BUILD_OUTPUT=$(eas build --platform ios --profile $PROFILE --non-interactive --skip-credentials-check --json 2>&1)
           BUILD_EXIT_CODE=$?
           set -e
           
