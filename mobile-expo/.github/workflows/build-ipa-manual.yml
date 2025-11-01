@@ -1,0 +1,55 @@
+name: Build iOS IPA (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build profile (unsigned, adhoc, preview, production)'
+        required: true
+        default: 'unsigned'
+        type: choice
+        options:
+          - unsigned
+          - adhoc
+          - preview
+          - production
+
+jobs:
+  build-ios:
+    name: Build iOS IPA (${{ github.event.inputs.profile }})
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build iOS IPA
+        run: |
+          eas build --platform ios \
+            --profile ${{ github.event.inputs.profile }} \
+            --non-interactive \
+            --no-wait
+
+      - name: Build Status
+        run: |
+          echo "✅ Build đã được khởi động thành công!"
+          echo "📱 Profile: ${{ github.event.inputs.profile }}"
+          echo "🔗 Kiểm tra trạng thái build tại:"
+          echo "https://expo.dev/accounts/hieukka/projects/zyea-mobile/builds"
+

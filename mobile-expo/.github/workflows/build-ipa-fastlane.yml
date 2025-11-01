@@ -1,0 +1,65 @@
+name: Build iOS IPA (Fastlane)
+
+on:
+  workflow_dispatch:  # Chạy thủ công
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'adhoc'
+        type: choice
+        options:
+          - adhoc
+          - appstore
+          - development
+
+jobs:
+  build-ios:
+    name: Build iOS IPA với Fastlane
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prebuild iOS native project
+        run: |
+          npx expo prebuild --platform ios --clean
+
+      - name: Install Fastlane
+        run: |
+          sudo gem install fastlane
+
+      - name: Setup Fastlane
+        run: |
+          cd ios
+          fastlane init || true
+
+      - name: Build với Fastlane
+        env:
+          BUILD_TYPE: ${{ github.event.inputs.build_type }}
+        run: |
+          cd ios
+          fastlane build_ipa type:${{ github.event.inputs.build_type }}
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zyeamobile-ipa-fastlane
+          path: ios/*.ipa
+          retention-days: 30
+
+      - name: Build Status
+        run: |
+          echo "✅ Build IPA thành công với Fastlane!"
+          echo "📱 File IPA đã được upload"
+

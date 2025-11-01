@@ -1,0 +1,41 @@
+{
+  "cli": {
+    "version": ">= 13.1.2",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "preview": {
+      "ios": {
+        "simulator": false,
+        "autoIncrement": true,
+        "buildConfiguration": "Release"
+      }
+    },
+    "adhoc": {
+      "ios": {
+        "simulator": false,
+        "autoIncrement": true,
+        "buildConfiguration": "Release",
+        "distribution": "internal"
+      }
+    },
+    "unsigned": {
+      "ios": {
+        "simulator": false,
+        "autoIncrement": true,
+        "buildConfiguration": "Release",
+        "distribution": "internal"
+      }
+    },
+    "production": {
+      "ios": {
+        "simulator": false,
+        "autoIncrement": true,
+        "buildConfiguration": "Release"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

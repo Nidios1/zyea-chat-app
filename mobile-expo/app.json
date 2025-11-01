@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Zyea+",
+    "slug": "zyea-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0084ff"
+    },
+    "ios": {
+      "bundleIdentifier": "com.zyea.mobile",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Ứng dụng cần quyền để bạn chọn ảnh đại diện và ảnh bìa.",
+        "NSCameraUsageDescription": "Ứng dụng cần quyền camera để chụp ảnh làm ảnh đại diện hoặc ảnh bìa.",
+        "NSPhotoLibraryAddUsageDescription": "Ứng dụng cần quyền lưu ảnh đã chỉnh sửa vào thư viện.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "fa5c683f-f9c5-459e-85a5-98f1856c4d2d"
+      }
+    },
+    "owner": "hieukka"
+  }
+}
