@@ -30,6 +30,9 @@ jobs:
     name: Build iOS IPA (Unsigned)
     runs-on: ubuntu-latest
     
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    
     defaults:
       run:
         working-directory: ./mobile-expo
@@ -45,18 +48,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: mobile-expo/package-lock.json
 
-      - name: Verify project structure
-        run: |
-          echo "Current directory: $(pwd)"
-          echo "Listing mobile-expo directory:"
-          ls -la mobile-expo/ || echo "mobile-expo not found"
-          echo "Checking for package.json:"
-          test -f mobile-expo/package.json && echo "✓ package.json exists" || echo "✗ package.json not found"
-          echo "Checking for app.json:"
-          test -f mobile-expo/app.json && echo "✓ app.json exists" || echo "✗ app.json not found"
-          echo "Checking for eas.json:"
-          test -f mobile-expo/eas.json && echo "✓ eas.json exists" || echo "✗ eas.json not found"
-
       - name: Install dependencies
         working-directory: ./mobile-expo
         run: npm ci
@@ -68,151 +59,69 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: Set EXPO_TOKEN environment variable
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: |
-          if [ -z "$EXPO_TOKEN" ]; then
-            echo "❌ EXPO_TOKEN is not set!"
-            exit 1
-          else
-            echo "✅ EXPO_TOKEN is set (length: ${#EXPO_TOKEN} characters)"
-            echo "Token starts with: ${EXPO_TOKEN:0:10}..."
-          fi
-
-      - name: Install jq for JSON parsing
+      - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
-
-      - name: Verify EAS CLI
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        working-directory: ./mobile-expo
-        run: |
-          echo "EAS CLI version:"
-          eas --version || echo "EAS CLI not found"
-          echo "Expo CLI version:"
-          expo --version || echo "Expo CLI not found"
-          echo "Verifying authentication..."
-          eas whoami || echo "Not authenticated"
 
       - name: Build IPA with EAS
         id: build
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         working-directory: ./mobile-expo
         run: |
           PROFILE="${{ github.event.inputs.profile || 'unsigned' }}"
           echo "Building IPA with profile: $PROFILE"
-          echo "Platform: iOS"
-          echo "Project ID: fa5c683f-f9c5-459e-85a5-98f1856c4d2d"
           
-          # Start build and capture output - handle both JSON and text output
-          echo "Starting EAS build..."
           BUILD_OUTPUT=$(eas build --platform ios --profile $PROFILE --non-interactive --json 2>&1 || true)
-          
-          echo "Raw build output:"
-          echo "$BUILD_OUTPUT"
-          
-          # Try to extract BUILD_ID from JSON output
           BUILD_ID=$(echo "$BUILD_OUTPUT" | jq -r '.id // empty' 2>/dev/null || echo "")
           
-          # If no ID in JSON, try to find build URL or ID in text
-          if [ -z "$BUILD_ID" ]; then
-            echo "Trying to extract BUILD_ID from text output..."
-            BUILD_ID=$(echo "$BUILD_OUTPUT" | grep -oP 'Build ID: \K[a-zA-Z0-9-]+' || echo "")
-          fi
-          
-          # If still no ID, try getting latest build
-          if [ -z "$BUILD_ID" ]; then
-            echo "Getting latest build from list..."
-            BUILD_LIST=$(eas build:list --platform ios --profile $PROFILE --limit 1 --json 2>&1 || echo "[]")
-            BUILD_ID=$(echo "$BUILD_LIST" | jq -r '.[0].id // empty' 2>/dev/null || echo "")
-          fi
-          
           if [ -z "$BUILD_ID" ] || [ "$BUILD_ID" = "null" ]; then
-            echo "❌ Failed to get build ID"
-            echo "Build output was:"
+            echo "❌ Failed to start build"
             echo "$BUILD_OUTPUT"
             exit 1
           fi
           
-          echo "✅ Build ID: $BUILD_ID"
+          echo "Build ID: $BUILD_ID"
           echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
-          echo "profile=$PROFILE" >> $GITHUB_OUTPUT
 
       - name: Wait for build to complete
         id: wait
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         working-directory: ./mobile-expo
         run: |
           BUILD_ID="${{ steps.build.outputs.build_id }}"
-          echo "⏳ Waiting for build $BUILD_ID to complete..."
+          echo "Waiting for build $BUILD_ID..."
           
-          # Poll build status with timeout (max 2 hours)
-          MAX_WAIT=7200
-          ELAPSED=0
-          STATUS="unknown"
           ATTEMPTS=0
-          MAX_ATTEMPTS=240  # 2 hours / 30 seconds
+          MAX_ATTEMPTS=240
           
           while [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
             ATTEMPTS=$((ATTEMPTS + 1))
-            
-            # Get build info
             BUILD_INFO=$(eas build:view $BUILD_ID --json 2>&1)
             STATUS=$(echo "$BUILD_INFO" | jq -r '.status // "unknown"' 2>/dev/null || echo "unknown")
             
-            echo "📊 Build status (attempt $ATTEMPTS): $STATUS (waited ${ELAPSED}s)"
+            echo "Status: $STATUS (attempt $ATTEMPTS)"
             
-            # Check if finished
             if [ "$STATUS" = "finished" ]; then
-              echo "✅ Build completed successfully!"
-              echo "$BUILD_INFO" | jq '.'
+              echo "✅ Build completed"
               break
             fi
             
-            # Check if failed
             if [ "$STATUS" = "errored" ] || [ "$STATUS" = "canceled" ]; then
-              echo "❌ Build failed with status: $STATUS"
-              echo "$BUILD_INFO" | jq '.' || echo "$BUILD_INFO"
+              echo "❌ Build failed: $STATUS"
               exit 1
             fi
             
-            # Continue waiting
-            if [ "$STATUS" = "in-progress" ] || [ "$STATUS" = "in-queue" ] || [ "$STATUS" = "new" ] || [ "$STATUS" = "unknown" ]; then
-              sleep 30
-              ELAPSED=$((ELAPSED + 30))
-            else
-              echo "⚠️  Unknown status: $STATUS, continuing to wait..."
-              sleep 30
-              ELAPSED=$((ELAPSED + 30))
-            fi
+            sleep 30
           done
           
           if [ "$STATUS" != "finished" ]; then
-            echo "❌ Build did not finish. Final status: $STATUS"
-            echo "Build info:"
-            echo "$BUILD_INFO"
+            echo "❌ Build timeout"
             exit 1
           fi
 
       - name: Download IPA
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         working-directory: ./mobile-expo
         run: |
           BUILD_ID="${{ steps.build.outputs.build_id }}"
           mkdir -p ./build-artifacts
-          echo "Downloading IPA for build $BUILD_ID..."
           eas build:download $BUILD_ID --output ./build-artifacts/
-
-      - name: List build artifacts
-        working-directory: ./mobile-expo
-        run: |
-          echo "Build artifacts:"
-          ls -lh ./build-artifacts/ || echo "No artifacts found"
-          find ./build-artifacts -name "*.ipa" -type f || echo "No IPA files found"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
@@ -221,14 +130,3 @@ jobs:
           path: mobile-expo/build-artifacts/*.ipa
           retention-days: 30
           if-no-files-found: error
-
-      - name: Build Summary
-        run: |
-          echo "## 🎉 Build Completed Successfully!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Build ID:** \`${{ steps.build.outputs.build_id }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Profile:** \`${{ steps.build.outputs.profile }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📦 IPA file is available in the artifacts section." >> $GITHUB_STEP_SUMMARY
-
