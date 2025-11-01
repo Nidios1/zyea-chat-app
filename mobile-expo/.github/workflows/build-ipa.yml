@@ -29,6 +29,10 @@ jobs:
     name: Build iOS IPA (Unsigned)
     runs-on: ubuntu-latest
     
+    defaults:
+      run:
+        working-directory: ./mobile-expo
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -38,9 +42,22 @@ jobs:
         with:
           node-version: '20.x'
           cache: 'npm'
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: mobile-expo/package-lock.json
+
+      - name: Verify project structure
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Listing mobile-expo directory:"
+          ls -la mobile-expo/ || echo "mobile-expo not found"
+          echo "Checking for package.json:"
+          test -f mobile-expo/package.json && echo "✓ package.json exists" || echo "✗ package.json not found"
+          echo "Checking for app.json:"
+          test -f mobile-expo/app.json && echo "✓ app.json exists" || echo "✗ app.json not found"
+          echo "Checking for eas.json:"
+          test -f mobile-expo/eas.json && echo "✓ eas.json exists" || echo "✗ eas.json not found"
 
       - name: Install dependencies
+        working-directory: ./mobile-expo
         run: npm ci
 
       - name: Setup Expo CLI
@@ -53,8 +70,17 @@ jobs:
       - name: Install jq for JSON parsing
         run: sudo apt-get update && sudo apt-get install -y jq
 
+      - name: Verify EAS CLI
+        working-directory: ./mobile-expo
+        run: |
+          echo "EAS CLI version:"
+          eas --version || echo "EAS CLI not found"
+          echo "Expo CLI version:"
+          expo --version || echo "Expo CLI not found"
+
       - name: Build IPA with EAS
         id: build
+        working-directory: ./mobile-expo
         run: |
           PROFILE="${{ github.event.inputs.profile || 'unsigned' }}"
           echo "Building IPA with profile: $PROFILE"
@@ -97,6 +123,7 @@ jobs:
 
       - name: Wait for build to complete
         id: wait
+        working-directory: ./mobile-expo
         run: |
           BUILD_ID="${{ steps.build.outputs.build_id }}"
           echo "⏳ Waiting for build $BUILD_ID to complete..."
@@ -150,6 +177,7 @@ jobs:
           fi
 
       - name: Download IPA
+        working-directory: ./mobile-expo
         run: |
           BUILD_ID="${{ steps.build.outputs.build_id }}"
           mkdir -p ./build-artifacts
@@ -157,6 +185,7 @@ jobs:
           eas build:download $BUILD_ID --output ./build-artifacts/
 
       - name: List build artifacts
+        working-directory: ./mobile-expo
         run: |
           echo "Build artifacts:"
           ls -lh ./build-artifacts/ || echo "No artifacts found"
@@ -166,7 +195,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa-${{ github.run_number }}-${{ github.sha }}
-          path: ./build-artifacts/*.ipa
+          path: mobile-expo/build-artifacts/*.ipa
           retention-days: 30
           if-no-files-found: error
 
