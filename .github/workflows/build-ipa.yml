@@ -62,6 +62,16 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
+      - name: Check EXPO_TOKEN
+        working-directory: ./mobile-expo
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "❌ EXPO_TOKEN is not set!"
+            echo "Please add EXPO_TOKEN to GitHub Secrets"
+            exit 1
+          fi
+          echo "✅ EXPO_TOKEN is set"
+
       - name: Build IPA with EAS
         id: build
         working-directory: ./mobile-expo
@@ -69,16 +79,29 @@ jobs:
           PROFILE="${{ github.event.inputs.profile || 'unsigned' }}"
           echo "Building IPA with profile: $PROFILE"
           
-          BUILD_OUTPUT=$(eas build --platform ios --profile $PROFILE --non-interactive --json 2>&1 || true)
-          BUILD_ID=$(echo "$BUILD_OUTPUT" | jq -r '.id // empty' 2>/dev/null || echo "")
+          set +e
+          BUILD_OUTPUT=$(eas build --platform ios --profile $PROFILE --non-interactive --json 2>&1)
+          BUILD_EXIT_CODE=$?
+          set -e
           
-          if [ -z "$BUILD_ID" ] || [ "$BUILD_ID" = "null" ]; then
-            echo "❌ Failed to start build"
-            echo "$BUILD_OUTPUT"
+          echo "Build command exit code: $BUILD_EXIT_CODE"
+          echo "Build output:"
+          echo "$BUILD_OUTPUT"
+          
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo "❌ EAS build command failed"
             exit 1
           fi
           
-          echo "Build ID: $BUILD_ID"
+          BUILD_ID=$(echo "$BUILD_OUTPUT" | jq -r '.id // empty' 2>/dev/null || echo "")
+          
+          if [ -z "$BUILD_ID" ] || [ "$BUILD_ID" = "null" ] || [ "$BUILD_ID" = "" ]; then
+            echo "❌ Failed to get build ID from output"
+            echo "Output was: $BUILD_OUTPUT"
+            exit 1
+          fi
+          
+          echo "✅ Build ID: $BUILD_ID"
           echo "build_id=$BUILD_ID" >> $GITHUB_OUTPUT
 
       - name: Wait for build to complete
