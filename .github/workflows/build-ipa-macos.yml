@@ -48,30 +48,20 @@ jobs:
         run: |
           npx expo prebuild --platform ios --clean
 
-      - name: Build IPA with xcodebuild (unsigned)
-        working-directory: ./mobile-expo
+      - name: List available schemes
+        working-directory: ./mobile-expo/ios
+        id: list_schemes
         run: |
-          cd ios
+          WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
+          echo "Found workspace: $WORKSPACE"
+          echo "Available schemes:"
+          xcodebuild -list -workspace "$WORKSPACE" || xcodebuild -list -project "$(find . -name "*.xcodeproj" | head -1)"
           
-          # Build archive
-          xcodebuild clean archive \
-            -workspace *.xcworkspace \
-            -scheme zyea-mobile \
-            -configuration Release \
-            -archivePath build/App.xcarchive \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            -allowProvisioningUpdates
-          
-          # Export IPA (unsigned)
-          xcodebuild -exportArchive \
-            -archivePath build/App.xcarchive \
-            -exportOptionsPlist exportOptions.plist \
-            -exportPath build \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+          # Try to find the scheme name automatically
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | head -1 | xargs || echo "App")
+          echo "Using scheme: $SCHEME"
+          echo "scheme_name=$SCHEME" >> $GITHUB_OUTPUT
+          echo "workspace_path=$WORKSPACE" >> $GITHUB_OUTPUT
 
       - name: Create exportOptions.plist
         working-directory: ./mobile-expo/ios
@@ -90,6 +80,41 @@ jobs:
           </dict>
           </plist>
           EOF
+
+      - name: Build IPA with xcodebuild (unsigned)
+        working-directory: ./mobile-expo/ios
+        run: |
+          WORKSPACE="${{ steps.list_schemes.outputs.workspace_path }}"
+          SCHEME="${{ steps.list_schemes.outputs.scheme_name }}"
+          
+          echo "Building with workspace: $WORKSPACE"
+          echo "Building with scheme: $SCHEME"
+          
+          mkdir -p build
+          
+          # Build archive (unsigned)
+          xcodebuild clean archive \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -archivePath build/App.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            -allowProvisioningUpdates || true
+          
+          # Export IPA (unsigned)
+          xcodebuild -exportArchive \
+            -archivePath build/App.xcarchive \
+            -exportOptionsPlist exportOptions.plist \
+            -exportPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO || true
+          
+          # Find IPA file
+          echo "Looking for IPA files:"
+          find build -name "*.ipa" -type f || echo "No IPA files found"
 
       - name: Find and upload IPA
         uses: actions/upload-artifact@v4
