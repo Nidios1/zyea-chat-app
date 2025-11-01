@@ -93,6 +93,7 @@ jobs:
           mkdir -p build
           
           # Build archive (unsigned)
+          echo "Step 1: Building archive..."
           xcodebuild clean archive \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
@@ -101,26 +102,45 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            -allowProvisioningUpdates || true
+            -allowProvisioningUpdates
+          
+          echo "Archive created. Checking archive..."
+          ls -la build/App.xcarchive/ || echo "Archive not found"
           
           # Export IPA (unsigned)
+          echo "Step 2: Exporting IPA..."
           xcodebuild -exportArchive \
             -archivePath build/App.xcarchive \
             -exportOptionsPlist exportOptions.plist \
             -exportPath build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO || true
+            CODE_SIGNING_ALLOWED=NO
           
-          # Find IPA file
-          echo "Looking for IPA files:"
-          find build -name "*.ipa" -type f || echo "No IPA files found"
+          echo "Export completed. Searching for IPA files..."
+          echo "Contents of build directory:"
+          ls -la build/ || echo "Build directory empty"
+          
+          echo "Searching recursively for IPA files:"
+          find . -name "*.ipa" -type f 2>/dev/null || echo "No IPA files found"
+          
+          # Copy IPA to a known location
+          IPA_FILE=$(find . -name "*.ipa" -type f | head -1)
+          if [ -n "$IPA_FILE" ]; then
+            echo "Found IPA: $IPA_FILE"
+            mkdir -p build-artifacts
+            cp "$IPA_FILE" build-artifacts/app.ipa
+            echo "IPA copied to: build-artifacts/app.ipa"
+          else
+            echo "ERROR: No IPA file found!"
+            exit 1
+          fi
 
       - name: Find and upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa-${{ github.run_number }}-${{ github.sha }}
-          path: mobile-expo/ios/build/*.ipa
+          path: mobile-expo/ios/build-artifacts/*.ipa
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
 
