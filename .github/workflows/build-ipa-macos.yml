@@ -120,17 +120,40 @@ jobs:
           
           echo "Build completed. Finding .app bundle..."
           
-          # Find the .app bundle
-          APP_BUNDLE=$(find build -name "*.app" -type d | grep -i "$SCHEME\|App" | head -1)
+          # Find the .app bundle - check multiple locations
+          echo "Searching for .app bundle..."
           
+          # Method 1: Look in DerivedData/Build/Products
+          APP_BUNDLE=$(find build/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
+          
+          # Method 2: Look in build directory recursively
           if [ -z "$APP_BUNDLE" ]; then
-            APP_BUNDLE=$(find build -name "*.app" -type d | head -1)
+            APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | grep -i "$SCHEME\|App" | head -1)
           fi
+          
+          # Method 3: Look for any .app bundle
+          if [ -z "$APP_BUNDLE" ]; then
+            APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | head -1)
+          fi
+          
+          # Method 4: Look in DerivedData at standard location
+          if [ -z "$APP_BUNDLE" ]; then
+            DERIVED_DATA=$(xcodebuild -showBuildSettings -workspace "$WORKSPACE" -scheme "$SCHEME" 2>/dev/null | grep "BUILT_PRODUCTS_DIR" | head -1 | sed 's/.*= *//')
+            if [ -n "$DERIVED_DATA" ]; then
+              APP_BUNDLE=$(find "$DERIVED_DATA" -name "*.app" -type d 2>/dev/null | head -1)
+            fi
+          fi
+          
+          # Debug: List all .app files found
+          echo "All .app files found:"
+          find build -name "*.app" -type d 2>/dev/null || echo "No .app in build/"
           
           if [ -z "$APP_BUNDLE" ]; then
             echo "ERROR: No .app bundle found!"
-            echo "Searching all .app files:"
-            find build -name "*.app" -type d
+            echo "Build directory structure:"
+            ls -la build/ || echo "Build directory doesn't exist"
+            echo "Checking DerivedData:"
+            ls -la ~/Library/Developer/Xcode/DerivedData/ 2>/dev/null || echo "Cannot access DerivedData"
             exit 1
           fi
           
