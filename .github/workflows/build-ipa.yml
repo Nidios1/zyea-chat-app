@@ -7,10 +7,11 @@ on:
       - master
       - develop
     paths:
-      - 'src/**'
-      - 'App.tsx'
-      - 'app.json'
-      - 'package.json'
+      - 'mobile-expo/src/**'
+      - 'mobile-expo/App.tsx'
+      - 'mobile-expo/app.json'
+      - 'mobile-expo/package.json'
+      - 'mobile-expo/eas.json'
       - '.github/workflows/build-ipa.yml'
   workflow_dispatch:
     inputs:
