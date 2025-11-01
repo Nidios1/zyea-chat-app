@@ -1,4 +1,4 @@
-name: Build iOS IPA - Expo React Native
+name: Build Expo iOS IPA Unsigned
 
 on:
   push:
@@ -8,14 +8,20 @@ on:
     paths:
       - 'mobile-expo/**'
   workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild from scratch'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
-  build-ios:
-    name: Build IPA Unsigned
+  build-expo-ios-ipa:
+    name: Build Expo iOS IPA (Unsigned)
     runs-on: macos-latest
     
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -27,52 +33,63 @@ jobs:
 
       - name: Install dependencies
         working-directory: ./mobile-expo
-        run: npm ci
+        run: |
+          npm ci
+          echo "✅ Dependencies installed"
 
-      - name: Prebuild iOS với Expo (Tạo iOS project)
+      - name: Prebuild iOS với Expo
         working-directory: ./mobile-expo
         run: |
-          echo "📦 Bắt đầu prebuild iOS project với Expo..."
+          echo "=========================================="
+          echo "📦 PREBUILD iOS PROJECT VỚI EXPO"
+          echo "=========================================="
+          echo "⚠️ KHÔNG PHẢI CAPACITOR - ĐÂY LÀ EXPO!"
+          echo ""
           npx expo prebuild --platform ios --clean
-          echo "✅ iOS project đã được tạo trong thư mục ios/"
+          echo ""
+          echo "✅ Expo prebuild completed"
+          echo "✅ iOS project được tạo trong ios/"
 
       - name: Install CocoaPods
         working-directory: ./mobile-expo/ios
         run: |
+          echo "📦 Installing CocoaPods..."
           sudo gem install cocoapods
-          pod install
-          echo "✅ CocoaPods dependencies đã được cài đặt"
+          pod install --repo-update
+          echo "✅ CocoaPods installed"
 
-      - name: Tìm iOS workspace
+      - name: Tìm workspace và scheme
         working-directory: ./mobile-expo
-        id: find-workspace
+        id: ios-config
         run: |
+          echo "🔍 Tìm iOS workspace..."
           WORKSPACE=$(find ios -name "*.xcworkspace" -type d | head -1)
           if [ -z "$WORKSPACE" ]; then
-            echo "❌ Không tìm thấy .xcworkspace file"
-            echo "Danh sách file trong ios/:"
+            echo "❌ Không tìm thấy .xcworkspace"
+            echo "📁 Danh sách trong ios/:"
             ls -la ios/ | head -20
             exit 1
           fi
           SCHEME=$(basename "$WORKSPACE" .xcworkspace)
           echo "workspace=$WORKSPACE" >> $GITHUB_OUTPUT
           echo "scheme=$SCHEME" >> $GITHUB_OUTPUT
-          echo "✅ Tìm thấy workspace: $WORKSPACE"
+          echo "✅ Workspace: $WORKSPACE"
           echo "✅ Scheme: $SCHEME"
 
-      - name: Build Archive (Unsigned - không ký)
+      - name: Build Archive (Unsigned)
         working-directory: ./mobile-expo
         run: |
+          echo "🔨 Building archive (unsigned)..."
           mkdir -p build
-          xcodebuild -workspace "${{ steps.find-workspace.outputs.workspace }}" \
-            -scheme "${{ steps.find-workspace.outputs.scheme }}" \
+          xcodebuild -workspace "${{ steps.ios-config.outputs.workspace }}" \
+            -scheme "${{ steps.ios-config.outputs.scheme }}" \
             -configuration Release \
             -archivePath build/App.xcarchive \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             archive
-          echo "✅ Archive đã được tạo"
+          echo "✅ Archive created"
 
       - name: Tạo exportOptions.plist
         working-directory: ./mobile-expo
@@ -92,41 +109,50 @@ jobs:
 </dict>
 </plist>
 EOF
+          echo "✅ exportOptions.plist created"
 
       - name: Export IPA (Unsigned)
         working-directory: ./mobile-expo
         run: |
+          echo "📦 Exporting IPA..."
           mkdir -p build/ipa
           xcodebuild -exportArchive \
             -archivePath build/App.xcarchive \
             -exportPath build/ipa \
             -exportOptionsPlist ios/exportOptions.plist
-          echo "✅ IPA đã được export"
+          echo "✅ IPA exported"
 
-      - name: Kiểm tra IPA file
+      - name: Verify IPA
         working-directory: ./mobile-expo
         run: |
           IPA=$(find build/ipa -name "*.ipa" | head -1)
           if [ -z "$IPA" ]; then
-            echo "❌ Không tìm thấy file IPA"
+            echo "❌ IPA file không tìm thấy!"
             exit 1
           fi
-          echo "✅ File IPA: $IPA"
+          echo "✅ IPA file: $IPA"
           ls -lh "$IPA"
+          echo "✅ File size: $(du -h "$IPA" | cut -f1)"
 
-      - name: Upload IPA
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zyeamobile-ipa-unsigned
+          name: zyeamobile-expo-ipa-unsigned
           path: mobile-expo/build/ipa/*.ipa
           retention-days: 90
+          if-no-files-found: error
 
-      - name: Success
+      - name: Build success message
         if: success()
         run: |
+          echo ""
           echo "=========================================="
-          echo "✅ BUILD THÀNH CÔNG!"
+          echo "  ✅ BUILD IPA THÀNH CÔNG!"
           echo "=========================================="
+          echo ""
           echo "📱 IPA unsigned đã sẵn sàng"
-          echo "💾 Tải về từ tab 'Actions' > 'Artifacts'"
-          echo "🔐 Ký với Esign và cài đặt lên iPhone"
+          echo "💾 Tải về: Actions > Artifacts > zyeamobile-expo-ipa-unsigned"
+          echo "🔐 Ký với Esign sau đó cài đặt lên iPhone"
+          echo ""
+          echo "=========================================="
+
