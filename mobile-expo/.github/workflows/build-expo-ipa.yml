@@ -1,4 +1,4 @@
-name: Build Expo iOS IPA Unsigned
+name: Build Expo React Native iOS IPA
 
 on:
   push:
@@ -6,22 +6,24 @@ on:
       - main
       - master
     paths:
-      - 'mobile-expo/**'
+      - 'mobile-expo/src/**'
+      - 'mobile-expo/app.json'
+      - 'mobile-expo/package.json'
+      - 'mobile-expo/eas.json'
   workflow_dispatch:
-    inputs:
-      force_rebuild:
-        description: 'Force rebuild from scratch'
-        required: false
-        default: 'false'
-        type: boolean
 
 jobs:
-  build-expo-ios-ipa:
-    name: Build Expo iOS IPA (Unsigned)
+  build-expo-ios:
+    name: Build Expo iOS IPA Unsigned
     runs-on: macos-latest
+    timeout-minutes: 45
+    
+    defaults:
+      run:
+        working-directory: ./mobile-expo
     
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -32,42 +34,46 @@ jobs:
           cache-dependency-path: mobile-expo/package-lock.json
 
       - name: Install dependencies
-        working-directory: ./mobile-expo
         run: |
           npm ci
           echo "✅ Dependencies installed"
 
-      - name: Prebuild iOS với Expo
-        working-directory: ./mobile-expo
+      - name: Verify Expo project
+        run: |
+          echo "📱 Verifying Expo project..."
+          if [ ! -f "app.json" ]; then
+            echo "❌ app.json not found!"
+            exit 1
+          fi
+          if ! grep -q '"expo"' app.json; then
+            echo "❌ Not an Expo project!"
+            exit 1
+          fi
+          echo "✅ Expo project verified"
+
+      - name: Prebuild iOS project with Expo
         run: |
           echo "=========================================="
-          echo "📦 PREBUILD iOS PROJECT VỚI EXPO"
+          echo "📦 PREBUILD iOS WITH EXPO (NOT CAPACITOR)"
           echo "=========================================="
-          echo "⚠️ KHÔNG PHẢI CAPACITOR - ĐÂY LÀ EXPO!"
-          echo ""
           npx expo prebuild --platform ios --clean
-          echo ""
           echo "✅ Expo prebuild completed"
-          echo "✅ iOS project được tạo trong ios/"
 
       - name: Install CocoaPods
-        working-directory: ./mobile-expo/ios
+        working-directory: ./ios
         run: |
           echo "📦 Installing CocoaPods..."
           sudo gem install cocoapods
           pod install --repo-update
           echo "✅ CocoaPods installed"
 
-      - name: Tìm workspace và scheme
-        working-directory: ./mobile-expo
-        id: ios-config
+      - name: Find iOS workspace and scheme
+        id: ios-info
         run: |
-          echo "🔍 Tìm iOS workspace..."
           WORKSPACE=$(find ios -name "*.xcworkspace" -type d | head -1)
           if [ -z "$WORKSPACE" ]; then
-            echo "❌ Không tìm thấy .xcworkspace"
-            echo "📁 Danh sách trong ios/:"
-            ls -la ios/ | head -20
+            echo "❌ No .xcworkspace found"
+            ls -la ios/
             exit 1
           fi
           SCHEME=$(basename "$WORKSPACE" .xcworkspace)
@@ -76,23 +82,21 @@ jobs:
           echo "✅ Workspace: $WORKSPACE"
           echo "✅ Scheme: $SCHEME"
 
-      - name: Build Archive (Unsigned)
-        working-directory: ./mobile-expo
+      - name: Build archive (Unsigned)
         run: |
           echo "🔨 Building archive (unsigned)..."
           mkdir -p build
-          xcodebuild -workspace "${{ steps.ios-config.outputs.workspace }}" \
-            -scheme "${{ steps.ios-config.outputs.scheme }}" \
+          xcodebuild -workspace "${{ steps.ios-info.outputs.workspace }}" \
+            -scheme "${{ steps.ios-info.outputs.scheme }}" \
             -configuration Release \
             -archivePath build/App.xcarchive \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            archive
+            archive || exit 1
           echo "✅ Archive created"
 
-      - name: Tạo exportOptions.plist
-        working-directory: ./mobile-expo
+      - name: Create exportOptions.plist
         run: |
           mkdir -p ios
           cat > ios/exportOptions.plist << 'EOF'
@@ -109,50 +113,42 @@ jobs:
 </dict>
 </plist>
 EOF
-          echo "✅ exportOptions.plist created"
 
       - name: Export IPA (Unsigned)
-        working-directory: ./mobile-expo
         run: |
           echo "📦 Exporting IPA..."
           mkdir -p build/ipa
           xcodebuild -exportArchive \
             -archivePath build/App.xcarchive \
             -exportPath build/ipa \
-            -exportOptionsPlist ios/exportOptions.plist
+            -exportOptionsPlist ios/exportOptions.plist || exit 1
           echo "✅ IPA exported"
 
-      - name: Verify IPA
-        working-directory: ./mobile-expo
+      - name: Verify IPA file
         run: |
           IPA=$(find build/ipa -name "*.ipa" | head -1)
           if [ -z "$IPA" ]; then
-            echo "❌ IPA file không tìm thấy!"
+            echo "❌ IPA file not found!"
+            ls -la build/ipa/
             exit 1
           fi
-          echo "✅ IPA file: $IPA"
+          echo "✅ IPA: $IPA"
           ls -lh "$IPA"
-          echo "✅ File size: $(du -h "$IPA" | cut -f1)"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zyeamobile-expo-ipa-unsigned
+          name: expo-ios-ipa-unsigned
           path: mobile-expo/build/ipa/*.ipa
           retention-days: 90
-          if-no-files-found: error
 
-      - name: Build success message
+      - name: Success
         if: success()
         run: |
           echo ""
           echo "=========================================="
-          echo "  ✅ BUILD IPA THÀNH CÔNG!"
+          echo "  ✅ BUILD THÀNH CÔNG!"
           echo "=========================================="
-          echo ""
           echo "📱 IPA unsigned đã sẵn sàng"
-          echo "💾 Tải về: Actions > Artifacts > zyeamobile-expo-ipa-unsigned"
-          echo "🔐 Ký với Esign sau đó cài đặt lên iPhone"
-          echo ""
-          echo "=========================================="
-
+          echo "💾 Tải về: Actions > Artifacts"
+          echo "🔐 Ký với Esign và cài đặt lên iPhone"
