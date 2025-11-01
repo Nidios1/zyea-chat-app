@@ -25,8 +25,7 @@
         "autoIncrement": true,
         "buildConfiguration": "Release",
         "distribution": "internal",
-        "withoutCredentials": true,
-        "credentialsSource": "remote"
+        "withoutCredentials": true
       }
     },
     "production": {
