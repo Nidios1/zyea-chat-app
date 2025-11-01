@@ -103,51 +103,51 @@ jobs:
           echo "Building with workspace: $WORKSPACE"
           echo "Building with scheme: $SCHEME"
           
-          mkdir -p build
+          mkdir -p build-artifacts
           
-          # Build archive (unsigned)
-          echo "Step 1: Building archive..."
-          xcodebuild clean archive \
+          # Build app directly (no archive needed for unsigned)
+          echo "Step 1: Building app..."
+          xcodebuild clean build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
-            -archivePath build/App.xcarchive \
+            -sdk iphoneos \
+            -derivedDataPath build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             -allowProvisioningUpdates
           
-          echo "Archive created. Checking archive..."
-          ls -la build/App.xcarchive/ || echo "Archive not found"
+          echo "Build completed. Finding .app bundle..."
           
-          # Export IPA (unsigned)
-          echo "Step 2: Exporting IPA..."
-          xcodebuild -exportArchive \
-            -archivePath build/App.xcarchive \
-            -exportOptionsPlist exportOptions.plist \
-            -exportPath build \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+          # Find the .app bundle
+          APP_BUNDLE=$(find build -name "*.app" -type d | grep -i "$SCHEME\|App" | head -1)
           
-          echo "Export completed. Searching for IPA files..."
-          echo "Contents of build directory:"
-          ls -la build/ || echo "Build directory empty"
+          if [ -z "$APP_BUNDLE" ]; then
+            APP_BUNDLE=$(find build -name "*.app" -type d | head -1)
+          fi
           
-          echo "Searching recursively for IPA files:"
-          find . -name "*.ipa" -type f 2>/dev/null || echo "No IPA files found"
-          
-          # Copy IPA to a known location
-          IPA_FILE=$(find . -name "*.ipa" -type f | head -1)
-          if [ -n "$IPA_FILE" ]; then
-            echo "Found IPA: $IPA_FILE"
-            mkdir -p build-artifacts
-            cp "$IPA_FILE" build-artifacts/app.ipa
-            echo "IPA copied to: build-artifacts/app.ipa"
-          else
-            echo "ERROR: No IPA file found!"
+          if [ -z "$APP_BUNDLE" ]; then
+            echo "ERROR: No .app bundle found!"
+            echo "Searching all .app files:"
+            find build -name "*.app" -type d
             exit 1
           fi
+          
+          echo "Found app bundle: $APP_BUNDLE"
+          
+          # Create Payload directory for IPA
+          echo "Step 2: Creating IPA package..."
+          mkdir -p build-artifacts/Payload
+          cp -R "$APP_BUNDLE" build-artifacts/Payload/
+          
+          # Create IPA by zipping Payload
+          cd build-artifacts
+          zip -r app.ipa Payload
+          cd ..
+          
+          echo "IPA created: build-artifacts/app.ipa"
+          ls -lh build-artifacts/app.ipa
 
       - name: Find and upload IPA
         uses: actions/upload-artifact@v4
