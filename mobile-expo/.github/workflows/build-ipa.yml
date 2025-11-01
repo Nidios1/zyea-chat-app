@@ -1,4 +1,4 @@
-name: Build iOS IPA (Expo Native)
+name: Build iOS IPA (Expo React Native)
 
 on:
   push:
@@ -6,22 +6,16 @@ on:
       - main
       - master
     paths:
-      - 'mobile-expo/src/**'
-      - 'mobile-expo/app.json'
-      - 'mobile-expo/package.json'
-  workflow_dispatch:  # Cho phép chạy thủ công từ GitHub UI
+      - 'mobile-expo/**'
+  workflow_dispatch:  # Cho phép chạy thủ công
 
 jobs:
-  build-ios:
-    name: Build iOS IPA với Expo + Xcode
-    runs-on: macos-latest  # Cần macOS để build iOS
-    
-    defaults:
-      run:
-        working-directory: ./mobile-expo
+  build-ios-ipa:
+    name: Build iOS IPA Unsigned
+    runs-on: macos-latest
     
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -32,125 +26,116 @@ jobs:
           cache-dependency-path: mobile-expo/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
-
-      - name: Setup Expo CLI
-        run: npm install -g expo-cli@latest
-
-      - name: Prebuild iOS native project (Expo)
+        working-directory: ./mobile-expo
         run: |
+          npm ci
+          echo "✅ Dependencies installed"
+
+      - name: Prebuild iOS project với Expo
+        working-directory: ./mobile-expo
+        run: |
+          echo "📦 Prebuild iOS native project với Expo..."
           npx expo prebuild --platform ios --clean
           echo "✅ Expo prebuild completed"
 
-      - name: Install CocoaPods
+      - name: Install CocoaPods dependencies
+        working-directory: ./mobile-expo/ios
         run: |
+          echo "📦 Installing CocoaPods..."
           sudo gem install cocoapods
-          cd ios
-          pod install --repo-update
-          cd ..
+          pod install
           echo "✅ CocoaPods installed"
 
-      - name: Check iOS project structure
+      - name: Find iOS workspace và scheme
+        working-directory: ./mobile-expo
+        id: ios-config
         run: |
-          ls -la ios/
-          if [ -f "ios/zyeamobile.xcworkspace" ]; then
-            echo "✅ Found zyeamobile.xcworkspace"
-          elif [ -f "ios/*.xcworkspace" ]; then
-            WORKSPACE=$(find ios -name "*.xcworkspace" | head -1)
-            echo "✅ Found workspace: $WORKSPACE"
-          else
-            echo "❌ No workspace found. Listing iOS directory:"
-            find ios -maxdepth 2 -type f -name "*.xcworkspace" -o -name "*.xcodeproj"
+          # Tìm workspace
+          WORKSPACE=$(find ios -name "*.xcworkspace" -type d | head -1)
+          if [ -z "$WORKSPACE" ]; then
+            echo "❌ Không tìm thấy .xcworkspace"
+            exit 1
           fi
+          
+          # Tên scheme thường là tên thư mục workspace
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          
+          echo "workspace=$WORKSPACE" >> $GITHUB_OUTPUT
+          echo "scheme=$SCHEME" >> $GITHUB_OUTPUT
+          echo "✅ Found workspace: $WORKSPACE"
+          echo "✅ Found scheme: $SCHEME"
 
-      - name: Build IPA với xcodebuild
+      - name: Build Archive (Unsigned)
+        working-directory: ./mobile-expo
         run: |
-          # Tìm workspace hoặc project
-          if [ -d "ios/zyeamobile.xcworkspace" ]; then
-            WORKSPACE="ios/zyeamobile.xcworkspace"
-            SCHEME="zyeamobile"
-          else
-            # Tìm workspace đầu tiên
-            WORKSPACE=$(find ios -name "*.xcworkspace" -type d | head -1)
-            SCHEME=$(basename "$WORKSPACE" .xcworkspace)
-          fi
-          
-          echo "Using workspace: $WORKSPACE"
-          echo "Using scheme: $SCHEME"
-          
           mkdir -p build
-          xcodebuild -workspace "$WORKSPACE" \
-            -scheme "$SCHEME" \
+          xcodebuild -workspace "${{ steps.ios-config.outputs.workspace }}" \
+            -scheme "${{ steps.ios-config.outputs.scheme }}" \
             -configuration Release \
-            -archivePath build/zyeamobile.xcarchive \
+            -archivePath build/App.xcarchive \
             -allowProvisioningUpdates \
-            archive \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO || true
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+          echo "✅ Archive created"
 
-      - name: Create exportOptions.plist if missing
+      - name: Create exportOptions.plist
+        working-directory: ./mobile-expo
         run: |
-          if [ ! -f "ios/exportOptions.plist" ]; then
-            mkdir -p ios
-            cat > ios/exportOptions.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>development</string>
-              <key>signingStyle</key>
-              <string>manual</string>
-              <key>stripSwiftSymbols</key>
-              <true/>
-          </dict>
-          </plist>
-          EOF
-            echo "✅ Created exportOptions.plist"
-          fi
+          mkdir -p ios
+          cat > ios/exportOptions.plist << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>development</string>
+    <key>signingStyle</key>
+    <string>manual</string>
+    <key>stripSwiftSymbols</key>
+    <true/>
+</dict>
+</plist>
+EOF
+          echo "✅ exportOptions.plist created"
 
       - name: Export IPA (Unsigned)
-        if: success() || failure()
+        working-directory: ./mobile-expo
         run: |
           mkdir -p build/ipa
-          if [ -d "build/zyeamobile.xcarchive" ]; then
-            xcodebuild -exportArchive \
-              -archivePath build/zyeamobile.xcarchive \
-              -exportPath build/ipa \
-              -exportOptionsPlist ios/exportOptions.plist \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO || echo "⚠️ Export failed but continuing"
-          else
-            echo "⚠️ Archive not found, skipping export"
-          fi
+          xcodebuild -exportArchive \
+            -archivePath build/App.xcarchive \
+            -exportPath build/ipa \
+            -exportOptionsPlist ios/exportOptions.plist
+          echo "✅ IPA exported"
 
-      - name: List build artifacts
-        if: always()
+      - name: Verify IPA file
+        working-directory: ./mobile-expo
         run: |
-          echo "Build directory contents:"
-          find build -type f 2>/dev/null || echo "No build directory"
-          echo ""
-          echo "IPA files:"
-          find build/ipa -name "*.ipa" 2>/dev/null || echo "No IPA files found"
+          IPA_FILE=$(find build/ipa -name "*.ipa" | head -1)
+          if [ -z "$IPA_FILE" ]; then
+            echo "❌ IPA file không tìm thấy!"
+            exit 1
+          fi
+          echo "✅ IPA file: $IPA_FILE"
+          ls -lh "$IPA_FILE"
 
       - name: Upload IPA artifact
-        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
-          name: zyeamobile-ipa
-          path: |
-            mobile-expo/build/ipa/*.ipa
-            mobile-expo/build/zyeamobile.xcarchive
-          if-no-files-found: warn
-          retention-days: 30
+          name: zyeamobile-ipa-unsigned
+          path: mobile-expo/build/ipa/*.ipa
+          retention-days: 90
+          if-no-files-found: error
 
-      - name: Build Status
-        if: always()
+      - name: Build summary
+        if: success()
         run: |
           echo "=========================================="
-          echo "  BUILD HOÀN TẤT"
+          echo "✅ BUILD IPA THÀNH CÔNG!"
           echo "=========================================="
-          echo "📱 Kiểm tra artifacts để tải IPA"
-          echo "💾 Tab 'Actions' > 'Artifacts'"
-
+          echo "📱 File IPA unsigned đã sẵn sàng"
+          echo "💾 Tải về từ tab 'Actions' > 'Artifacts'"
+          echo "🔐 Ký với Esign sau đó cài đặt lên iPhone"
+          echo "=========================================="
