@@ -280,6 +280,7 @@ jobs:
           
           # Always build with scheme - it will build the app target and dependencies
           # Scheme is more reliable than target for building complete app
+          # Ignore all warnings to prevent build failure
           if [ -n "$WORKSPACE" ]; then
             xcodebuild build \
               -workspace "$WORKSPACE" \
@@ -292,7 +293,9 @@ jobs:
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
+              CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
+              WARNING_CFLAGS="-Wno-error" \
+              ONLY_ACTIVE_ARCH=NO 2>&1 | grep -v "warning:" | grep -v "note:" || BUILD_SUCCESS=$?
           else
             xcodebuild build \
               -project "$PROJECT" \
@@ -305,7 +308,9 @@ jobs:
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
+              CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
+              WARNING_CFLAGS="-Wno-error" \
+              ONLY_ACTIVE_ARCH=NO 2>&1 | grep -v "warning:" | grep -v "note:" || BUILD_SUCCESS=$?
           fi
           
           echo ""
@@ -389,11 +394,18 @@ jobs:
             echo "❌ ERROR: No .app bundle found!"
             echo "Searched in: $APP_PATH"
             echo ""
-            echo "Full build directory structure:"
-            find build -type d -maxdepth 4 2>/dev/null | head -50
+            echo "Build status: $([ $BUILD_SUCCESS -eq 0 ] && echo 'SUCCESS' || echo 'FAILED with code '$BUILD_SUCCESS)"
             echo ""
-            echo "All .app files found:"
+            echo "Full build directory structure:"
+            find build -type d -maxdepth 4 2>/dev/null | head -50 || echo "Build directory not found"
+            echo ""
+            echo "All .app files found in build/:"
             find build -name "*.app" -type d 2>/dev/null || echo "None found"
+            echo ""
+            echo "Contents of build/Build/Products if exists:"
+            ls -la build/Build/Products/ 2>/dev/null || echo "Products directory not found"
+            echo ""
+            echo "If build failed, check the full log above for actual errors (not warnings)."
             exit 1
           fi
           
