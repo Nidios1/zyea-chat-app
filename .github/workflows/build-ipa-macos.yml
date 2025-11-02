@@ -197,16 +197,21 @@ jobs:
           
           mkdir -p build-artifacts
           
-          # Determine build command based on workspace or project
+          # Get build settings to find the correct target
+          echo "Getting build settings for app target..."
           if [ -n "$WORKSPACE" ]; then
-            BUILD_CMD="xcodebuild clean build -workspace \"$WORKSPACE\" -scheme \"$SCHEME\""
-          else
-            BUILD_CMD="xcodebuild clean build -project \"$PROJECT\" -scheme \"$SCHEME\""
-          fi
-          
-          # Get build output path before building
-          echo "Getting build settings..."
-          if [ -n "$WORKSPACE" ]; then
+            # Get the PRODUCT_NAME for the scheme
+            PRODUCT_NAME=$(xcodebuild -showBuildSettings \
+              -workspace "$WORKSPACE" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -sdk iphoneos 2>/dev/null | \
+              grep "PRODUCT_NAME" | \
+              grep -v "Pods\|EX" | \
+              head -1 | \
+              sed 's/.*= *//' | \
+              xargs)
+              
             BUILT_PRODUCTS_DIR=$(xcodebuild -showBuildSettings \
               -workspace "$WORKSPACE" \
               -scheme "$SCHEME" \
@@ -218,6 +223,17 @@ jobs:
               sed 's/.*= *//' | \
               xargs)
           else
+            PRODUCT_NAME=$(xcodebuild -showBuildSettings \
+              -project "$PROJECT" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -sdk iphoneos 2>/dev/null | \
+              grep "PRODUCT_NAME" | \
+              grep -v "Pods\|EX" | \
+              head -1 | \
+              sed 's/.*= *//' | \
+              xargs)
+              
             BUILT_PRODUCTS_DIR=$(xcodebuild -showBuildSettings \
               -project "$PROJECT" \
               -scheme "$SCHEME" \
@@ -230,11 +246,28 @@ jobs:
               xargs)
           fi
           
+          echo "PRODUCT_NAME: $PRODUCT_NAME"
           echo "Expected build output: $BUILT_PRODUCTS_DIR"
+          
+          # Determine build command - use target if available, otherwise scheme
+          if [ -n "$WORKSPACE" ]; then
+            if [ -n "$TARGET" ]; then
+              BUILD_CMD="xcodebuild clean build -workspace \"$WORKSPACE\" -target \"$TARGET\""
+            else
+              BUILD_CMD="xcodebuild clean build -workspace \"$WORKSPACE\" -scheme \"$SCHEME\""
+            fi
+          else
+            if [ -n "$TARGET" ]; then
+              BUILD_CMD="xcodebuild clean build -project \"$PROJECT\" -target \"$TARGET\""
+            else
+              BUILD_CMD="xcodebuild clean build -project \"$PROJECT\" -scheme \"$SCHEME\""
+            fi
+          fi
           
           # Build app directly (no archive needed for unsigned)
           echo "Step 1: Building app..."
           echo "Build command: $BUILD_CMD"
+          echo "This should create: $PRODUCT_NAME.app"
           
           eval $BUILD_CMD \
             -configuration Release \
@@ -280,16 +313,32 @@ jobs:
               echo "Contents of Release-iphoneos:"
               ls -la build/Build/Products/Release-iphoneos/
               echo ""
-              # Look for app with scheme name
-              APP_BUNDLE=$(find build/Build/Products/Release-iphoneos -name "$SCHEME.app" -type d 2>/dev/null | head -1)
+              
+              # Try PRODUCT_NAME first
+              if [ -n "$PRODUCT_NAME" ] && [ -d "build/Build/Products/Release-iphoneos/$PRODUCT_NAME.app" ]; then
+                APP_BUNDLE="build/Build/Products/Release-iphoneos/$PRODUCT_NAME.app"
+                echo "Found app using PRODUCT_NAME: $APP_BUNDLE"
+              fi
+              
+              # Try scheme name
+              if [ -z "$APP_BUNDLE" ]; then
+                APP_BUNDLE=$(find build/Build/Products/Release-iphoneos -name "$SCHEME.app" -type d 2>/dev/null | head -1)
+              fi
+              
+              # Try target name
+              if [ -z "$APP_BUNDLE" ] && [ -n "$TARGET" ]; then
+                APP_BUNDLE=$(find build/Build/Products/Release-iphoneos -name "$TARGET.app" -type d 2>/dev/null | head -1)
+              fi
+              
               # If not found, look for any .app (but exclude frameworks)
               if [ -z "$APP_BUNDLE" ]; then
-                echo "Searching for any .app bundle..."
+                echo "Searching for any .app bundle with Info.plist..."
                 for item in build/Build/Products/Release-iphoneos/*; do
                   if [ -d "$item" ] && [[ "$item" == *.app ]]; then
-                    # Check if it's actually an app bundle (has Info.plist)
-                    if [ -f "$item/Info.plist" ]; then
+                    # Check if it's actually an app bundle (has Info.plist and executable)
+                    if [ -f "$item/Info.plist" ] && [ -f "$item/$(basename "$item" .app)" ]; then
                       APP_BUNDLE="$item"
+                      echo "Found valid app bundle: $APP_BUNDLE"
                       break
                     fi
                   fi
