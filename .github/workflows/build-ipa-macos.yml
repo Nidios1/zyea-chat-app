@@ -234,6 +234,8 @@ jobs:
           
           # Build app directly (no archive needed for unsigned)
           echo "Step 1: Building app..."
+          echo "Build command: $BUILD_CMD"
+          
           eval $BUILD_CMD \
             -configuration Release \
             -sdk iphoneos \
@@ -243,7 +245,19 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             -allowProvisioningUpdates
           
-          echo "Build completed!"
+          echo ""
+          echo "Build completed! Checking build output..."
+          
+          # List what was built
+          echo "Checking build/Build/Products/Release-iphoneos:"
+          if [ -d "build/Build/Products/Release-iphoneos" ]; then
+            ls -la build/Build/Products/Release-iphoneos/
+            echo ""
+            echo "Looking for .app bundles:"
+            find build/Build/Products/Release-iphoneos -name "*.app" -type d
+          else
+            echo "Products directory not found!"
+          fi
           
           # Find the .app bundle - comprehensive search
           echo "Step 2: Searching for .app bundle..."
@@ -258,15 +272,29 @@ jobs:
               head -1)
           fi
           
-          # Method 2: Look in build/Build/Products (filter main app)
+          # Method 2: Look in build/Build/Products/Release-iphoneos specifically
           if [ -z "$APP_BUNDLE" ]; then
-            echo "Checking build/Build/Products..."
-            # Look for app with scheme name or common app names
-            APP_BUNDLE=$(find build/Build/Products -name "$SCHEME.app" -type d 2>/dev/null | head -1)
-            if [ -z "$APP_BUNDLE" ]; then
-              APP_BUNDLE=$(find build/Build/Products -name "*.app" -type d 2>/dev/null | \
-                grep -v "Pods\|\.framework\|EX\|Test" | \
-                head -1)
+            echo "Checking build/Build/Products/Release-iphoneos..."
+            if [ -d "build/Build/Products/Release-iphoneos" ]; then
+              # List all files first
+              echo "Contents of Release-iphoneos:"
+              ls -la build/Build/Products/Release-iphoneos/
+              echo ""
+              # Look for app with scheme name
+              APP_BUNDLE=$(find build/Build/Products/Release-iphoneos -name "$SCHEME.app" -type d 2>/dev/null | head -1)
+              # If not found, look for any .app (but exclude frameworks)
+              if [ -z "$APP_BUNDLE" ]; then
+                echo "Searching for any .app bundle..."
+                for item in build/Build/Products/Release-iphoneos/*; do
+                  if [ -d "$item" ] && [[ "$item" == *.app ]]; then
+                    # Check if it's actually an app bundle (has Info.plist)
+                    if [ -f "$item/Info.plist" ]; then
+                      APP_BUNDLE="$item"
+                      break
+                    fi
+                  fi
+                done
+              fi
             fi
           fi
           
