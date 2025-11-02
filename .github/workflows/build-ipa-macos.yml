@@ -258,47 +258,55 @@ jobs:
           # Build using archive command (creates .app even without signing)
           # Specify architecture explicitly to avoid undefined_arch error
           # Ignore warnings to prevent build failure
+          
+          echo "Archive command will use:"
+          echo "  Workspace/Project: $([ -n "$WORKSPACE" ] && echo "$WORKSPACE" || echo "$PROJECT")"
+          echo "  Scheme: $SCHEME"
+          echo "  Archive path: $ARCHIVE_PATH"
+          echo "  App bundle will be at: $ARCHIVE_PATH/Products/Applications/"
+          
+          # Execute archive command
           if [ -n "$WORKSPACE" ]; then
-            ARCHIVE_CMD="xcodebuild clean archive \
-              -workspace \"$WORKSPACE\" \
-              -scheme \"$SCHEME\" \
+            xcodebuild clean archive \
+              -workspace "$WORKSPACE" \
+              -scheme "$SCHEME" \
               -configuration Release \
               -sdk iphoneos \
               -arch arm64 \
-              -archivePath \"$ARCHIVE_PATH\" \
+              -archivePath "$ARCHIVE_PATH" \
               -derivedDataPath ./build \
-              CODE_SIGN_IDENTITY=\"\" \
+              CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
               -allowProvisioningUpdates \
               SKIP_INSTALL=NO \
-              ONLY_ACTIVE_ARCH=NO 2>&1 | tee build.log || (cat build.log && exit 1)"
+              ONLY_ACTIVE_ARCH=NO || {
+                echo "❌ Build failed! Check logs above."
+                exit 1
+              }
           else
-            ARCHIVE_CMD="xcodebuild clean archive \
-              -project \"$PROJECT\" \
-              -scheme \"$SCHEME\" \
+            xcodebuild clean archive \
+              -project "$PROJECT" \
+              -scheme "$SCHEME" \
               -configuration Release \
               -sdk iphoneos \
               -arch arm64 \
-              -archivePath \"$ARCHIVE_PATH\" \
+              -archivePath "$ARCHIVE_PATH" \
               -derivedDataPath ./build \
-              CODE_SIGN_IDENTITY=\"\" \
+              CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
               -allowProvisioningUpdates \
               SKIP_INSTALL=NO \
-              ONLY_ACTIVE_ARCH=NO 2>&1 | tee build.log || (cat build.log && exit 1)"
+              ONLY_ACTIVE_ARCH=NO || {
+                echo "❌ Build failed! Check logs above."
+                exit 1
+              }
           fi
-          
-          echo "Archive command: $ARCHIVE_CMD"
-          echo "This will create archive at: $ARCHIVE_PATH"
-          echo "App bundle will be at: $ARCHIVE_PATH/Products/Applications/"
-          
-          eval $ARCHIVE_CMD
           
           echo ""
           echo "Archive completed! Checking archive contents..."
