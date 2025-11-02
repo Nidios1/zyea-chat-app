@@ -223,36 +223,70 @@ jobs:
           
           echo "PRODUCT_NAME: $PRODUCT_NAME"
           
-          # Build the app
+          # Build the app - use target if available to ensure app bundle is built
           echo ""
           echo "🔨 Building app..."
           BUILD_SUCCESS=0
-          if [ -n "$WORKSPACE" ]; then
-            xcodebuild build \
-              -workspace "$WORKSPACE" \
-              -scheme "$SCHEME" \
-              -configuration Release \
-              -sdk iphoneos \
-              -arch arm64 \
-              -derivedDataPath ./build \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGNING_ALLOWED=NO \
-              GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
+          
+          # Build with target if available (more reliable for app bundle)
+          if [ -n "$TARGET" ]; then
+            echo "Building with target: $TARGET"
+            if [ -n "$WORKSPACE" ]; then
+              xcodebuild build \
+                -workspace "$WORKSPACE" \
+                -target "$TARGET" \
+                -configuration Release \
+                -sdk iphoneos \
+                -arch arm64 \
+                -derivedDataPath ./build \
+                CODE_SIGN_IDENTITY="" \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGNING_ALLOWED=NO \
+                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+                ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
+            else
+              xcodebuild build \
+                -project "$PROJECT" \
+                -target "$TARGET" \
+                -configuration Release \
+                -sdk iphoneos \
+                -arch arm64 \
+                -derivedDataPath ./build \
+                CODE_SIGN_IDENTITY="" \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGNING_ALLOWED=NO \
+                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+                ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
+            fi
           else
-            xcodebuild build \
-              -project "$PROJECT" \
-              -scheme "$SCHEME" \
-              -configuration Release \
-              -sdk iphoneos \
-              -arch arm64 \
-              -derivedDataPath ./build \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGNING_ALLOWED=NO \
-              GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
+            echo "Building with scheme: $SCHEME"
+            if [ -n "$WORKSPACE" ]; then
+              xcodebuild build \
+                -workspace "$WORKSPACE" \
+                -scheme "$SCHEME" \
+                -configuration Release \
+                -sdk iphoneos \
+                -arch arm64 \
+                -derivedDataPath ./build \
+                CODE_SIGN_IDENTITY="" \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGNING_ALLOWED=NO \
+                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+                ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
+            else
+              xcodebuild build \
+                -project "$PROJECT" \
+                -scheme "$SCHEME" \
+                -configuration Release \
+                -sdk iphoneos \
+                -arch arm64 \
+                -derivedDataPath ./build \
+                CODE_SIGN_IDENTITY="" \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGNING_ALLOWED=NO \
+                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+                ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
+            fi
           fi
           
           echo ""
