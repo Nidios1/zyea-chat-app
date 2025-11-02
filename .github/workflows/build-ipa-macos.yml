@@ -190,35 +190,22 @@ jobs:
           SCHEME="${{ steps.list_schemes.outputs.scheme_name }}"
           TARGET="${{ steps.list_schemes.outputs.target_name }}"
           
-          echo "Building with scheme: $SCHEME"
+          echo "📦 Building with scheme: $SCHEME"
           if [ -n "$TARGET" ]; then
-            echo "Building with target: $TARGET"
+            echo "Target: $TARGET"
           fi
           
           mkdir -p build-artifacts
           
-          # Get build settings to find the correct target
-          echo "Getting build settings for app target..."
+          # Get PRODUCT_NAME to know what .app file will be created
+          echo "Getting build settings..."
           if [ -n "$WORKSPACE" ]; then
-            # Get the PRODUCT_NAME for the scheme
             PRODUCT_NAME=$(xcodebuild -showBuildSettings \
               -workspace "$WORKSPACE" \
               -scheme "$SCHEME" \
               -configuration Release \
               -sdk iphoneos 2>/dev/null | \
-              grep "PRODUCT_NAME" | \
-              grep -v "Pods\|EX" | \
-              head -1 | \
-              sed 's/.*= *//' | \
-              xargs)
-              
-            BUILT_PRODUCTS_DIR=$(xcodebuild -showBuildSettings \
-              -workspace "$WORKSPACE" \
-              -scheme "$SCHEME" \
-              -configuration Release \
-              -sdk iphoneos 2>/dev/null | \
-              grep "BUILT_PRODUCTS_DIR" | \
-              grep -v "Pods\|EX" | \
+              grep "^\s*PRODUCT_NAME\s*=" | \
               head -1 | \
               sed 's/.*= *//' | \
               xargs)
@@ -228,179 +215,116 @@ jobs:
               -scheme "$SCHEME" \
               -configuration Release \
               -sdk iphoneos 2>/dev/null | \
-              grep "PRODUCT_NAME" | \
-              grep -v "Pods\|EX" | \
-              head -1 | \
-              sed 's/.*= *//' | \
-              xargs)
-              
-            BUILT_PRODUCTS_DIR=$(xcodebuild -showBuildSettings \
-              -project "$PROJECT" \
-              -scheme "$SCHEME" \
-              -configuration Release \
-              -sdk iphoneos 2>/dev/null | \
-              grep "BUILT_PRODUCTS_DIR" | \
-              grep -v "Pods\|EX" | \
+              grep "^\s*PRODUCT_NAME\s*=" | \
               head -1 | \
               sed 's/.*= *//' | \
               xargs)
           fi
           
           echo "PRODUCT_NAME: $PRODUCT_NAME"
-          echo "Expected build output: $BUILT_PRODUCTS_DIR"
           
-          # Use archive to build app bundle (even without signing, archive creates .app)
-          ARCHIVE_PATH="./build/archive.xcarchive"
-          mkdir -p $(dirname "$ARCHIVE_PATH")
-          
-          echo "Step 1: Building and archiving app..."
-          
-          # Build using archive command (creates .app even without signing)
-          # Specify architecture explicitly to avoid undefined_arch error
-          # Ignore warnings to prevent build failure
-          
-          echo "Archive command will use:"
-          echo "  Workspace/Project: $([ -n "$WORKSPACE" ] && echo "$WORKSPACE" || echo "$PROJECT")"
-          echo "  Scheme: $SCHEME"
-          echo "  Archive path: $ARCHIVE_PATH"
-          echo "  App bundle will be at: $ARCHIVE_PATH/Products/Applications/"
-          
-          # Execute archive command
+          # Build the app
+          echo ""
+          echo "🔨 Building app..."
           if [ -n "$WORKSPACE" ]; then
-            xcodebuild clean archive \
+            xcodebuild build \
               -workspace "$WORKSPACE" \
               -scheme "$SCHEME" \
               -configuration Release \
               -sdk iphoneos \
               -arch arm64 \
-              -archivePath "$ARCHIVE_PATH" \
               -derivedDataPath ./build \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
-              -allowProvisioningUpdates \
-              SKIP_INSTALL=NO \
-              ONLY_ACTIVE_ARCH=NO || {
-                echo "❌ Build failed! Check logs above."
-                exit 1
-              }
+              ONLY_ACTIVE_ARCH=NO
           else
-            xcodebuild clean archive \
+            xcodebuild build \
               -project "$PROJECT" \
               -scheme "$SCHEME" \
               -configuration Release \
               -sdk iphoneos \
               -arch arm64 \
-              -archivePath "$ARCHIVE_PATH" \
               -derivedDataPath ./build \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
-              -allowProvisioningUpdates \
-              SKIP_INSTALL=NO \
-              ONLY_ACTIVE_ARCH=NO || {
-                echo "❌ Build failed! Check logs above."
-                exit 1
-              }
+              ONLY_ACTIVE_ARCH=NO
           fi
           
           echo ""
-          echo "Archive completed! Checking archive contents..."
+          echo "✅ Build completed! Looking for .app bundle..."
           
-          # Find .app bundle in archive (standard location)
-          echo "Step 2: Looking for .app bundle in archive..."
-          
+          # Find the .app bundle
           APP_BUNDLE=""
+          APP_PATH="build/Build/Products/Release-iphoneos"
           
-          # Method 1: Check archive Products/Applications (standard archive location)
-          if [ -d "$ARCHIVE_PATH/Products/Applications" ]; then
-            echo "Checking archive Products/Applications:"
-            ls -la "$ARCHIVE_PATH/Products/Applications/"
-            APP_BUNDLE=$(find "$ARCHIVE_PATH/Products/Applications" -name "*.app" -type d | head -1)
+          # Try PRODUCT_NAME first
+          if [ -n "$PRODUCT_NAME" ] && [ -d "$APP_PATH/$PRODUCT_NAME.app" ]; then
+            APP_BUNDLE="$APP_PATH/$PRODUCT_NAME.app"
+            echo "✅ Found: $APP_BUNDLE"
+          fi
+          
+          # Try scheme name
+          if [ -z "$APP_BUNDLE" ] && [ -d "$APP_PATH/$SCHEME.app" ]; then
+            APP_BUNDLE="$APP_PATH/$SCHEME.app"
+            echo "✅ Found: $APP_BUNDLE"
+          fi
+          
+          # Try any .app with Info.plist (not a framework)
+          if [ -z "$APP_BUNDLE" ] && [ -d "$APP_PATH" ]; then
+            for item in "$APP_PATH"/*.app; do
+              if [ -d "$item" ] && [ -f "$item/Info.plist" ] && [ -f "$item/$(basename "$item" .app)" ]; then
+                # Check it's not a framework (frameworks don't have executable in root)
+                APP_BUNDLE="$item"
+                echo "✅ Found: $APP_BUNDLE"
+                break
+              fi
+            done
+          fi
+          
+          # Final check - search recursively
+          if [ -z "$APP_BUNDLE" ]; then
+            echo "Searching recursively in build directory..."
+            APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | \
+              grep -v "\.framework" | \
+              grep -v "Pods" | \
+              head -1)
             if [ -n "$APP_BUNDLE" ]; then
-              echo "✅ Found app in archive: $APP_BUNDLE"
+              echo "✅ Found: $APP_BUNDLE"
             fi
           fi
-          
-          # Method 2: Check build/Build/Products/Release-iphoneos (fallback)
-          if [ -z "$APP_BUNDLE" ] && [ -d "build/Build/Products/Release-iphoneos" ]; then
-            echo "Checking build/Build/Products/Release-iphoneos:"
-            ls -la build/Build/Products/Release-iphoneos/
-            
-            # Try PRODUCT_NAME first
-            if [ -n "$PRODUCT_NAME" ] && [ -d "build/Build/Products/Release-iphoneos/$PRODUCT_NAME.app" ]; then
-              APP_BUNDLE="build/Build/Products/Release-iphoneos/$PRODUCT_NAME.app"
-              echo "✅ Found app using PRODUCT_NAME: $APP_BUNDLE"
-            fi
-            
-            # Try scheme name
-            if [ -z "$APP_BUNDLE" ]; then
-              APP_BUNDLE=$(find build/Build/Products/Release-iphoneos -name "$SCHEME.app" -type d 2>/dev/null | head -1)
-            fi
-            
-            # Try any .app with Info.plist
-            if [ -z "$APP_BUNDLE" ]; then
-              for item in build/Build/Products/Release-iphoneos/*; do
-                if [ -d "$item" ] && [[ "$item" == *.app ]] && [ -f "$item/Info.plist" ]; then
-                  APP_BUNDLE="$item"
-                  echo "✅ Found valid app bundle: $APP_BUNDLE"
-                  break
-                fi
-              done
-            fi
-          fi
-          
-          # Debug output
-          echo ""
-          echo "=== DEBUG INFO ==="
-          echo "Archive path: $ARCHIVE_PATH"
-          if [ -d "$ARCHIVE_PATH" ]; then
-            echo "Archive structure:"
-            find "$ARCHIVE_PATH" -type d -maxdepth 3 2>/dev/null | head -20
-            echo ""
-            echo "All .app files in archive:"
-            find "$ARCHIVE_PATH" -name "*.app" -type d 2>/dev/null || echo "No .app in archive"
-          fi
-          
-          if [ -d "build/Build/Products" ]; then
-            echo ""
-            echo "Build Products structure:"
-            find build/Build/Products -type d -maxdepth 2 2>/dev/null | head -20
-          fi
-          echo "=================="
-          echo ""
           
           if [ -z "$APP_BUNDLE" ] || [ ! -d "$APP_BUNDLE" ]; then
+            echo ""
             echo "❌ ERROR: No .app bundle found!"
-            echo "Tried searching in:"
-            echo "  - $BUILT_PRODUCTS_DIR"
-            echo "  - build/Build/Products"
-            echo "  - build/ (recursive)"
-            echo "  - ./ (recursive)"
+            echo "Searched in: $APP_PATH"
+            echo "Listing contents:"
+            ls -la "$APP_PATH" 2>/dev/null || echo "Directory not found"
             exit 1
           fi
           
-          echo "✅ Found app bundle: $APP_BUNDLE"
-          ls -la "$APP_BUNDLE" | head -5
-          
-          # Create Payload directory for IPA
           echo ""
-          echo "Step 3: Creating IPA package..."
+          echo "📱 App bundle found: $APP_BUNDLE"
+          echo "Size: $(du -sh "$APP_BUNDLE" | cut -f1)"
+          
+          # Create IPA
+          echo ""
+          echo "📦 Creating IPA..."
           mkdir -p build-artifacts/Payload
           cp -R "$APP_BUNDLE" build-artifacts/Payload/
           
-          # Create IPA by zipping Payload
           cd build-artifacts
-          zip -r app.ipa Payload
+          zip -r -q app.ipa Payload
           cd ..
           
           echo ""
           echo "✅ IPA created successfully!"
           ls -lh build-artifacts/app.ipa
+          echo ""
+          echo "📍 IPA location: build-artifacts/app.ipa"
 
       - name: Find and upload IPA
         uses: actions/upload-artifact@v4
