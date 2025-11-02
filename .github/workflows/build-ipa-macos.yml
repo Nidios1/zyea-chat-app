@@ -226,6 +226,7 @@ jobs:
           # Build the app
           echo ""
           echo "🔨 Building app..."
+          BUILD_SUCCESS=0
           if [ -n "$WORKSPACE" ]; then
             xcodebuild build \
               -workspace "$WORKSPACE" \
@@ -238,7 +239,7 @@ jobs:
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              ONLY_ACTIVE_ARCH=NO
+              ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
           else
             xcodebuild build \
               -project "$PROJECT" \
@@ -251,49 +252,82 @@ jobs:
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              ONLY_ACTIVE_ARCH=NO
+              ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
           fi
           
           echo ""
-          echo "✅ Build completed! Looking for .app bundle..."
+          if [ $BUILD_SUCCESS -ne 0 ]; then
+            echo "⚠️  Build command exited with code $BUILD_SUCCESS"
+            echo "Checking if .app bundle was still created..."
+          else
+            echo "✅ Build completed! Looking for .app bundle..."
+          fi
           
           # Find the .app bundle
           APP_BUNDLE=""
           APP_PATH="build/Build/Products/Release-iphoneos"
           
-          # Try PRODUCT_NAME first
-          if [ -n "$PRODUCT_NAME" ] && [ -d "$APP_PATH/$PRODUCT_NAME.app" ]; then
-            APP_BUNDLE="$APP_PATH/$PRODUCT_NAME.app"
-            echo "✅ Found: $APP_BUNDLE"
+          echo "Checking if build directory exists..."
+          if [ ! -d "build" ]; then
+            echo "❌ ERROR: Build directory not found!"
+            exit 1
           fi
           
-          # Try scheme name
-          if [ -z "$APP_BUNDLE" ] && [ -d "$APP_PATH/$SCHEME.app" ]; then
-            APP_BUNDLE="$APP_PATH/$SCHEME.app"
-            echo "✅ Found: $APP_BUNDLE"
+          echo "Checking Products directory: $APP_PATH"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "⚠️  $APP_PATH not found, searching for alternative locations..."
+            # Try to find Products directory
+            ALTERNATIVE_PATH=$(find build -type d -name "Release-iphoneos" 2>/dev/null | head -1)
+            if [ -n "$ALTERNATIVE_PATH" ]; then
+              APP_PATH="$ALTERNATIVE_PATH"
+              echo "Using alternative path: $APP_PATH"
+            fi
           fi
           
-          # Try any .app with Info.plist (not a framework)
-          if [ -z "$APP_BUNDLE" ] && [ -d "$APP_PATH" ]; then
-            for item in "$APP_PATH"/*.app; do
-              if [ -d "$item" ] && [ -f "$item/Info.plist" ] && [ -f "$item/$(basename "$item" .app)" ]; then
-                # Check it's not a framework (frameworks don't have executable in root)
-                APP_BUNDLE="$item"
-                echo "✅ Found: $APP_BUNDLE"
-                break
-              fi
-            done
+          if [ -d "$APP_PATH" ]; then
+            echo "Contents of $APP_PATH:"
+            ls -la "$APP_PATH" | head -20
+            
+            # Try PRODUCT_NAME first
+            if [ -n "$PRODUCT_NAME" ] && [ -d "$APP_PATH/$PRODUCT_NAME.app" ]; then
+              APP_BUNDLE="$APP_PATH/$PRODUCT_NAME.app"
+              echo "✅ Found using PRODUCT_NAME: $APP_BUNDLE"
+            fi
+            
+            # Try scheme name
+            if [ -z "$APP_BUNDLE" ] && [ -d "$APP_PATH/$SCHEME.app" ]; then
+              APP_BUNDLE="$APP_PATH/$SCHEME.app"
+              echo "✅ Found using SCHEME: $APP_BUNDLE"
+            fi
+            
+            # Try any .app with Info.plist (not a framework)
+            if [ -z "$APP_BUNDLE" ]; then
+              echo "Searching for any .app bundle..."
+              for item in "$APP_PATH"/*.app; do
+                if [ -d "$item" ] && [ -f "$item/Info.plist" ]; then
+                  # Check it has an executable (app bundles have executable, frameworks don't in root)
+                  EXECUTABLE_NAME=$(basename "$item" .app)
+                  if [ -f "$item/$EXECUTABLE_NAME" ] || [ -L "$item/$EXECUTABLE_NAME" ]; then
+                    APP_BUNDLE="$item"
+                    echo "✅ Found app bundle: $APP_BUNDLE"
+                    break
+                  fi
+                fi
+              done
+            fi
           fi
           
-          # Final check - search recursively
+          # Final check - search recursively in build
           if [ -z "$APP_BUNDLE" ]; then
+            echo ""
             echo "Searching recursively in build directory..."
             APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | \
               grep -v "\.framework" | \
               grep -v "Pods" | \
+              grep -v "\.app/" | \
               head -1)
             if [ -n "$APP_BUNDLE" ]; then
-              echo "✅ Found: $APP_BUNDLE"
+              echo "✅ Found recursively: $APP_BUNDLE"
             fi
           fi
           
@@ -301,8 +335,12 @@ jobs:
             echo ""
             echo "❌ ERROR: No .app bundle found!"
             echo "Searched in: $APP_PATH"
-            echo "Listing contents:"
-            ls -la "$APP_PATH" 2>/dev/null || echo "Directory not found"
+            echo ""
+            echo "Full build directory structure:"
+            find build -type d -maxdepth 4 2>/dev/null | head -50
+            echo ""
+            echo "All .app files found:"
+            find build -name "*.app" -type d 2>/dev/null || echo "None found"
             exit 1
           fi
           
