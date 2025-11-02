@@ -91,18 +91,21 @@ jobs:
           echo "Available schemes:"
           eval $LIST_CMD
           
-          # Find main app scheme (not Pods, not frameworks)
+          # Find main app scheme (not Pods, not Expo, not frameworks)
           if [ -n "$WORKSPACE" ]; then
             SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | \
               grep -A 100 "Schemes:" | \
               grep -v "Schemes:" | \
               grep -v "Pods" | \
-              grep -v "EX" | \
+              grep -v "^Expo$" | \
+              grep -v "^EX" | \
+              grep -v "Test" | \
               head -1 | \
               xargs || \
               xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | \
               grep -A 100 "Schemes:" | \
               grep -v "Schemes:" | \
+              grep -v "Pods" | \
               head -1 | \
               xargs)
           else
@@ -110,12 +113,15 @@ jobs:
               grep -A 100 "Schemes:" | \
               grep -v "Schemes:" | \
               grep -v "Pods" | \
-              grep -v "EX" | \
+              grep -v "^Expo$" | \
+              grep -v "^EX" | \
+              grep -v "Test" | \
               head -1 | \
               xargs || \
               xcodebuild -list -project "$PROJECT" 2>/dev/null | \
               grep -A 100 "Schemes:" | \
               grep -v "Schemes:" | \
+              grep -v "Pods" | \
               head -1 | \
               xargs)
           fi
@@ -127,25 +133,58 @@ jobs:
           echo "Using scheme: $SCHEME"
           echo "scheme_name=$SCHEME" >> $GITHUB_OUTPUT
           
-          # Also get the target name for building
-          TARGET=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | \
-            grep -A 100 "Targets:" | \
-            grep -v "Targets:" | \
-            grep -v "Pods" | \
-            grep -v "EX" | \
-            head -1 | \
-            xargs || \
-            echo "")
-          
-          if [ -z "$TARGET" ] && [ -n "$PROJECT" ]; then
-            TARGET=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | \
-              grep -A 100 "Targets:" | \
-              grep -v "Targets:" | \
-              grep -v "Pods" | \
-              grep -v "EX" | \
+          # Get target name - exclude Expo, Pods, frameworks
+          # Try to get target from the selected scheme
+          if [ -n "$WORKSPACE" ]; then
+            TARGET=$(xcodebuild -showBuildSettings \
+              -workspace "$WORKSPACE" \
+              -scheme "$SCHEME" \
+              -configuration Release 2>/dev/null | \
+              grep "TARGET_NAME" | \
               head -1 | \
+              sed 's/.*= *//' | \
               xargs || \
               echo "")
+            
+            # If not found, try listing targets and filter
+            if [ -z "$TARGET" ]; then
+              TARGET=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | \
+                grep -A 200 "Targets:" | \
+                grep -v "Targets:" | \
+                grep -v "Pods" | \
+                grep -v "^Expo$" | \
+                grep -v "^EX" | \
+                grep -v "Test" | \
+                grep -v "Framework" | \
+                head -1 | \
+                xargs || \
+                echo "")
+            fi
+          else
+            TARGET=$(xcodebuild -showBuildSettings \
+              -project "$PROJECT" \
+              -scheme "$SCHEME" \
+              -configuration Release 2>/dev/null | \
+              grep "TARGET_NAME" | \
+              head -1 | \
+              sed 's/.*= *//' | \
+              xargs || \
+              echo "")
+            
+            # If not found, try listing targets and filter
+            if [ -z "$TARGET" ]; then
+              TARGET=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | \
+                grep -A 200 "Targets:" | \
+                grep -v "Targets:" | \
+                grep -v "Pods" | \
+                grep -v "^Expo$" | \
+                grep -v "^EX" | \
+                grep -v "Test" | \
+                grep -v "Framework" | \
+                head -1 | \
+                xargs || \
+                echo "")
+            fi
           fi
           
           echo "Main target: $TARGET"
@@ -223,70 +262,50 @@ jobs:
           
           echo "PRODUCT_NAME: $PRODUCT_NAME"
           
-          # Build the app - use target if available to ensure app bundle is built
+          # Build the app - always use scheme (it builds all dependencies + app)
+          # But verify TARGET is not "Expo" first
+          if [ "$TARGET" = "Expo" ]; then
+            echo "⚠️  Warning: Target is 'Expo', this is likely a framework. Building with scheme instead."
+            TARGET=""
+          fi
+          
           echo ""
           echo "🔨 Building app..."
+          echo "Scheme: $SCHEME"
+          if [ -n "$TARGET" ]; then
+            echo "Target: $TARGET"
+          fi
+          
           BUILD_SUCCESS=0
           
-          # Build with target if available (more reliable for app bundle)
-          if [ -n "$TARGET" ]; then
-            echo "Building with target: $TARGET"
-            if [ -n "$WORKSPACE" ]; then
-              xcodebuild build \
-                -workspace "$WORKSPACE" \
-                -target "$TARGET" \
-                -configuration Release \
-                -sdk iphoneos \
-                -arch arm64 \
-                -derivedDataPath ./build \
-                CODE_SIGN_IDENTITY="" \
-                CODE_SIGNING_REQUIRED=NO \
-                CODE_SIGNING_ALLOWED=NO \
-                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-                ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
-            else
-              xcodebuild build \
-                -project "$PROJECT" \
-                -target "$TARGET" \
-                -configuration Release \
-                -sdk iphoneos \
-                -arch arm64 \
-                -derivedDataPath ./build \
-                CODE_SIGN_IDENTITY="" \
-                CODE_SIGNING_REQUIRED=NO \
-                CODE_SIGNING_ALLOWED=NO \
-                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-                ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
-            fi
+          # Always build with scheme - it will build the app target and dependencies
+          # Scheme is more reliable than target for building complete app
+          if [ -n "$WORKSPACE" ]; then
+            xcodebuild build \
+              -workspace "$WORKSPACE" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -sdk iphoneos \
+              -arch arm64 \
+              -derivedDataPath ./build \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+              ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
           else
-            echo "Building with scheme: $SCHEME"
-            if [ -n "$WORKSPACE" ]; then
-              xcodebuild build \
-                -workspace "$WORKSPACE" \
-                -scheme "$SCHEME" \
-                -configuration Release \
-                -sdk iphoneos \
-                -arch arm64 \
-                -derivedDataPath ./build \
-                CODE_SIGN_IDENTITY="" \
-                CODE_SIGNING_REQUIRED=NO \
-                CODE_SIGNING_ALLOWED=NO \
-                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-                ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
-            else
-              xcodebuild build \
-                -project "$PROJECT" \
-                -scheme "$SCHEME" \
-                -configuration Release \
-                -sdk iphoneos \
-                -arch arm64 \
-                -derivedDataPath ./build \
-                CODE_SIGN_IDENTITY="" \
-                CODE_SIGNING_REQUIRED=NO \
-                CODE_SIGNING_ALLOWED=NO \
-                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-                ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
-            fi
+            xcodebuild build \
+              -project "$PROJECT" \
+              -scheme "$SCHEME" \
+              -configuration Release \
+              -sdk iphoneos \
+              -arch arm64 \
+              -derivedDataPath ./build \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+              ONLY_ACTIVE_ARCH=NO || BUILD_SUCCESS=$?
           fi
           
           echo ""
