@@ -298,11 +298,19 @@ jobs:
           echo "=== DEBUG INFO ==="
           echo "Build directory exists: $(test -d build && echo 'YES' || echo 'NO')"
           if [ -d build ]; then
-            echo "Build directory contents:"
-            ls -la build/ | head -20
+            echo "Build directory structure:"
+            find build -type d -maxdepth 3 2>/dev/null | head -30
             echo ""
-            echo "Searching for .app recursively in build/:"
+            echo "All .app files found in build/:"
             find build -name "*.app" -type d 2>/dev/null || echo "No .app found in build/"
+            echo ""
+            echo "All files in build/Build/Products:"
+            if [ -d build/Build/Products ]; then
+              find build/Build/Products -type d -maxdepth 2 2>/dev/null || echo "Products directory not found"
+              echo ""
+              echo "Files in Products/Release-iphoneos:"
+              ls -la build/Build/Products/Release-iphoneos/ 2>/dev/null || echo "Release-iphoneos not found"
+            fi
           fi
           echo "=================="
           echo ""
