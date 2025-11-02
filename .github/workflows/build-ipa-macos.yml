@@ -256,32 +256,37 @@ jobs:
           echo "Step 1: Building and archiving app..."
           
           # Build using archive command (creates .app even without signing)
+          # Specify architecture explicitly to avoid undefined_arch error
           if [ -n "$WORKSPACE" ]; then
             ARCHIVE_CMD="xcodebuild clean archive \
               -workspace \"$WORKSPACE\" \
               -scheme \"$SCHEME\" \
               -configuration Release \
               -sdk iphoneos \
+              -arch arm64 \
               -archivePath \"$ARCHIVE_PATH\" \
               -derivedDataPath ./build \
               CODE_SIGN_IDENTITY=\"\" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               -allowProvisioningUpdates \
-              SKIP_INSTALL=NO"
+              SKIP_INSTALL=NO \
+              ONLY_ACTIVE_ARCH=NO"
           else
             ARCHIVE_CMD="xcodebuild clean archive \
               -project \"$PROJECT\" \
               -scheme \"$SCHEME\" \
               -configuration Release \
               -sdk iphoneos \
+              -arch arm64 \
               -archivePath \"$ARCHIVE_PATH\" \
               -derivedDataPath ./build \
               CODE_SIGN_IDENTITY=\"\" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               -allowProvisioningUpdates \
-              SKIP_INSTALL=NO"
+              SKIP_INSTALL=NO \
+              ONLY_ACTIVE_ARCH=NO"
           fi
           
           echo "Archive command: $ARCHIVE_CMD"
