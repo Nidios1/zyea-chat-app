@@ -11,6 +11,15 @@
       "resizeMode": "contain",
       "backgroundColor": "#0084ff"
     },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/fa5c683f-f9c5-459e-85a5-98f1856c4d2d",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "ios": {
       "bundleIdentifier": "com.zyea.mobile",
       "infoPlist": {

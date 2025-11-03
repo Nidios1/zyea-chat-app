@@ -13,6 +13,7 @@ import { TabBarProvider } from './contexts/TabBarContext';
 import AuthNavigator from './navigation/AuthNavigator';
 import MainNavigator from './navigation/MainNavigator';
 import SplashScreen from './components/Splash/SplashScreen';
+import { useUpdates } from './hooks/useUpdates';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,6 +38,9 @@ const PaperWrapper = ({ children }: { children: React.ReactNode }) => {
 
 const AppContent = () => {
   const { isAuthenticated, loading } = useAuth();
+  
+  // Check for live updates (chỉ chạy trong production build)
+  useUpdates();
 
   // Ensure loading and isAuthenticated are always boolean, not string
   const isLoading = Boolean(loading);
