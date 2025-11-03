@@ -181,141 +181,240 @@ jobs:
           # Find .app bundle
           echo ""
           echo "🔍 Searching for .app bundle..."
-          APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | \
+          
+          # First, try to get the exact path from build settings
+          echo "Getting build settings..."
+          if [ -n "$WORKSPACE" ]; then
+            BUILD_SETTINGS=$(xcodebuild -showBuildSettings -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -derivedDataPath ./build 2>/dev/null)
+          else
+            BUILD_SETTINGS=$(xcodebuild -showBuildSettings -project "$PROJECT" -target "$TARGET" -configuration Release -derivedDataPath ./build 2>/dev/null)
+          fi
+          
+          PRODUCT_NAME=$(echo "$BUILD_SETTINGS" | grep "PRODUCT_NAME" | head -1 | sed -n 's/.*PRODUCT_NAME = \(.*\)/\1/p' | xargs)
+          BUILT_PRODUCTS_DIR=$(echo "$BUILD_SETTINGS" | grep "BUILT_PRODUCTS_DIR" | head -1 | sed -n 's/.*BUILT_PRODUCTS_DIR = \(.*\)/\1/p' | xargs)
+          CONFIGURATION_BUILD_DIR=$(echo "$BUILD_SETTINGS" | grep "CONFIGURATION_BUILD_DIR" | head -1 | sed -n 's/.*CONFIGURATION_BUILD_DIR = \(.*\)/\1/p' | xargs)
+          
+          echo "Build settings:"
+          echo "  PRODUCT_NAME: $PRODUCT_NAME"
+          echo "  BUILT_PRODUCTS_DIR: $BUILT_PRODUCTS_DIR"
+          echo "  CONFIGURATION_BUILD_DIR: $CONFIGURATION_BUILD_DIR"
+          
+          # Try to find app bundle using build settings first
+          APP_FROM_SETTINGS=""
+          if [ -n "$BUILT_PRODUCTS_DIR" ] && [ -n "$PRODUCT_NAME" ]; then
+            APP_FROM_SETTINGS="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app"
+            if [ -d "$APP_FROM_SETTINGS" ]; then
+              echo "✅ Found app bundle from build settings: $APP_FROM_SETTINGS"
+            fi
+          fi
+          
+          if [ -z "$APP_FROM_SETTINGS" ] && [ -n "$CONFIGURATION_BUILD_DIR" ] && [ -n "$PRODUCT_NAME" ]; then
+            APP_FROM_SETTINGS="$CONFIGURATION_BUILD_DIR/$PRODUCT_NAME.app"
+            if [ -d "$APP_FROM_SETTINGS" ]; then
+              echo "✅ Found app bundle from CONFIGURATION_BUILD_DIR: $APP_FROM_SETTINGS"
+            fi
+          fi
+          
+          # Also search in build directory
+          echo ""
+          echo "Searching in build directory..."
+          APP_CANDIDATES=$(find build -name "*.app" -type d 2>/dev/null | \
             grep -v "\.framework" | \
             grep -v "Pods" | \
-            grep -v "\.app/" | \
-            head -1)
+            grep -v "\.app/")
           
-          if [ -z "$APP_BUNDLE" ] || [ ! -d "$APP_BUNDLE" ]; then
+          # Add app from settings to candidates if found
+          if [ -n "$APP_FROM_SETTINGS" ] && [ -d "$APP_FROM_SETTINGS" ]; then
+            APP_CANDIDATES="$APP_FROM_SETTINGS $APP_CANDIDATES"
+          fi
+          
+          if [ -z "$APP_CANDIDATES" ]; then
             echo "❌ ERROR: No .app bundle found!"
-            echo "Build directory structure:"
-            find build -type d -maxdepth 3 2>/dev/null | head -30
             echo ""
-            echo "All .app files:"
+            echo "Build directory structure:"
+            find build -type d -maxdepth 4 2>/dev/null | head -50
+            echo ""
+            echo "All .app files in build:"
             find build -name "*.app" -type d 2>/dev/null
+            echo ""
+            echo "Build log saved to: /tmp/xcodebuild.log"
             exit 1
           fi
           
-          echo "✅ Found .app bundle: $APP_BUNDLE"
-          
-          # Show .app bundle contents for debugging
-          echo "📋 .app bundle contents:"
-          ls -la "$APP_BUNDLE" | head -20
-          
-          # Validate .app bundle structure
+          echo "Found .app candidates:"
+          echo "$APP_CANDIDATES"
           echo ""
-          echo "📋 Validating .app bundle..."
           
-          # Check for Info.plist (có thể có tên khác)
-          INFO_PLIST=""
-          if [ -f "$APP_BUNDLE/Info.plist" ]; then
-            INFO_PLIST="$APP_BUNDLE/Info.plist"
-          elif [ -f "$APP_BUNDLE/Contents/Info.plist" ]; then
-            INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
-          else
-            # Tìm bất kỳ file .plist nào
-            PLIST_FILE=$(find "$APP_BUNDLE" -name "*.plist" -type f 2>/dev/null | head -1)
-            if [ -n "$PLIST_FILE" ]; then
-              INFO_PLIST="$PLIST_FILE"
-              echo "⚠️  Found plist at: $INFO_PLIST"
+          # Validate each candidate and find the real app bundle
+          APP_BUNDLE=""
+          for CANDIDATE in $APP_CANDIDATES; do
+            echo "Checking candidate: $CANDIDATE"
+            
+            # Check if it's a real app bundle (has files and structure)
+            FILE_COUNT=$(find "$CANDIDATE" -type f 2>/dev/null | wc -l | tr -d ' ')
+            BUNDLE_SIZE=$(du -sm "$CANDIDATE" 2>/dev/null | cut -f1 | tr -d ' ')
+            
+            echo "  Files: $FILE_COUNT, Size: ${BUNDLE_SIZE}MB"
+            
+            # Skip if empty
+            if [ "$FILE_COUNT" -eq 0 ] || [ "$BUNDLE_SIZE" -eq 0 ] 2>/dev/null; then
+              echo "  ⚠️  Skipping empty bundle"
+              continue
             fi
+            
+            # Check for executable or Info.plist
+            EXECUTABLE_NAME=$(basename "$CANDIDATE" .app)
+            HAS_EXECUTABLE=false
+            HAS_INFO_PLIST=false
+            
+            if [ -f "$CANDIDATE/$EXECUTABLE_NAME" ] || [ -L "$CANDIDATE/$EXECUTABLE_NAME" ]; then
+              HAS_EXECUTABLE=true
+            elif [ -n "$(find "$CANDIDATE" -type f -perm +111 2>/dev/null | grep -v ".framework" | head -1)" ]; then
+              HAS_EXECUTABLE=true
+            fi
+            
+            if [ -f "$CANDIDATE/Info.plist" ] || [ -f "$CANDIDATE/Contents/Info.plist" ]; then
+              HAS_INFO_PLIST=true
+            elif [ -n "$(find "$CANDIDATE" -name "*.plist" -type f 2>/dev/null | head -1)" ]; then
+              HAS_INFO_PLIST=true
+            fi
+            
+            # If it has reasonable size and files, it's likely the app bundle
+            if [ "$FILE_COUNT" -gt 10 ] && [ "$BUNDLE_SIZE" -gt 1 ] 2>/dev/null; then
+              APP_BUNDLE="$CANDIDATE"
+              echo "  ✅ Selected as app bundle (has $FILE_COUNT files, ${BUNDLE_SIZE}MB)"
+              break
+            elif [ "$HAS_EXECUTABLE" = true ] || [ "$HAS_INFO_PLIST" = true ]; then
+              APP_BUNDLE="$CANDIDATE"
+              echo "  ✅ Selected as app bundle (has executable or Info.plist)"
+              break
+            fi
+          done
+          
+          if [ -z "$APP_BUNDLE" ] || [ ! -d "$APP_BUNDLE" ]; then
+            echo "❌ ERROR: No valid .app bundle found!"
+            echo ""
+            echo "All .app candidates were empty or invalid."
+            echo ""
+            echo "Build log location: /tmp/xcodebuild.log"
+            echo "Check the build output for errors."
+            exit 1
           fi
           
-          if [ -z "$INFO_PLIST" ] || [ ! -f "$INFO_PLIST" ]; then
-            echo "❌ ERROR: Info.plist not found in .app bundle!"
-            echo ""
-            echo "Searching for all files in .app bundle:"
-            find "$APP_BUNDLE" -type f 2>/dev/null | head -20
-            echo ""
-            echo "Looking for .plist files:"
-            find "$APP_BUNDLE" -name "*.plist" -type f 2>/dev/null
-            echo ""
-            echo "If this is a valid .app bundle, continuing anyway..."
-            # Không exit, tiếp tục tạo IPA (có thể Info.plist được embed vào binary)
-          else
-            echo "✅ Found Info.plist: $INFO_PLIST"
-          fi
+          echo ""
+          echo "✅ Selected .app bundle: $APP_BUNDLE"
           
+          # Final validation
           EXECUTABLE_NAME=$(basename "$APP_BUNDLE" .app)
+          FILE_COUNT=$(find "$APP_BUNDLE" -type f 2>/dev/null | wc -l | tr -d ' ')
+          BUNDLE_SIZE=$(du -sh "$APP_BUNDLE" 2>/dev/null | cut -f1)
           
-          # Check executable
-          if [ -f "$APP_BUNDLE/$EXECUTABLE_NAME" ] || [ -L "$APP_BUNDLE/$EXECUTABLE_NAME" ]; then
-            echo "✅ Found executable: $APP_BUNDLE/$EXECUTABLE_NAME"
-          else
-            echo "⚠️  Warning: Executable not found at expected location"
-            # Tìm executable
-            EXECUTABLE=$(find "$APP_BUNDLE" -type f -perm +111 2>/dev/null | grep -v ".framework" | head -1)
-            if [ -n "$EXECUTABLE" ]; then
-              echo "   Found executable at: $EXECUTABLE"
-            fi
-          fi
-          
-          # Check if .app has minimum required files
-          FILE_COUNT=$(find "$APP_BUNDLE" -type f 2>/dev/null | wc -l)
-          if [ "$FILE_COUNT" -lt 5 ]; then
-            echo "⚠️  Warning: .app bundle seems incomplete (only $FILE_COUNT files)"
-          fi
-          
-          echo "✅ .app bundle validation complete"
-          echo "   Size: $(du -sh "$APP_BUNDLE" | cut -f1)"
+          echo "📋 Bundle details:"
+          echo "   Name: $EXECUTABLE_NAME"
           echo "   Files: $FILE_COUNT"
+          echo "   Size: $BUNDLE_SIZE"
+          
+          # Require minimum content
+          if [ "$FILE_COUNT" -lt 5 ]; then
+            echo "❌ ERROR: .app bundle is too small (only $FILE_COUNT files)!"
+            echo "This is likely not a valid app bundle."
+            exit 1
+          fi
           
           # Create IPA with proper structure
           echo ""
           echo "📦 Creating IPA..."
           rm -rf Payload 2>/dev/null
+          rm -f app.ipa 2>/dev/null
+          
+          # Create Payload directory
           mkdir -p Payload
           
-          # Copy .app bundle to Payload
-          echo "   Copying .app bundle..."
-          cp -R "$APP_BUNDLE" Payload/ || {
-            echo "❌ ERROR: Failed to copy .app bundle!"
-            exit 1
-          }
+          # Copy .app bundle to Payload with verbose output
+          echo "   Copying .app bundle to Payload..."
+          echo "   Source: $APP_BUNDLE"
+          echo "   Destination: Payload/$EXECUTABLE_NAME.app"
           
-          # Verify Payload structure
-          if [ ! -d "Payload/$EXECUTABLE_NAME.app" ]; then
-            echo "❌ ERROR: Payload structure invalid!"
-            ls -la Payload/
+          if ! cp -R "$APP_BUNDLE" "Payload/$EXECUTABLE_NAME.app"; then
+            echo "❌ ERROR: Failed to copy .app bundle!"
             exit 1
           fi
           
-          # Create IPA file
-          echo "   Zipping into IPA..."
-          rm -f app.ipa 2>/dev/null
-          cd Payload
-          zip -r -q ../app.ipa . || {
+          # Verify Payload structure before zipping
+          if [ ! -d "Payload/$EXECUTABLE_NAME.app" ]; then
+            echo "❌ ERROR: Payload structure invalid - .app not found after copy!"
+            echo "Payload contents:"
+            ls -la Payload/ || true
+            exit 1
+          fi
+          
+          # Verify the copied bundle has content
+          COPIED_FILE_COUNT=$(find "Payload/$EXECUTABLE_NAME.app" -type f 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$COPIED_FILE_COUNT" -eq 0 ]; then
+            echo "❌ ERROR: Copied .app bundle is empty!"
+            echo "This means the original bundle was empty or copy failed."
+            exit 1
+          fi
+          
+          echo "   Verified Payload structure: $COPIED_FILE_COUNT files"
+          
+          # Create IPA file (zip Payload directory into app.ipa)
+          echo "   Zipping Payload into IPA..."
+          if ! zip -r app.ipa Payload/; then
             echo "❌ ERROR: Failed to create IPA!"
             exit 1
-          }
-          cd ..
+          fi
           
-          # Verify IPA file
+          # Verify IPA file exists and has content
           if [ ! -f "app.ipa" ]; then
             echo "❌ ERROR: IPA file not created!"
             exit 1
           fi
           
-          IPA_SIZE=$(du -sh app.ipa | cut -f1)
-          echo "✅ IPA created successfully!"
+          IPA_SIZE=$(du -sh app.ipa 2>/dev/null | cut -f1)
+          IPA_SIZE_BYTES=$(stat -f%z app.ipa 2>/dev/null || stat -c%s app.ipa 2>/dev/null || echo "0")
+          
+          echo "✅ IPA file created!"
           echo "   File: app.ipa"
-          echo "   Size: $IPA_SIZE"
+          echo "   Size: $IPA_SIZE ($IPA_SIZE_BYTES bytes)"
+          
+          # Validate IPA size (should be > 1KB for a valid app)
+          if [ "$IPA_SIZE_BYTES" -lt 1024 ] 2>/dev/null; then
+            echo "⚠️  WARNING: IPA file seems too small ($IPA_SIZE_BYTES bytes)"
+          fi
           
           # Validate IPA structure (check if it's a valid zip)
           echo "   Validating IPA structure..."
           if ! unzip -t app.ipa > /dev/null 2>&1; then
-            echo "❌ ERROR: IPA file is corrupted!"
+            echo "❌ ERROR: IPA file is corrupted (not a valid zip)!"
             exit 1
           fi
           
           # Check if Payload directory exists in IPA
-          if ! unzip -l app.ipa | grep -q "Payload/"; then
+          echo "   Checking Payload directory in IPA..."
+          ZIP_LIST=$(unzip -l app.ipa 2>/dev/null)
+          if ! echo "$ZIP_LIST" | grep -q "Payload/"; then
             echo "❌ ERROR: IPA structure invalid - Payload directory not found!"
+            echo ""
+            echo "IPA contents:"
+            echo "$ZIP_LIST" | head -20
+            exit 1
+          fi
+          
+          # Check if .app is inside Payload
+          if ! echo "$ZIP_LIST" | grep -q "Payload/.*\.app"; then
+            echo "❌ ERROR: .app bundle not found inside Payload!"
+            echo ""
+            echo "IPA contents:"
+            echo "$ZIP_LIST" | head -30
             exit 1
           fi
           
           echo "✅ IPA structure is valid"
+          echo "   ✓ Valid zip file"
+          echo "   ✓ Contains Payload directory"
+          echo "   ✓ Contains .app bundle"
+          echo ""
           echo "ipa_path=app.ipa" >> $GITHUB_OUTPUT
 
       - name: Upload IPA artifact
