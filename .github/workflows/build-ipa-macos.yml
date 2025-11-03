@@ -317,6 +317,26 @@ jobs:
             exit 1
           fi
           
+          # Verify app target exists
+          echo ""
+          echo "🔍 Verifying app target exists..."
+          if [ -n "$WORKSPACE" ]; then
+            if ! xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -q "^[[:space:]]*$APP_TARGET[[:space:]]*$"; then
+              echo "❌ ERROR: Target '$APP_TARGET' not found in workspace!"
+              echo "Available targets:"
+              xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 200 "Targets:" || echo "Could not list targets"
+              exit 1
+            fi
+          else
+            if ! xcodebuild -list -project "$PROJECT" 2>/dev/null | grep -q "^[[:space:]]*$APP_TARGET[[:space:]]*$"; then
+              echo "❌ ERROR: Target '$APP_TARGET' not found in project!"
+              echo "Available targets:"
+              xcodebuild -list -project "$PROJECT" 2>/dev/null | grep -A 200 "Targets:" || echo "Could not list targets"
+              exit 1
+            fi
+          fi
+          echo "✅ Target '$APP_TARGET' exists"
+          
           echo ""
           echo "🔨 Building app target directly: $APP_TARGET"
           echo "(This will automatically build all dependencies)"
@@ -326,7 +346,7 @@ jobs:
           # Build app target directly - it will build dependencies automatically
           echo ""
           echo "Building..."
-          echo "Saving full build log for debugging..."
+          echo "Full build log will be saved to /tmp/xcodebuild.log"
           
           if [ -n "$WORKSPACE" ]; then
             # Build with target - Xcode will build dependencies automatically
@@ -367,14 +387,20 @@ jobs:
           if [ $BUILD_SUCCESS -eq 0 ]; then
             echo "✅ Build command completed successfully"
           else
-            echo "⚠️  Build command exited with code $BUILD_SUCCESS"
+            echo "❌ Build command exited with code $BUILD_SUCCESS"
             echo ""
-            echo "Checking for critical build errors..."
-            if grep -i "error:" /tmp/xcodebuild.log | grep -v "warning:" | head -20; then
+            echo "📋 Showing last 100 lines of build log:"
+            tail -100 /tmp/xcodebuild.log
+            echo ""
+            echo "🔍 Checking for critical build errors..."
+            ERRORS=$(grep -i "error:" /tmp/xcodebuild.log | grep -v "warning:" | head -30)
+            if [ -n "$ERRORS" ]; then
+              echo "Found build errors:"
+              echo "$ERRORS"
               echo ""
-              echo "Found build errors above. However, continuing to search for .app bundle..."
+              echo "⚠️  Build failed with errors above. Checking if .app bundle was still created..."
             else
-              echo "No critical errors found in log (warnings are expected and ignored)"
+              echo "No critical errors found in log (only warnings)"
             fi
           fi
           
@@ -544,16 +570,29 @@ jobs:
             echo ""
             echo "Build status: $([ $BUILD_SUCCESS -eq 0 ] && echo 'SUCCESS' || echo 'FAILED with code '$BUILD_SUCCESS)"
             echo ""
-            echo "Full build directory structure:"
+            echo "📁 Full build directory structure:"
             find build -type d -maxdepth 4 2>/dev/null | head -50 || echo "Build directory not found"
             echo ""
-            echo "All .app files found in build/:"
+            echo "📦 All .app files found in build/:"
             find build -name "*.app" -type d 2>/dev/null || echo "None found"
             echo ""
-            echo "Contents of build/Build/Products if exists:"
+            echo "📂 Contents of build/Build/Products if exists:"
             ls -la build/Build/Products/ 2>/dev/null || echo "Products directory not found"
             echo ""
-            echo "If build failed, check the full log above for actual errors (not warnings)."
+            echo "📋 Checking build log for clues (last 50 lines):"
+            tail -50 /tmp/xcodebuild.log 2>/dev/null || echo "Build log not available"
+            echo ""
+            echo "🔍 Summary:"
+            if [ $BUILD_SUCCESS -ne 0 ]; then
+              echo "  - Build failed with exit code $BUILD_SUCCESS"
+              echo "  - Check errors in build log above"
+            else
+              echo "  - Build succeeded but .app bundle not found"
+              echo "  - Possible causes:"
+              echo "    * App target name is incorrect"
+              echo "    * Products directory is in unexpected location"
+              echo "    * Build configuration issue"
+            fi
             exit 1
           fi
           
