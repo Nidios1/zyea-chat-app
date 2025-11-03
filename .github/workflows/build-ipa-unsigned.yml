@@ -115,11 +115,12 @@ jobs:
           echo "Scheme: $SCHEME"
           echo "Target: $TARGET"
           
-          # Build app target
+          # Build: use -scheme for workspace, -target for project
           if [ -n "$WORKSPACE" ]; then
+            echo "Building with workspace and scheme..."
             xcodebuild build \
               -workspace "$WORKSPACE" \
-              -target "$TARGET" \
+              -scheme "$SCHEME" \
               -configuration Release \
               -sdk iphoneos \
               -arch arm64 \
@@ -130,6 +131,7 @@ jobs:
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               ONLY_ACTIVE_ARCH=NO
           else
+            echo "Building with project and target..."
             xcodebuild build \
               -project "$PROJECT" \
               -target "$TARGET" \
