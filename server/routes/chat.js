@@ -10,7 +10,7 @@ router.get('/conversations', async (req, res) => {
 
     const [conversations] = await connection.execute(`
       SELECT DISTINCT c.id, c.name, c.type, c.updated_at,
-             u.id as other_user_id, u.username, u.full_name, u.avatar_url, u.status,
+             u.id as other_user_id, u.username, u.full_name, u.avatar_url, u.status, u.last_seen,
              m.content as last_message, m.created_at as last_message_time,
              COALESCE(unread.unread_count, 0) as unread_count
       FROM conversations c
@@ -143,8 +143,9 @@ router.get('/conversations/:id/messages', async (req, res) => {
     }
 
     // Get messages with read status, excluding messages deleted by this user
-    const [messages] = await connection.execute(`
+const [messages] = await connection.execute(`
       SELECT m.id, m.content, m.message_type, m.file_url, m.created_at, m.reactions,
+             m.edited_at, CASE WHEN m.edited_at IS NOT NULL THEN 1 ELSE 0 END as edited,
              u.id as sender_id, u.username, u.full_name, u.avatar_url,
              CASE 
                WHEN mrs.read_at IS NOT NULL THEN 'read'
@@ -754,14 +755,28 @@ router.put('/messages/:messageId', async (req, res) => {
       return res.status(403).json({ message: 'You can only edit your own messages' });
     }
 
-    // Update message content
+    // Update message content and set edited_at timestamp
     await connection.execute(
-      'UPDATE messages SET content = ? WHERE id = ?',
+      'UPDATE messages SET content = ?, edited_at = CURRENT_TIMESTAMP WHERE id = ?',
       [content, messageIdInt]
     );
 
+    // Get updated message to return with edited flag
+    const [updatedMessages] = await connection.execute(`
+      SELECT m.id, m.content, m.created_at, m.edited_at,
+             CASE WHEN m.edited_at IS NOT NULL THEN 1 ELSE 0 END as edited,
+             u.id as sender_id, u.username, u.full_name, u.avatar_url
+      FROM messages m
+      JOIN users u ON m.sender_id = u.id
+      WHERE m.id = ?
+    `, [messageIdInt]);
+
     console.log('Message updated successfully:', messageIdInt);
-    res.json({ success: true, message: 'Message updated successfully' });
+    res.json({ 
+      success: true, 
+      message: 'Message updated successfully',
+      data: updatedMessages[0]
+    });
   } catch (error) {
     console.error('Update message error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -772,6 +787,7 @@ router.put('/messages/:messageId', async (req, res) => {
 router.delete('/messages/:messageId', async (req, res) => {
   try {
     const { messageId } = req.params;
+    const { deleteForEveryone } = req.query; // Query parameter: ?deleteForEveryone=true
     const connection = getConnection();
 
     // Convert messageId to integer
@@ -781,7 +797,7 @@ router.delete('/messages/:messageId', async (req, res) => {
       return res.status(400).json({ message: 'Invalid message ID' });
     }
 
-    console.log('Delete message request:', { messageId: messageIdInt, userId: req.user.id });
+    console.log('Delete message request:', { messageId: messageIdInt, userId: req.user.id, deleteForEveryone });
 
     // Check if message exists and user is the sender
     const [messages] = await connection.execute(`
@@ -803,13 +819,47 @@ router.delete('/messages/:messageId', async (req, res) => {
       return res.status(403).json({ message: 'You can only delete your own messages' });
     }
 
-    // Soft delete - add to message_deletions table
-    await connection.execute(
-      'INSERT INTO message_deletions (message_id, user_id) VALUES (?, ?)',
-      [messageIdInt, req.user.id]
-    );
+    if (deleteForEveryone === 'true') {
+      // Delete for everyone - mark deleted for all participants in the conversation
+      const [participants] = await connection.execute(
+        'SELECT user_id FROM conversation_participants WHERE conversation_id = ?',
+        [message.conversation_id]
+      );
 
-    console.log('Message deleted successfully:', messageIdInt);
+      // Add deletion record for all participants
+      for (const participant of participants) {
+        try {
+          // Use INSERT IGNORE or check if exists first to avoid duplicate key errors
+          await connection.execute(
+            'INSERT IGNORE INTO message_deletions (message_id, user_id) VALUES (?, ?)',
+            [messageIdInt, participant.user_id]
+          );
+        } catch (err) {
+          // Log error but continue
+          console.error('Error deleting message for user:', participant.user_id, err.message);
+        }
+      }
+
+      console.log('Message deleted for everyone:', messageIdInt);
+    } else {
+      // Delete for me only - soft delete - add to message_deletions table
+      // Use INSERT IGNORE to avoid duplicate key errors if already deleted
+      try {
+        await connection.execute(
+          'INSERT IGNORE INTO message_deletions (message_id, user_id) VALUES (?, ?)',
+          [messageIdInt, req.user.id]
+        );
+        console.log('Message deleted for user only:', messageIdInt);
+      } catch (err) {
+        // If duplicate, message is already deleted, which is fine
+        if (err.message.includes('Duplicate entry')) {
+          console.log('Message already deleted for user:', req.user.id);
+        } else {
+          throw err;
+        }
+      }
+    }
+
     res.json({ success: true, message: 'Message deleted successfully' });
   } catch (error) {
     console.error('Delete message error:', error);

@@ -72,6 +72,8 @@ async function setupDatabase() {
         password VARCHAR(255) NOT NULL,
         full_name VARCHAR(100),
         avatar VARCHAR(255),
+        avatar_url VARCHAR(500) DEFAULT NULL,
+        cover_url VARCHAR(500) DEFAULT NULL,
         phone VARCHAR(20),
         status ENUM('online', 'offline', 'away', 'recently_active') DEFAULT 'offline',
         last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -80,7 +80,7 @@ router.get('/posts', async (req, res) => {
       LIMIT 50
     `, [userId, userId, userId, userId, userId]);
 
-    // Get comments for each post
+    // Get comments for each post and parse images
     for (let post of posts) {
       const [comments] = await getConnection().execute(`
         SELECT 
@@ -96,6 +96,30 @@ router.get('/posts', async (req, res) => {
       `, [post.id]);
       
       post.comments = comments;
+      
+      // Parse images from image_url
+      if (post.image_url) {
+        try {
+          // Try to parse as JSON (for multiple images)
+          const parsed = JSON.parse(post.image_url);
+          if (Array.isArray(parsed)) {
+            post.images = parsed;
+            post.image_url = parsed[0]; // Keep first image for backward compatibility
+          } else {
+            post.images = [post.image_url];
+          }
+        } catch (e) {
+          // Not JSON, treat as single image
+          post.images = [post.image_url];
+        }
+      } else {
+        post.images = [];
+      }
+
+      // Add videoUrl to response (using video_url from database)
+      if (post.video_url) {
+        post.videoUrl = post.video_url;
+      }
     }
 
     res.json(posts);
@@ -106,25 +130,67 @@ router.get('/posts', async (req, res) => {
 });
 
 // Create a new post
-router.post('/posts', upload.single('image'), async (req, res) => {
+router.post('/posts', async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { content, privacy = 'public' } = req.body;
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
     
-    console.log('Creating post:', { userId, content, privacy, file: req.file });
+    const userId = req.user.id;
+    const { content, images, videoUrl, privacy = 'public' } = req.body;
+    
+    console.log('Creating post:', { userId, content, privacy, images, videoUrl });
     console.log('Request body:', req.body);
     
+    // Handle images - can be array or single string
     let imageUrl = null;
-    if (req.file) {
-      imageUrl = `uploads/posts/${req.file.filename}`;
-      console.log('Image uploaded:', imageUrl);
+    if (images && Array.isArray(images) && images.length > 0) {
+      // If multiple images, store as JSON string
+      if (images.length === 1) {
+        imageUrl = images[0];
+      } else {
+        imageUrl = JSON.stringify(images);
+      }
+    } else if (images && typeof images === 'string') {
+      imageUrl = images;
     }
 
+    // Handle videoUrl
+    let video_url = videoUrl || null;
+
     console.log('Executing INSERT query...');
-    const [result] = await getConnection().execute(`
-      INSERT INTO posts (user_id, content, image_url, privacy)
-      VALUES (?, ?, ?, ?)
-    `, [userId, content || '', imageUrl, privacy]);
+    // Try to insert with video_url, fallback to old schema if column doesn't exist
+    let result;
+    try {
+      [result] = await getConnection().execute(`
+        INSERT INTO posts (user_id, content, image_url, video_url, privacy)
+        VALUES (?, ?, ?, ?, ?)
+      `, [userId, content || '', imageUrl, video_url, privacy]);
+    } catch (error) {
+      // If video_url column doesn't exist, try without it
+      if (error.code === 'ER_BAD_FIELD_ERROR' && error.sqlMessage.includes('video_url')) {
+        console.warn('video_url column not found, attempting to add it...');
+        try {
+          await getConnection().execute(`
+            ALTER TABLE posts ADD COLUMN video_url VARCHAR(500) DEFAULT NULL
+          `);
+          // Retry insert with video_url
+          [result] = await getConnection().execute(`
+            INSERT INTO posts (user_id, content, image_url, video_url, privacy)
+            VALUES (?, ?, ?, ?, ?)
+          `, [userId, content || '', imageUrl, video_url, privacy]);
+        } catch (alterError) {
+          console.error('Failed to add video_url column:', alterError);
+          // Fallback to insert without video_url
+          [result] = await getConnection().execute(`
+            INSERT INTO posts (user_id, content, image_url, privacy)
+            VALUES (?, ?, ?, ?)
+          `, [userId, content || '', imageUrl, privacy]);
+        }
+      } else {
+        throw error;
+      }
+    }
 
     console.log('Post created with ID:', result.insertId);
 
@@ -142,11 +208,38 @@ router.post('/posts', upload.single('image'), async (req, res) => {
       WHERE p.id = ?
     `, [result.insertId]);
 
-    console.log('Retrieved post:', posts[0]);
-    res.status(201).json(posts[0]);
+    const post = posts[0];
+    
+    // Parse images from image_url
+    if (post.image_url) {
+      try {
+        const parsed = JSON.parse(post.image_url);
+        if (Array.isArray(parsed)) {
+          post.images = parsed;
+        } else {
+          post.images = [post.image_url];
+        }
+      } catch (e) {
+        post.images = [post.image_url];
+      }
+    } else {
+      post.images = [];
+    }
+
+    // Add videoUrl to response
+    if (post.video_url) {
+      post.videoUrl = post.video_url;
+    }
+
+    console.log('Retrieved post:', post);
+    res.status(201).json(post);
   } catch (error) {
     console.error('Error creating post:', error);
-    res.status(500).json({ message: 'Server error: ' + error.message });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Server error: ' + (error.message || 'Unknown error'),
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 

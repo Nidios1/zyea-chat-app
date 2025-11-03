@@ -131,7 +131,7 @@ jobs:
               exit 1
             fi
             
-            sleep 30
+              sleep 30
           done
           
           if [ "$STATUS" != "finished" ]; then

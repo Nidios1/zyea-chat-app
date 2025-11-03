@@ -102,6 +102,21 @@ const createTables = async () => {
       console.log('Could not add reactions column (may already exist):', e.message);
     }
 
+    // Add edited_at column if it doesn't exist (for tracking edited messages)
+    try {
+      const [editedColumns] = await connection.execute(`
+        SHOW COLUMNS FROM messages LIKE 'edited_at'
+      `);
+      if (editedColumns.length === 0) {
+        await connection.execute(`
+          ALTER TABLE messages ADD COLUMN edited_at TIMESTAMP NULL DEFAULT NULL
+        `);
+        console.log('Added edited_at column to messages table');
+      }
+    } catch (e) {
+      console.log('Could not add edited_at column (may already exist):', e.message);
+    }
+
     // Friends table (first definition - will be removed later)
 
     // Message read status table

@@ -24,7 +24,7 @@ const CURRENT_VERSION = getStoredVersion();
 export const checkForUpdates = async () => {
   try {
     // Live Update hoạt động cả PWA và Native App
-    const response = await fetch('http://192.168.0.102:5000/api/app/version');
+    const response = await fetch('http://192.168.0.104:5000/api/app/version');
     const data = await response.json();
     
     const { version, updateUrl, changeLog, mandatory } = data;

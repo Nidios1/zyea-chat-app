@@ -136,7 +136,7 @@ app.use('/api/test-newsfeed', newsfeedRoutes); // Test route without auth
 app.use('/api/friends', authenticateToken, friendsRoutes);
 app.use('/api/notifications', authenticateToken, notificationRoutes);
 app.use('/api/app', appRoutes); // Live update endpoints
-app.use('/api', uploadRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // ✅ Tối ưu: Tạo helper function để tránh lặp code get connection
 const { getConnection } = require('./config/database');
@@ -200,11 +200,25 @@ const notifyFriendsStatusChange = async (socket, userId, status) => {
       WHERE f.friend_id = ? AND f.status = 'accepted'
     `, [userId]);
     
+    // Get last_seen from database before notifying
+    let lastSeenValue = new Date();
+    try {
+      const [users] = await connection.execute(
+        'SELECT last_seen FROM users WHERE id = ?',
+        [userId]
+      );
+      if (users.length > 0 && users[0].last_seen) {
+        lastSeenValue = users[0].last_seen;
+      }
+    } catch (error) {
+      console.error('❌ Error getting last_seen:', error);
+    }
+    
     // Prepare status change data
     const statusData = {
       userId: userId,
       status: status,
-      lastSeen: new Date()
+      lastSeen: lastSeenValue // Use actual last_seen from database
     };
     
     // Emit status change to all friends
@@ -301,60 +315,84 @@ io.on('connection', (socket) => {
   // ✅ Tối ưu: Xóa duplicate typing handler - handler đầy đủ hơn ở dưới (line 340)
 
   // Handle message edited
-  socket.on('messageEdited', (data) => {
+  socket.on('messageEdited', async (data) => {
     console.log('Received messageEdited:', data);
     const { messageId, content, conversationId } = data;
     
-    // Get conversation participants
-    const connection = getConnection();
-    connection.query(
-      'SELECT user_id FROM conversation_participants WHERE conversation_id = ?',
-      [conversationId],
-      (err, results) => {
-        if (err) {
-          console.error('Error getting conversation participants:', err);
-          return;
-        }
-        
-        // Emit to all participants in this conversation
-        results.forEach(participant => {
-          io.to(participant.user_id).emit('messageEdited', {
-            messageId,
-            content,
-            conversationId
-          });
-          console.log('Sent messageEdited to user:', participant.user_id);
+    try {
+      // Get conversation participants
+      const connection = getConnection();
+      const [participants] = await connection.execute(
+        'SELECT user_id FROM conversation_participants WHERE conversation_id = ?',
+        [conversationId]
+      );
+      
+      // Emit to all participants in this conversation
+      participants.forEach((participant) => {
+        io.to(participant.user_id.toString()).emit('messageEdited', {
+          messageId,
+          content,
+          conversationId
         });
-      }
-    );
+        console.log('Sent messageEdited to user:', participant.user_id);
+      });
+    } catch (err) {
+      console.error('Error getting conversation participants:', err);
+    }
   });
 
   // Handle message deleted
-  socket.on('messageDeleted', (data) => {
+  socket.on('messageDeleted', async (data) => {
     console.log('Received messageDeleted:', data);
     const { messageId, conversationId } = data;
     
-    // Get conversation participants
-    const connection = getConnection();
-    connection.query(
-      'SELECT user_id FROM conversation_participants WHERE conversation_id = ?',
-      [conversationId],
-      (err, results) => {
-        if (err) {
-          console.error('Error getting conversation participants:', err);
-          return;
-        }
-        
-        // Emit to all participants in this conversation
-        results.forEach(participant => {
-          io.to(participant.user_id).emit('messageDeleted', {
-            messageId,
-            conversationId
-          });
-          console.log('Sent messageDeleted to user:', participant.user_id);
+    try {
+      // Get conversation participants
+      const connection = getConnection();
+      const [participants] = await connection.execute(
+        'SELECT user_id FROM conversation_participants WHERE conversation_id = ?',
+        [conversationId]
+      );
+      
+      // Emit to all participants in this conversation
+      participants.forEach((participant) => {
+        io.to(participant.user_id.toString()).emit('messageDeleted', {
+          messageId,
+          conversationId
         });
-      }
-    );
+        console.log('Sent messageDeleted to user:', participant.user_id);
+      });
+    } catch (err) {
+      console.error('Error getting conversation participants:', err);
+    }
+  });
+
+  // Handle reaction updates
+  socket.on('reactionUpdate', async (data) => {
+    console.log('Received reactionUpdate:', data);
+    const { messageId, reactions, conversationId, userId } = data;
+    
+    try {
+      // Get conversation participants
+      const connection = getConnection();
+      const [participants] = await connection.execute(
+        'SELECT user_id FROM conversation_participants WHERE conversation_id = ?',
+        [conversationId]
+      );
+      
+      // Emit to all participants in this conversation
+      participants.forEach((participant) => {
+        io.to(participant.user_id.toString()).emit('reactionUpdate', {
+          messageId,
+          reactions,
+          conversationId,
+          userId
+        });
+        console.log('Sent reactionUpdate to user:', participant.user_id);
+      });
+    } catch (err) {
+      console.error('Error getting conversation participants:', err);
+    }
   });
 
   // Handle user viewing conversation (read receipts)

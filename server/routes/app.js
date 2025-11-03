@@ -16,7 +16,7 @@ router.get('/version', async (req, res) => {
     // Ở đây tôi hardcode, bạn có thể lưu vào database
     const versionInfo = {
       version: APP_VERSION,
-      updateUrl: 'http://192.168.0.102:5000/api/app/download/latest',
+      updateUrl: 'http://192.168.0.104:5000/api/app/download/latest',
       changeLog: `
 • Fix Critical: Xóa hoàn toàn nút test "v1.1.x LIVE" khỏi màn hình
 • Clean: UI sạch sẽ, không còn phần debug
