@@ -179,26 +179,96 @@ jobs:
           fi
           
           # Find .app bundle
+          echo ""
+          echo "🔍 Searching for .app bundle..."
           APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | \
             grep -v "\.framework" | \
             grep -v "Pods" | \
+            grep -v "\.app/" | \
             head -1)
           
           if [ -z "$APP_BUNDLE" ] || [ ! -d "$APP_BUNDLE" ]; then
             echo "❌ ERROR: No .app bundle found!"
             echo "Build directory structure:"
-            find build -type d -maxdepth 3 2>/dev/null | head -20
+            find build -type d -maxdepth 3 2>/dev/null | head -30
+            echo ""
+            echo "All .app files:"
+            find build -name "*.app" -type d 2>/dev/null
             exit 1
           fi
           
           echo "✅ Found .app bundle: $APP_BUNDLE"
           
-          # Create IPA
-          mkdir -p Payload
-          cp -R "$APP_BUNDLE" Payload/
-          zip -r -q app.ipa Payload
+          # Validate .app bundle structure
+          echo "📋 Validating .app bundle..."
+          if [ ! -f "$APP_BUNDLE/Info.plist" ]; then
+            echo "❌ ERROR: Info.plist not found in .app bundle!"
+            exit 1
+          fi
           
-          echo "✅ IPA created: app.ipa"
+          EXECUTABLE_NAME=$(basename "$APP_BUNDLE" .app)
+          if [ ! -f "$APP_BUNDLE/$EXECUTABLE_NAME" ] && [ ! -L "$APP_BUNDLE/$EXECUTABLE_NAME" ]; then
+            echo "⚠️  Warning: Executable not found, but continuing..."
+          fi
+          
+          echo "✅ .app bundle is valid"
+          echo "   Size: $(du -sh "$APP_BUNDLE" | cut -f1)"
+          
+          # Create IPA with proper structure
+          echo ""
+          echo "📦 Creating IPA..."
+          rm -rf Payload 2>/dev/null
+          mkdir -p Payload
+          
+          # Copy .app bundle to Payload
+          echo "   Copying .app bundle..."
+          cp -R "$APP_BUNDLE" Payload/ || {
+            echo "❌ ERROR: Failed to copy .app bundle!"
+            exit 1
+          }
+          
+          # Verify Payload structure
+          if [ ! -d "Payload/$EXECUTABLE_NAME.app" ]; then
+            echo "❌ ERROR: Payload structure invalid!"
+            ls -la Payload/
+            exit 1
+          fi
+          
+          # Create IPA file
+          echo "   Zipping into IPA..."
+          rm -f app.ipa 2>/dev/null
+          cd Payload
+          zip -r -q ../app.ipa . || {
+            echo "❌ ERROR: Failed to create IPA!"
+            exit 1
+          }
+          cd ..
+          
+          # Verify IPA file
+          if [ ! -f "app.ipa" ]; then
+            echo "❌ ERROR: IPA file not created!"
+            exit 1
+          fi
+          
+          IPA_SIZE=$(du -sh app.ipa | cut -f1)
+          echo "✅ IPA created successfully!"
+          echo "   File: app.ipa"
+          echo "   Size: $IPA_SIZE"
+          
+          # Validate IPA structure (check if it's a valid zip)
+          echo "   Validating IPA structure..."
+          if ! unzip -t app.ipa > /dev/null 2>&1; then
+            echo "❌ ERROR: IPA file is corrupted!"
+            exit 1
+          fi
+          
+          # Check if Payload directory exists in IPA
+          if ! unzip -l app.ipa | grep -q "Payload/"; then
+            echo "❌ ERROR: IPA structure invalid - Payload directory not found!"
+            exit 1
+          fi
+          
+          echo "✅ IPA structure is valid"
           echo "ipa_path=app.ipa" >> $GITHUB_OUTPUT
 
       - name: Upload IPA artifact
