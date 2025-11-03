@@ -1,0 +1,186 @@
+name: Build iOS IPA (Unsigned)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'mobile-expo/**'
+      - '.github/workflows/build-ipa-unsigned.yml'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build profile'
+        required: false
+        default: 'unsigned'
+
+jobs:
+  build-ipa:
+    name: Build Unsigned IPA
+    runs-on: macos-latest
+    
+    defaults:
+      run:
+        working-directory: ./mobile-expo
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: mobile-expo/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Expo CLI
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+
+      - name: Generate iOS project
+        run: |
+          echo "🔨 Generating iOS project with Expo..."
+          npx expo prebuild --platform ios --clean
+
+      - name: Install CocoaPods dependencies
+        working-directory: ./mobile-expo/ios
+        run: |
+          echo "📦 Installing CocoaPods dependencies..."
+          pod install --repo-update
+
+      - name: Find app target and scheme
+        working-directory: ./mobile-expo/ios
+        id: find_targets
+        run: |
+          # Find .xcworkspace or .xcodeproj
+          WORKSPACE=$(find . -name "*.xcworkspace" -maxdepth 1 | head -1)
+          PROJECT=$(find . -name "*.xcodeproj" -maxdepth 1 | head -1)
+          
+          if [ -n "$WORKSPACE" ]; then
+            echo "Found workspace: $WORKSPACE"
+            echo "workspace_path=$WORKSPACE" >> $GITHUB_OUTPUT
+            
+            # Get scheme (usually same as workspace name without extension)
+            SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+            echo "scheme_name=$SCHEME" >> $GITHUB_OUTPUT
+            
+            # Get app target (first target that's not Pods/Expo/Test)
+            TARGET=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | \
+              grep -A 100 "Targets:" | \
+              grep -v "Targets:" | \
+              grep -v "Pods" | \
+              grep -v "^Expo$" | \
+              grep -v "Test" | \
+              head -1 | xargs)
+            echo "target_name=$TARGET" >> $GITHUB_OUTPUT
+          elif [ -n "$PROJECT" ]; then
+            echo "Found project: $PROJECT"
+            echo "project_path=$PROJECT" >> $GITHUB_OUTPUT
+            
+            SCHEME=$(basename "$PROJECT" .xcodeproj)
+            echo "scheme_name=$SCHEME" >> $GITHUB_OUTPUT
+            
+            TARGET=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | \
+              grep -A 100 "Targets:" | \
+              grep -v "Targets:" | \
+              grep -v "Pods" | \
+              grep -v "^Expo$" | \
+              grep -v "Test" | \
+              head -1 | xargs)
+            echo "target_name=$TARGET" >> $GITHUB_OUTPUT
+          else
+            echo "❌ ERROR: No .xcworkspace or .xcodeproj found!"
+            exit 1
+          fi
+          
+          echo "📱 Scheme: $SCHEME"
+          echo "📱 Target: $TARGET"
+
+      - name: Build IPA (unsigned)
+        working-directory: ./mobile-expo/ios
+        id: build
+        run: |
+          WORKSPACE="${{ steps.find_targets.outputs.workspace_path }}"
+          PROJECT="${{ steps.find_targets.outputs.project_path }}"
+          SCHEME="${{ steps.find_targets.outputs.scheme_name }}"
+          TARGET="${{ steps.find_targets.outputs.target_name }}"
+          
+          echo "🔨 Building unsigned IPA..."
+          echo "Scheme: $SCHEME"
+          echo "Target: $TARGET"
+          
+          # Build app target
+          if [ -n "$WORKSPACE" ]; then
+            xcodebuild build \
+              -workspace "$WORKSPACE" \
+              -target "$TARGET" \
+              -configuration Release \
+              -sdk iphoneos \
+              -arch arm64 \
+              -derivedDataPath ./build \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+              ONLY_ACTIVE_ARCH=NO
+          else
+            xcodebuild build \
+              -project "$PROJECT" \
+              -target "$TARGET" \
+              -configuration Release \
+              -sdk iphoneos \
+              -arch arm64 \
+              -derivedDataPath ./build \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+              ONLY_ACTIVE_ARCH=NO
+          fi
+          
+          # Find .app bundle
+          APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | \
+            grep -v "\.framework" | \
+            grep -v "Pods" | \
+            head -1)
+          
+          if [ -z "$APP_BUNDLE" ] || [ ! -d "$APP_BUNDLE" ]; then
+            echo "❌ ERROR: No .app bundle found!"
+            echo "Build directory structure:"
+            find build -type d -maxdepth 3 2>/dev/null | head -20
+            exit 1
+          fi
+          
+          echo "✅ Found .app bundle: $APP_BUNDLE"
+          
+          # Create IPA
+          mkdir -p Payload
+          cp -R "$APP_BUNDLE" Payload/
+          zip -r -q app.ipa Payload
+          
+          echo "✅ IPA created: app.ipa"
+          echo "ipa_path=app.ipa" >> $GITHUB_OUTPUT
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa-unsigned
+          path: mobile-expo/ios/app.ipa
+          retention-days: 30
+
+      - name: Summary
+        run: |
+          echo "## ✅ Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📱 **Unsigned IPA** has been built successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Download the IPA from the **Artifacts** section above." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Note:** This IPA is unsigned. You will need to sign it manually with eSign or another tool before installing." >> $GITHUB_STEP_SUMMARY
+
