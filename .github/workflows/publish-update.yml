@@ -1,0 +1,83 @@
+name: Publish Live Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      message:
+        description: 'Update message'
+        required: true
+        default: 'Update from GitHub Actions'
+      branch:
+        description: 'Update branch'
+        required: false
+        default: 'production'
+
+jobs:
+  publish-update:
+    name: Publish OTA Update
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./mobile-expo
+    
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: mobile-expo/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          echo "📦 Installing dependencies..."
+          npm install --legacy-peer-deps || npm install
+
+      - name: Setup Expo CLI
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+          eas-version: latest
+
+      - name: Check EXPO_TOKEN
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "❌ EXPO_TOKEN is not set!"
+            echo "Please add EXPO_TOKEN to GitHub Secrets"
+            exit 1
+          fi
+          echo "✅ EXPO_TOKEN is set"
+
+      - name: Publish Update
+        run: |
+          BRANCH="${{ github.event.inputs.branch || 'production' }}"
+          MESSAGE="${{ github.event.inputs.message }}"
+          
+          echo "🔄 Publishing live update..."
+          echo "Branch: $BRANCH"
+          echo "Message: $MESSAGE"
+          
+          eas update --branch "$BRANCH" --message "$MESSAGE" --non-interactive
+          
+          echo "✅ Update published successfully!"
+          echo ""
+          echo "📱 Users will receive update notification when they open the app"
+
+      - name: Summary
+        run: |
+          echo "## ✅ Update Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔄 **Live Update** has been published successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📝 **Branch:** ${{ github.event.inputs.branch || 'production' }}" >> $GITHUB_STEP_SUMMARY
+          echo "📝 **Message:** ${{ github.event.inputs.message }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📱 Users will be notified when they open the app." >> $GITHUB_STEP_SUMMARY
+

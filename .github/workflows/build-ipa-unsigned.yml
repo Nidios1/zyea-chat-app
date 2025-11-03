@@ -278,6 +278,29 @@ jobs:
           path: mobile-expo/ios/app.ipa
           retention-days: 30
 
+      - name: Publish Live Update (Optional)
+        working-directory: ./mobile-expo
+        if: success() && github.event_name == 'workflow_dispatch'
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "⚠️  EXPO_TOKEN not set. Skipping live update publish."
+            echo "   To enable live updates, add EXPO_TOKEN to GitHub Secrets."
+            exit 0
+          fi
+          
+          echo "🔄 Publishing live update..."
+          BRANCH="production"
+          MESSAGE="Auto-update: Build ${{ github.run_number }} - ${{ github.sha }}"
+          
+          eas update --branch "$BRANCH" --message "$MESSAGE" --non-interactive || {
+            echo "⚠️  Failed to publish update, but IPA build succeeded"
+            exit 0  # Don't fail the workflow if update publish fails
+          }
+          
+          echo "✅ Live update published successfully!"
+
       - name: Summary
         run: |
           echo "## ✅ Build Complete" >> $GITHUB_STEP_SUMMARY
@@ -285,6 +308,11 @@ jobs:
           echo "📱 **Unsigned IPA** has been built successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "📦 Download the IPA from the **Artifacts** section above." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔄 **Live Updates:**" >> $GITHUB_STEP_SUMMARY
+          echo "- IPA build includes live update support" >> $GITHUB_STEP_SUMMARY
+          echo "- Publish updates with: \`eas update --branch production --message 'Your message'\`" >> $GITHUB_STEP_SUMMARY
+          echo "- App will auto-check for updates when opened" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "⚠️ **Note:** This IPA is unsigned. You will need to sign it manually with eSign or another tool before installing." >> $GITHUB_STEP_SUMMARY
 
