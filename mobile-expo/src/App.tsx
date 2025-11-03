@@ -14,6 +14,7 @@ import AuthNavigator from './navigation/AuthNavigator';
 import MainNavigator from './navigation/MainNavigator';
 import SplashScreen from './components/Splash/SplashScreen';
 import { useUpdates } from './hooks/useUpdates';
+import { UpdateModal } from './components/Common/UpdateModal';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,7 +41,7 @@ const AppContent = () => {
   const { isAuthenticated, loading } = useAuth();
   
   // Check for live updates (chỉ chạy trong production build)
-  useUpdates();
+  const { showUpdateModal, handleUpdate, handleCancel } = useUpdates();
 
   // Ensure loading and isAuthenticated are always boolean, not string
   const isLoading = Boolean(loading);
@@ -58,6 +59,13 @@ const AppContent = () => {
       >
         {authenticated ? <MainNavigator /> : <AuthNavigator />}
         <Toast position="bottom" />
+        
+        {/* Update Modal - Hiển thị khi có phiên bản mới */}
+        <UpdateModal
+          visible={showUpdateModal}
+          onUpdate={handleUpdate}
+          onCancel={handleCancel}
+        />
       </NavigationContainer>
     </TabBarProvider>
   );

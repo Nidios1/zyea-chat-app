@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import * as Updates from 'expo-updates';
-import { Platform, Alert } from 'react-native';
+import { Platform } from 'react-native';
 
 interface UpdateInfo {
   isUpdateAvailable: boolean;
   isUpdatePending: boolean;
   isChecking: boolean;
   isDownloading: boolean;
+  showUpdateModal: boolean;
   manifest?: Updates.Manifest;
 }
 
@@ -23,6 +24,7 @@ export function useUpdates() {
     isUpdatePending: false,
     isChecking: false,
     isDownloading: false,
+    showUpdateModal: false,
   });
 
   useEffect(() => {
@@ -73,20 +75,8 @@ export function useUpdates() {
           ...prev,
           isUpdatePending: true,
           isDownloading: false,
+          showUpdateModal: true, // Hiển thị modal
         }));
-
-        // Hiển thị thông báo có update mới
-        Alert.alert(
-          'Có phiên bản mới',
-          'Đã tải phiên bản mới. Bạn có muốn cập nhật ngay bây giờ?',
-          [
-            { text: 'Để sau', style: 'cancel' },
-            {
-              text: 'Cập nhật',
-              onPress: () => reloadApp(),
-            },
-          ]
-        );
       }
     } catch (error) {
       console.error('Error downloading update:', error);
@@ -102,10 +92,21 @@ export function useUpdates() {
     }
   };
 
+  const handleUpdate = () => {
+    setUpdateInfo((prev) => ({ ...prev, showUpdateModal: false }));
+    reloadApp();
+  };
+
+  const handleCancel = () => {
+    setUpdateInfo((prev) => ({ ...prev, showUpdateModal: false }));
+  };
+
   return {
     ...updateInfo,
     checkForUpdates,
     reloadApp,
+    handleUpdate,
+    handleCancel,
   };
 }
 
