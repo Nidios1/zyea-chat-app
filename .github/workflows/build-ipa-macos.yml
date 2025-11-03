@@ -310,19 +310,27 @@ jobs:
             fi
           fi
           
+          # Validate APP_TARGET
+          if [ -z "$APP_TARGET" ]; then
+            echo "❌ ERROR: Could not determine app target!"
+            echo "All targets: $ALL_TARGETS"
+            exit 1
+          fi
+          
           echo ""
-          echo "🔨 Building with scheme: $SCHEME"
-          echo "App target will be: $APP_TARGET"
+          echo "🔨 Building app target directly: $APP_TARGET"
+          echo "(This will automatically build all dependencies)"
           
           BUILD_SUCCESS=0
           
-          # Build with scheme - it should build all dependencies and the app
+          # Build app target directly - it will build dependencies automatically
           echo ""
           echo "Building..."
           if [ -n "$WORKSPACE" ]; then
+            # Build with target - Xcode will build dependencies automatically
             xcodebuild build \
               -workspace "$WORKSPACE" \
-              -scheme "$SCHEME" \
+              -target "$APP_TARGET" \
               -configuration Release \
               -sdk iphoneos \
               -arch arm64 \
@@ -337,7 +345,7 @@ jobs:
           else
             xcodebuild build \
               -project "$PROJECT" \
-              -scheme "$SCHEME" \
+              -target "$APP_TARGET" \
               -configuration Release \
               -sdk iphoneos \
               -arch arm64 \
@@ -357,19 +365,22 @@ jobs:
             echo "✅ Build command completed successfully"
           else
             echo "⚠️  Build command exited with code $BUILD_SUCCESS"
-            echo "Last 50 lines of build log:"
-            tail -50 /tmp/xcodebuild.log || true
+            echo "Checking for build errors (last 50 lines):"
+            tail -50 /tmp/xcodebuild.log | grep -i "error" || tail -50 /tmp/xcodebuild.log || true
           fi
           
-          # Get actual build output directory from build settings
+          # Get actual build output directory from build settings for the app target
           if [ -n "$WORKSPACE" ]; then
-            ACTUAL_BUILT_PRODUCTS=$(xcodebuild -showBuildSettings -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphoneos -derivedDataPath ./build 2>/dev/null | grep "^\s*BUILT_PRODUCTS_DIR\s*=" | head -1 | sed 's/.*= *//' | xargs)
+            ACTUAL_BUILT_PRODUCTS=$(xcodebuild -showBuildSettings -workspace "$WORKSPACE" -target "$APP_TARGET" -configuration Release -sdk iphoneos -derivedDataPath ./build 2>/dev/null | grep "^\s*BUILT_PRODUCTS_DIR\s*=" | head -1 | sed 's/.*= *//' | xargs)
+            PRODUCT_NAME=$(xcodebuild -showBuildSettings -workspace "$WORKSPACE" -target "$APP_TARGET" -configuration Release -sdk iphoneos -derivedDataPath ./build 2>/dev/null | grep "^\s*PRODUCT_NAME\s*=" | head -1 | sed 's/.*= *//' | xargs)
           else
-            ACTUAL_BUILT_PRODUCTS=$(xcodebuild -showBuildSettings -project "$PROJECT" -scheme "$SCHEME" -configuration Release -sdk iphoneos -derivedDataPath ./build 2>/dev/null | grep "^\s*BUILT_PRODUCTS_DIR\s*=" | head -1 | sed 's/.*= *//' | xargs)
+            ACTUAL_BUILT_PRODUCTS=$(xcodebuild -showBuildSettings -project "$PROJECT" -target "$APP_TARGET" -configuration Release -sdk iphoneos -derivedDataPath ./build 2>/dev/null | grep "^\s*BUILT_PRODUCTS_DIR\s*=" | head -1 | sed 's/.*= *//' | xargs)
+            PRODUCT_NAME=$(xcodebuild -showBuildSettings -project "$PROJECT" -target "$APP_TARGET" -configuration Release -sdk iphoneos -derivedDataPath ./build 2>/dev/null | grep "^\s*PRODUCT_NAME\s*=" | head -1 | sed 's/.*= *//' | xargs)
           fi
           
           echo ""
           echo "BUILT_PRODUCTS_DIR from build settings: $ACTUAL_BUILT_PRODUCTS"
+          echo "PRODUCT_NAME from build settings: $PRODUCT_NAME"
           
           echo ""
           if [ $BUILD_SUCCESS -ne 0 ]; then
@@ -461,46 +472,11 @@ jobs:
             fi
           fi
           
-          # If still not found, try building app target explicitly
-          if [ -z "$APP_BUNDLE" ] && [ -n "$APP_TARGET" ] && [ "$APP_TARGET" != "$SCHEME" ]; then
-            echo ""
-            echo "⚠️  .app bundle not found after scheme build. Trying to build app target explicitly..."
-            if [ -n "$WORKSPACE" ]; then
-              xcodebuild build \
-                -workspace "$WORKSPACE" \
-                -target "$APP_TARGET" \
-                -configuration Release \
-                -sdk iphoneos \
-                -arch arm64 \
-                -derivedDataPath ./build \
-                CODE_SIGN_IDENTITY="" \
-                CODE_SIGNING_REQUIRED=NO \
-                CODE_SIGNING_ALLOWED=NO \
-                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-                CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
-                WARNING_CFLAGS="-Wno-error" \
-                ONLY_ACTIVE_ARCH=NO 2>&1 | tail -50 || true
-            else
-              xcodebuild build \
-                -project "$PROJECT" \
-                -target "$APP_TARGET" \
-                -configuration Release \
-                -sdk iphoneos \
-                -arch arm64 \
-                -derivedDataPath ./build \
-                CODE_SIGN_IDENTITY="" \
-                CODE_SIGNING_REQUIRED=NO \
-                CODE_SIGNING_ALLOWED=NO \
-                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-                CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
-                WARNING_CFLAGS="-Wno-error" \
-                ONLY_ACTIVE_ARCH=NO 2>&1 | tail -50 || true
-            fi
-            
-            # Try finding again after explicit build
-            if [ -d "$APP_PATH" ] && [ -d "$APP_PATH/$APP_TARGET.app" ]; then
-              APP_BUNDLE="$APP_PATH/$APP_TARGET.app"
-              echo "✅ Found after explicit build: $APP_BUNDLE"
+          # Update PRODUCT_NAME if we got it from build settings
+          if [ -n "$PRODUCT_NAME" ]; then
+            if [ -z "$APP_BUNDLE" ] && [ -d "$APP_PATH/$PRODUCT_NAME.app" ]; then
+              APP_BUNDLE="$APP_PATH/$PRODUCT_NAME.app"
+              echo "✅ Found using PRODUCT_NAME from build settings: $APP_BUNDLE"
             fi
           fi
           
