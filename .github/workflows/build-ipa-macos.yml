@@ -326,6 +326,8 @@ jobs:
           # Build app target directly - it will build dependencies automatically
           echo ""
           echo "Building..."
+          echo "Saving full build log for debugging..."
+          
           if [ -n "$WORKSPACE" ]; then
             # Build with target - Xcode will build dependencies automatically
             xcodebuild build \
@@ -341,7 +343,7 @@ jobs:
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
               WARNING_CFLAGS="-Wno-error" \
-              ONLY_ACTIVE_ARCH=NO 2>&1 | tee /tmp/xcodebuild.log | tail -100 || BUILD_SUCCESS=$?
+              ONLY_ACTIVE_ARCH=NO 2>&1 | tee /tmp/xcodebuild.log || BUILD_SUCCESS=$?
           else
             xcodebuild build \
               -project "$PROJECT" \
@@ -356,17 +358,35 @@ jobs:
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
               WARNING_CFLAGS="-Wno-error" \
-              ONLY_ACTIVE_ARCH=NO 2>&1 | tee /tmp/xcodebuild.log | tail -100 || BUILD_SUCCESS=$?
+              ONLY_ACTIVE_ARCH=NO 2>&1 | tee /tmp/xcodebuild.log || BUILD_SUCCESS=$?
           fi
           
           # Check if build succeeded
           echo ""
+          echo "Build exit code: $BUILD_SUCCESS"
           if [ $BUILD_SUCCESS -eq 0 ]; then
             echo "✅ Build command completed successfully"
           else
             echo "⚠️  Build command exited with code $BUILD_SUCCESS"
-            echo "Checking for build errors (last 50 lines):"
-            tail -50 /tmp/xcodebuild.log | grep -i "error" || tail -50 /tmp/xcodebuild.log || true
+            echo ""
+            echo "Checking for critical build errors..."
+            if grep -i "error:" /tmp/xcodebuild.log | grep -v "warning:" | head -20; then
+              echo ""
+              echo "Found build errors above. However, continuing to search for .app bundle..."
+            else
+              echo "No critical errors found in log (warnings are expected and ignored)"
+            fi
+          fi
+          
+          # Show build directory structure
+          echo ""
+          echo "📁 Build directory structure:"
+          echo "Current directory: $(pwd)"
+          if [ -d "build" ]; then
+            echo "build/ exists"
+            find build -type d -maxdepth 3 2>/dev/null | head -30 || echo "Could not list build directory"
+          else
+            echo "❌ build/ directory does not exist!"
           fi
           
           # Get actual build output directory from build settings for the app target
@@ -393,44 +413,67 @@ jobs:
           # Find the .app bundle
           APP_BUNDLE=""
           
-          # Use the actual BUILT_PRODUCTS_DIR if available, otherwise use standard path
+          echo ""
+          echo "🔍 Searching for .app bundle..."
+          echo "ACTUAL_BUILT_PRODUCTS from settings: $ACTUAL_BUILT_PRODUCTS"
+          
+          # Try multiple possible locations for Products directory
+          POSSIBLE_PATHS=()
+          
+          # 1. From build settings (if available)
           if [ -n "$ACTUAL_BUILT_PRODUCTS" ] && [ -d "$ACTUAL_BUILT_PRODUCTS" ]; then
-            APP_PATH="$ACTUAL_BUILT_PRODUCTS"
-            echo "✅ Using BUILT_PRODUCTS_DIR: $APP_PATH"
-          else
-            APP_PATH="build/Build/Products/Release-iphoneos"
-            echo "⚠️  Using default path: $APP_PATH"
+            POSSIBLE_PATHS+=("$ACTUAL_BUILT_PRODUCTS")
           fi
           
-          echo "Checking if build directory exists..."
-          if [ ! -d "build" ]; then
-            echo "❌ ERROR: Build directory not found!"
-            exit 1
-          fi
+          # 2. Standard DerivedData path
+          POSSIBLE_PATHS+=("build/Build/Products/Release-iphoneos")
           
-          echo "Checking Products directory: $APP_PATH"
-          if [ ! -d "$APP_PATH" ]; then
-            echo "⚠️  $APP_PATH not found, searching for alternative locations..."
-            # Try to find Products directory - check multiple possible locations
-            ALTERNATIVE_PATH=$(find build -type d -name "Release-iphoneos" 2>/dev/null | head -1)
-            if [ -n "$ALTERNATIVE_PATH" ]; then
-              APP_PATH="$ALTERNATIVE_PATH"
-              echo "Using alternative path: $APP_PATH"
-            else
-              # Check for any Products directory
-              PRODUCTS_DIR=$(find build -type d -path "*/Build/Products" 2>/dev/null | head -1)
-              if [ -n "$PRODUCTS_DIR" ]; then
-                # Find the first Release-iphoneos or just use Products
-                RELEASE_DIR=$(find "$PRODUCTS_DIR" -type d -name "*iphoneos" 2>/dev/null | head -1)
-                if [ -n "$RELEASE_DIR" ]; then
-                  APP_PATH="$RELEASE_DIR"
-                  echo "Found Products/Release: $APP_PATH"
-                else
-                  APP_PATH="$PRODUCTS_DIR"
-                  echo "Using Products directory: $APP_PATH"
-                fi
-              fi
+          # 3. Find any Release-iphoneos directory
+          RELEASE_DIRS=$(find build -type d -name "Release-iphoneos" 2>/dev/null)
+          while IFS= read -r dir; do
+            if [ -n "$dir" ]; then
+              POSSIBLE_PATHS+=("$dir")
             fi
+          done <<< "$RELEASE_DIRS"
+          
+          # 4. Find any Products directory
+          PRODUCTS_DIRS=$(find build -type d -path "*/Build/Products/*" 2>/dev/null)
+          while IFS= read -r dir; do
+            if [ -n "$dir" ]; then
+              POSSIBLE_PATHS+=("$dir")
+            fi
+          done <<< "$PRODUCTS_DIRS"
+          
+          # 5. Check if build created in current directory
+          POSSIBLE_PATHS+=("$(pwd)/build/Build/Products/Release-iphoneos")
+          
+          echo ""
+          echo "Checking possible paths for .app bundle:"
+          APP_PATH=""
+          for path in "${POSSIBLE_PATHS[@]}"; do
+            if [ -d "$path" ]; then
+              echo "  ✅ Found: $path"
+              if [ -z "$APP_PATH" ]; then
+                APP_PATH="$path"
+              fi
+              echo "    Contents:"
+              ls -la "$path" | head -10 || echo "    (could not list)"
+            else
+              echo "  ❌ Not found: $path"
+            fi
+          done
+          
+          # If still no path found, use default and create if needed
+          if [ -z "$APP_PATH" ]; then
+            echo ""
+            echo "⚠️  No Products directory found in expected locations"
+            APP_PATH="build/Build/Products/Release-iphoneos"
+            echo "Using default path: $APP_PATH"
+            
+            # Show what actually exists in build directory
+            echo ""
+            echo "Full build directory tree (first 50 entries):"
+            find build -type d 2>/dev/null | head -50 || echo "Build directory not accessible"
           fi
           
           if [ -d "$APP_PATH" ]; then
