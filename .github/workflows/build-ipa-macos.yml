@@ -262,57 +262,63 @@ jobs:
           
           echo "PRODUCT_NAME: $PRODUCT_NAME"
           
-          # Find the actual app target name - it should be the one that creates a .app bundle
+          # Find app target by checking all targets for one that produces .app
           echo ""
           echo "🔍 Finding app target..."
           if [ -n "$WORKSPACE" ]; then
-            ALL_TARGETS=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 200 "Targets:" | grep -v "Targets:" | xargs)
-            SCHEME_TARGETS=$(xcodebuild -list -workspace "$WORKSPACE" -json 2>/dev/null | jq -r '.workspace.schemes[] | select(.name == "'"$SCHEME"'") | .buildAction.targets[]?.targetName' 2>/dev/null | head -5)
+            ALL_TARGETS=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 200 "Targets:" | grep -v "Targets:" | grep -v "^$" | xargs)
           else
-            ALL_TARGETS=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | grep -A 200 "Targets:" | grep -v "Targets:" | xargs)
-            SCHEME_TARGETS=$(xcodebuild -list -project "$PROJECT" -json 2>/dev/null | jq -r '.project.schemes[] | select(.name == "'"$SCHEME"'") | .buildAction.targets[]?.targetName' 2>/dev/null | head -5)
+            ALL_TARGETS=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | grep -A 200 "Targets:" | grep -v "Targets:" | grep -v "^$" | xargs)
           fi
           
           echo "All targets: $ALL_TARGETS"
-          echo "Targets in scheme '$SCHEME': $SCHEME_TARGETS"
           
-          # Find the app target (not Expo, Pods, Test, Framework)
+          # Find app target by checking each target
           APP_TARGET=""
-          for t in $SCHEME_TARGETS; do
-            if [[ "$t" != "Expo" ]] && [[ "$t" != *"Pods"* ]] && [[ "$t" != *"Test"* ]] && [[ "$t" != *"Framework"* ]] && [[ "$t" != *"EX"* ]]; then
-              # Check if this target produces a .app bundle
-              if [ -n "$WORKSPACE" ]; then
-                WRAPPER_EXT=$(xcodebuild -showBuildSettings -workspace "$WORKSPACE" -scheme "$SCHEME" -target "$t" -configuration Release -sdk iphoneos 2>/dev/null | grep "WRAPPER_EXTENSION" | head -1 | sed 's/.*= *//' | xargs)
-              else
-                WRAPPER_EXT=$(xcodebuild -showBuildSettings -project "$PROJECT" -scheme "$SCHEME" -target "$t" -configuration Release -sdk iphoneos 2>/dev/null | grep "WRAPPER_EXTENSION" | head -1 | sed 's/.*= *//' | xargs)
-              fi
-              if [ "$WRAPPER_EXT" = "app" ]; then
-                APP_TARGET="$t"
-                echo "✅ Found app target: $APP_TARGET"
-                break
-              fi
+          for t in $ALL_TARGETS; do
+            # Skip non-app targets
+            if [[ "$t" == *"Pods"* ]] || [[ "$t" == *"Test"* ]] || [[ "$t" == *"Framework"* ]] || [[ "$t" == "Expo" ]]; then
+              continue
+            fi
+            
+            echo "Checking target: $t"
+            # Check if this target produces a .app bundle
+            if [ -n "$WORKSPACE" ]; then
+              WRAPPER_EXT=$(xcodebuild -showBuildSettings -workspace "$WORKSPACE" -target "$t" -configuration Release -sdk iphoneos 2>/dev/null | grep "^\s*WRAPPER_EXTENSION\s*=" | head -1 | sed 's/.*= *//' | xargs)
+            else
+              WRAPPER_EXT=$(xcodebuild -showBuildSettings -project "$PROJECT" -target "$t" -configuration Release -sdk iphoneos 2>/dev/null | grep "^\s*WRAPPER_EXTENSION\s*=" | head -1 | sed 's/.*= *//' | xargs)
+            fi
+            
+            if [ "$WRAPPER_EXT" = "app" ]; then
+              APP_TARGET="$t"
+              echo "✅ Found app target: $APP_TARGET"
+              break
             fi
           done
           
-          # Fallback: use PRODUCT_NAME or scheme name
+          # Fallback to PRODUCT_NAME or TARGET from previous step
           if [ -z "$APP_TARGET" ]; then
             if [ -n "$PRODUCT_NAME" ] && [ "$PRODUCT_NAME" != "Expo" ]; then
               APP_TARGET="$PRODUCT_NAME"
+              echo "⚠️  Using PRODUCT_NAME as app target: $APP_TARGET"
+            elif [ -n "$TARGET" ] && [ "$TARGET" != "Expo" ]; then
+              APP_TARGET="$TARGET"
+              echo "⚠️  Using detected target: $APP_TARGET"
             else
               APP_TARGET="$SCHEME"
+              echo "⚠️  Using scheme name as fallback: $APP_TARGET"
             fi
-            echo "⚠️  Using fallback app target: $APP_TARGET"
           fi
           
           echo ""
-          echo "🔨 Building app target: $APP_TARGET"
-          echo "Scheme: $SCHEME"
+          echo "🔨 Building with scheme: $SCHEME"
+          echo "App target will be: $APP_TARGET"
           
           BUILD_SUCCESS=0
           
-          # First, build dependencies with scheme to ensure everything is ready
+          # Build with scheme - it should build all dependencies and the app
           echo ""
-          echo "Step 1: Building all dependencies with scheme..."
+          echo "Building..."
           if [ -n "$WORKSPACE" ]; then
             xcodebuild build \
               -workspace "$WORKSPACE" \
@@ -327,7 +333,7 @@ jobs:
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
               WARNING_CFLAGS="-Wno-error" \
-              ONLY_ACTIVE_ARCH=NO 2>&1 | tee /tmp/xcodebuild.log | grep -v "warning:" | grep -v "note:" || true
+              ONLY_ACTIVE_ARCH=NO 2>&1 | tee /tmp/xcodebuild.log | tail -100 || BUILD_SUCCESS=$?
           else
             xcodebuild build \
               -project "$PROJECT" \
@@ -342,53 +348,24 @@ jobs:
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
               WARNING_CFLAGS="-Wno-error" \
-              ONLY_ACTIVE_ARCH=NO 2>&1 | tee /tmp/xcodebuild.log | grep -v "warning:" | grep -v "note:" || true
+              ONLY_ACTIVE_ARCH=NO 2>&1 | tee /tmp/xcodebuild.log | tail -100 || BUILD_SUCCESS=$?
           fi
           
-          # Then, explicitly build the app target to ensure it's built
+          # Check if build succeeded
           echo ""
-          echo "Step 2: Building app target explicitly..."
-          if [ -n "$WORKSPACE" ]; then
-            xcodebuild build \
-              -workspace "$WORKSPACE" \
-              -target "$APP_TARGET" \
-              -configuration Release \
-              -sdk iphoneos \
-              -arch arm64 \
-              -derivedDataPath ./build \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGNING_ALLOWED=NO \
-              GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
-              WARNING_CFLAGS="-Wno-error" \
-              ONLY_ACTIVE_ARCH=NO \
-              BUILT_PRODUCTS_DIR="$(pwd)/build/Build/Products" \
-              CONFIGURATION_BUILD_DIR="$(pwd)/build/Build/Products/Release-iphoneos" 2>&1 | tee -a /tmp/xcodebuild.log | grep -v "warning:" | grep -v "note:" || BUILD_SUCCESS=$?
+          if [ $BUILD_SUCCESS -eq 0 ]; then
+            echo "✅ Build command completed successfully"
           else
-            xcodebuild build \
-              -project "$PROJECT" \
-              -target "$APP_TARGET" \
-              -configuration Release \
-              -sdk iphoneos \
-              -arch arm64 \
-              -derivedDataPath ./build \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGNING_ALLOWED=NO \
-              GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
-              WARNING_CFLAGS="-Wno-error" \
-              ONLY_ACTIVE_ARCH=NO \
-              BUILT_PRODUCTS_DIR="$(pwd)/build/Build/Products" \
-              CONFIGURATION_BUILD_DIR="$(pwd)/build/Build/Products/Release-iphoneos" 2>&1 | tee -a /tmp/xcodebuild.log | grep -v "warning:" | grep -v "note:" || BUILD_SUCCESS=$?
+            echo "⚠️  Build command exited with code $BUILD_SUCCESS"
+            echo "Last 50 lines of build log:"
+            tail -50 /tmp/xcodebuild.log || true
           fi
           
           # Get actual build output directory from build settings
           if [ -n "$WORKSPACE" ]; then
-            ACTUAL_BUILT_PRODUCTS=$(xcodebuild -showBuildSettings -workspace "$WORKSPACE" -target "$APP_TARGET" -configuration Release -sdk iphoneos 2>/dev/null | grep "BUILT_PRODUCTS_DIR" | head -1 | sed 's/.*= *//' | xargs)
+            ACTUAL_BUILT_PRODUCTS=$(xcodebuild -showBuildSettings -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphoneos -derivedDataPath ./build 2>/dev/null | grep "^\s*BUILT_PRODUCTS_DIR\s*=" | head -1 | sed 's/.*= *//' | xargs)
           else
-            ACTUAL_BUILT_PRODUCTS=$(xcodebuild -showBuildSettings -project "$PROJECT" -target "$APP_TARGET" -configuration Release -sdk iphoneos 2>/dev/null | grep "BUILT_PRODUCTS_DIR" | head -1 | sed 's/.*= *//' | xargs)
+            ACTUAL_BUILT_PRODUCTS=$(xcodebuild -showBuildSettings -project "$PROJECT" -scheme "$SCHEME" -configuration Release -sdk iphoneos -derivedDataPath ./build 2>/dev/null | grep "^\s*BUILT_PRODUCTS_DIR\s*=" | head -1 | sed 's/.*= *//' | xargs)
           fi
           
           echo ""
@@ -449,8 +426,14 @@ jobs:
             echo "Contents of $APP_PATH:"
             ls -la "$APP_PATH" | head -20
             
-            # Try PRODUCT_NAME first
-            if [ -n "$PRODUCT_NAME" ] && [ -d "$APP_PATH/$PRODUCT_NAME.app" ]; then
+            # Try APP_TARGET first
+            if [ -n "$APP_TARGET" ] && [ -d "$APP_PATH/$APP_TARGET.app" ]; then
+              APP_BUNDLE="$APP_PATH/$APP_TARGET.app"
+              echo "✅ Found using APP_TARGET: $APP_BUNDLE"
+            fi
+            
+            # Try PRODUCT_NAME
+            if [ -z "$APP_BUNDLE" ] && [ -n "$PRODUCT_NAME" ] && [ -d "$APP_PATH/$PRODUCT_NAME.app" ]; then
               APP_BUNDLE="$APP_PATH/$PRODUCT_NAME.app"
               echo "✅ Found using PRODUCT_NAME: $APP_BUNDLE"
             fi
@@ -463,7 +446,7 @@ jobs:
             
             # Try any .app with Info.plist (not a framework)
             if [ -z "$APP_BUNDLE" ]; then
-              echo "Searching for any .app bundle..."
+              echo "Searching for any .app bundle in $APP_PATH..."
               for item in "$APP_PATH"/*.app; do
                 if [ -d "$item" ] && [ -f "$item/Info.plist" ]; then
                   # Check it has an executable (app bundles have executable, frameworks don't in root)
@@ -475,6 +458,49 @@ jobs:
                   fi
                 fi
               done
+            fi
+          fi
+          
+          # If still not found, try building app target explicitly
+          if [ -z "$APP_BUNDLE" ] && [ -n "$APP_TARGET" ] && [ "$APP_TARGET" != "$SCHEME" ]; then
+            echo ""
+            echo "⚠️  .app bundle not found after scheme build. Trying to build app target explicitly..."
+            if [ -n "$WORKSPACE" ]; then
+              xcodebuild build \
+                -workspace "$WORKSPACE" \
+                -target "$APP_TARGET" \
+                -configuration Release \
+                -sdk iphoneos \
+                -arch arm64 \
+                -derivedDataPath ./build \
+                CODE_SIGN_IDENTITY="" \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGNING_ALLOWED=NO \
+                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+                CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
+                WARNING_CFLAGS="-Wno-error" \
+                ONLY_ACTIVE_ARCH=NO 2>&1 | tail -50 || true
+            else
+              xcodebuild build \
+                -project "$PROJECT" \
+                -target "$APP_TARGET" \
+                -configuration Release \
+                -sdk iphoneos \
+                -arch arm64 \
+                -derivedDataPath ./build \
+                CODE_SIGN_IDENTITY="" \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGNING_ALLOWED=NO \
+                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+                CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
+                WARNING_CFLAGS="-Wno-error" \
+                ONLY_ACTIVE_ARCH=NO 2>&1 | tail -50 || true
+            fi
+            
+            # Try finding again after explicit build
+            if [ -d "$APP_PATH" ] && [ -d "$APP_PATH/$APP_TARGET.app" ]; then
+              APP_BUNDLE="$APP_PATH/$APP_TARGET.app"
+              echo "✅ Found after explicit build: $APP_BUNDLE"
             fi
           fi
           
