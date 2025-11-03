@@ -15,7 +15,8 @@
     "eas:build:unsigned": "eas build --platform ios --profile unsigned --non-interactive",
     "eas:build:adhoc": "eas build --platform ios --profile adhoc --non-interactive",
     "eas:build:preview": "eas build --platform ios --profile preview --non-interactive",
-    "eas:build:production": "eas build --platform ios --profile production --non-interactive"
+    "eas:build:production": "eas build --platform ios --profile production --non-interactive",
+    "update:ip": "node update-api-ip.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
