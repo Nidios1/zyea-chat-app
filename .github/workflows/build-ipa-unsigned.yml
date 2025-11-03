@@ -36,7 +36,10 @@ jobs:
           cache-dependency-path: mobile-expo/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        working-directory: ./mobile-expo
+        run: |
+          echo "📦 Installing dependencies..."
+          npm install --legacy-peer-deps || npm install
 
       - name: Setup Expo CLI
         uses: expo/expo-github-action@v8
