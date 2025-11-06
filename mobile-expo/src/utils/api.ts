@@ -188,11 +188,10 @@ export const notificationsAPI = {
 
 export const newsfeedAPI = {
   getPosts: (page = 1, type?: 'all' | 'following') => {
-    const params = new URLSearchParams({ page: page.toString() });
-    // Always append type parameter, default to 'all' if not provided
+    // Always use 'all' as default to show all posts from everyone
     const typeParam = type || 'all';
-    params.append('type', typeParam);
-    const url = `/newsfeed/posts?${params.toString()}`;
+    // Build URL manually to ensure compatibility with React Native
+    const url = `/newsfeed/posts?page=${page}&type=${encodeURIComponent(typeParam)}`;
     console.log('📱 [API] getPosts URL:', url, 'type param:', typeParam, 'original type:', type);
     return apiClient.get(url);
   },

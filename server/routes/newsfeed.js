@@ -61,17 +61,19 @@ router.get('/posts', async (req, res) => {
     // Get type from query - handle both string and undefined
     // Check both req.query.type and req.query.type (case insensitive)
     const typeParam = req.query.type;
-    const type = typeParam ? String(typeParam).toLowerCase().trim() : undefined;
+    const type = typeParam ? String(typeParam).toLowerCase().trim() : 'all'; // Default to 'all'
     
     console.log('📱 [Backend] /posts request - userId:', userId);
     console.log('📱 [Backend] req.query:', JSON.stringify(req.query));
     console.log('📱 [Backend] typeParam:', typeParam, 'type:', type, 'typeof:', typeof typeParam);
+    console.log('📱 [Backend] Will use query for type:', type);
     
     let query, params;
     
     // When type is 'all' or undefined/null, show ALL posts from everyone
     // Explicitly check for 'all' string or undefined/null
-    if (type === 'all' || type === undefined || type === null || type === '') {
+    // IMPORTANT: Default to 'all' if type is not 'following' to show all posts
+    if (type !== 'following') {
       // Get ALL posts from everyone (like Threads "For you" tab)
       // Show all posts regardless of privacy setting
       
@@ -115,8 +117,10 @@ router.get('/posts', async (req, res) => {
         LIMIT 50
       `;
       params = [userId, userId, userId];
+      console.log('📱 [Backend] Fetching posts from following, type:', type);
     } else {
-      // Default: Get posts from user, friends, and following (backward compatibility)
+      // Fallback: Should not happen, but if it does, show all posts
+      console.log('⚠️ [Backend] Unexpected type value:', type, '- defaulting to all posts');
       query = `
         SELECT 
           p.*,
@@ -128,16 +132,10 @@ router.get('/posts', async (req, res) => {
         FROM posts p
         JOIN users u ON p.user_id = u.id
         LEFT JOIN post_likes pl ON p.id = pl.post_id AND pl.user_id = ?
-        LEFT JOIN friends f ON (
-          (f.user_id = ? AND f.friend_id = p.user_id AND f.status = 'accepted') OR
-          (f.friend_id = ? AND f.user_id = p.user_id AND f.status = 'accepted')
-        )
-        LEFT JOIN follows fl ON (fl.follower_id = ? AND fl.following_id = p.user_id)
-        WHERE p.user_id = ? OR f.id IS NOT NULL OR fl.id IS NOT NULL
         ORDER BY p.created_at DESC
         LIMIT 50
       `;
-      params = [userId, userId, userId, userId, userId];
+      params = [userId];
     }
     
     const [posts] = await getConnection().execute(query, params);

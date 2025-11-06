@@ -9,6 +9,7 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Avatar } from 'react-native-paper';
@@ -240,6 +241,8 @@ const PostsListScreen = () => {
   const {
     data: posts = [],
     isLoading,
+    isError,
+    error,
     refetch,
   } = useQuery({
     queryKey: ['posts', activeTab],
@@ -525,21 +528,58 @@ const PostsListScreen = () => {
       />
 
       {/* Posts List */}
-      <FlatList
-        data={posts}
-        keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
-        renderItem={renderPost}
-        refreshing={refreshing}
-        onRefresh={handleRefresh}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        contentContainerStyle={dynamicStyles.listContent}
-        ListEmptyComponent={
-          <View style={dynamicStyles.emptyContainer}>
-            <Text style={[dynamicStyles.emptyText, { color: colors.textSecondary }]}>Chưa có bài viết nào</Text>
-          </View>
-        }
-      />
+      {isLoading && !refreshing ? (
+        <View style={[dynamicStyles.emptyContainer, { paddingTop: 100 }]}>
+          <ActivityIndicator size="large" color={colors.primary || '#0084ff'} />
+          <Text style={[dynamicStyles.emptyText, { color: colors.textSecondary, marginTop: 16 }]}>
+            Đang tải bài viết...
+          </Text>
+        </View>
+      ) : isError ? (
+        <View style={[dynamicStyles.emptyContainer, { paddingTop: 100 }]}>
+          <MaterialCommunityIcons name="alert-circle" size={48} color={colors.error || '#e74c3c'} />
+          <Text style={[dynamicStyles.emptyText, { color: colors.error || '#e74c3c', marginTop: 16 }]}>
+            Không thể tải bài viết
+          </Text>
+          <Text style={[dynamicStyles.emptyText, { color: colors.textSecondary, marginTop: 8, fontSize: 13 }]}>
+            {error instanceof Error ? error.message : 'Đã xảy ra lỗi'}
+          </Text>
+          <TouchableOpacity
+            onPress={() => refetch()}
+            style={{
+              marginTop: 16,
+              paddingHorizontal: 24,
+              paddingVertical: 12,
+              backgroundColor: colors.primary || '#0084ff',
+              borderRadius: 8,
+            }}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Thử lại</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={posts}
+          keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+          renderItem={renderPost}
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          contentContainerStyle={dynamicStyles.listContent}
+          ListEmptyComponent={
+            <View style={dynamicStyles.emptyContainer}>
+              <MaterialCommunityIcons name="newspaper-variant-outline" size={48} color={colors.textSecondary} />
+              <Text style={[dynamicStyles.emptyText, { color: colors.textSecondary, marginTop: 16 }]}>
+                Chưa có bài viết nào
+              </Text>
+              <Text style={[dynamicStyles.emptyText, { color: colors.textSecondary, marginTop: 8, fontSize: 13 }]}>
+                Kéo xuống để làm mới
+              </Text>
+            </View>
+          }
+        />
+      )}
 
       <CommentsBottomSheet
         postId={activePostId}

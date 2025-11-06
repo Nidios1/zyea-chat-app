@@ -12,7 +12,6 @@ import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { TabBarProvider } from './contexts/TabBarContext';
 import AuthNavigator from './navigation/AuthNavigator';
 import MainNavigator from './navigation/MainNavigator';
-import SplashScreen from './components/Splash/SplashScreen';
 import { useUpdates } from './hooks/useUpdates';
 import { UpdateModal } from './components/Common/UpdateModal';
 
@@ -61,7 +60,7 @@ const AppContent = () => {
   const authenticated = Boolean(isAuthenticated);
 
   if (isLoading) {
-    return <SplashScreen />;
+    return null;
   }
 
   return (
