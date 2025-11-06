@@ -13,13 +13,13 @@ export const PWATheme = {
     success: '#00a651',
   },
   dark: {
-    primary: '#0084ff',
+    primary: '#ffffff', // White for primary actions (like Threads)
     secondary: '#00a651',
-    background: '#18191a', // Facebook dark background
-    surface: '#242526',    // Facebook surface
-    text: '#e4e6eb',       // Facebook text
-    textSecondary: '#b0b3b8',
-    border: '#3a3b3c',
+    background: '#000000', // Pure black like Threads
+    surface: '#000000', // Pure black
+    text: '#ffffff', // White text
+    textSecondary: '#a0a0a0', // Light gray for secondary text
+    border: '#1a1a1a', // Very dark gray for borders
     error: '#ff4444',
     success: '#00a651',
   },

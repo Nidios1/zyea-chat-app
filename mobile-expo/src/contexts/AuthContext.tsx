@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getStoredToken, storeToken, removeToken } from '../utils/auth';
-import axios from 'axios';
+import apiClient from '../utils/api';
 import { API_BASE_URL } from '../config/constants';
 
 interface User {
@@ -50,20 +50,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const verifyToken = async (token: string) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/users/profile`, {
+      // Use apiClient with configured timeout and interceptors
+      const response = await apiClient.get('/users/profile', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        timeout: 15000, // 15 seconds timeout
       });
 
       if (response.data) {
         setUser(response.data);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Token verification failed:', error);
-      // Token invalid, remove it
-      await removeToken();
-      setToken(null);
+      
+      // Only remove token if it's an authentication error (401, 403)
+      // Don't remove token for timeout errors - might be network issue
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        // Token invalid, remove it
+        await removeToken();
+        setToken(null);
+      } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        // Timeout error - don't remove token, just log it
+        console.warn('Token verification timeout - network may be slow');
+      } else {
+        // Other errors - log but don't remove token
+        console.warn('Token verification error - keeping token:', error.message);
+      }
     }
   };
 

@@ -124,15 +124,15 @@
             document.documentElement.style.background = bgGradient;
             document.body.style.background = bgGradient;
             
-            // After app loads, switch to theme color
+            // After app loads, switch to theme color (Threads style - pure black)
             setTimeout(() => {
-              const bgColor = theme === 'dark' ? '#1c1c1e' : '#ffffff';
+              const bgColor = theme === 'dark' ? '#000000' : '#ffffff';
               document.documentElement.style.background = bgColor;
               document.body.style.background = bgColor;
             }, 2000); // Wait for splash screen to finish
           } else {
-            // Desktop: light gray or dark gray
-            const bgColor = theme === 'dark' ? '#1a1a1c' : '#f0f2f5';
+            // Desktop: light gray or pure black (Threads style)
+            const bgColor = theme === 'dark' ? '#000000' : '#f0f2f5';
             document.documentElement.style.background = bgColor;
             document.body.style.background = bgColor;
           }

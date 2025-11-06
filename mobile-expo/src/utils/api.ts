@@ -6,7 +6,7 @@ import { getStoredToken } from './auth';
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 15000, // 15 seconds timeout (increased from 10s)
   headers: {
     'Content-Type': 'application/json',
   },
@@ -165,6 +165,16 @@ export const friendsAPI = {
 
   removeFriend: (friendId: string) =>
     apiClient.delete(`/friends/${friendId}`),
+
+  getFollowing: () => apiClient.get('/friends/following'),
+
+  getFollowers: () => apiClient.get('/friends/followers'),
+
+  follow: (followingId: string) =>
+    apiClient.post('/friends/follow', { followingId }),
+
+  unfollow: (followingId: string) =>
+    apiClient.delete(`/friends/follow/${followingId}`),
 };
 
 export const notificationsAPI = {
@@ -177,8 +187,15 @@ export const notificationsAPI = {
 };
 
 export const newsfeedAPI = {
-  getPosts: (page = 1) =>
-    apiClient.get(`/newsfeed/posts?page=${page}`),
+  getPosts: (page = 1, type?: 'all' | 'following') => {
+    const params = new URLSearchParams({ page: page.toString() });
+    // Always append type parameter, default to 'all' if not provided
+    const typeParam = type || 'all';
+    params.append('type', typeParam);
+    const url = `/newsfeed/posts?${params.toString()}`;
+    console.log('📱 [API] getPosts URL:', url, 'type param:', typeParam, 'original type:', type);
+    return apiClient.get(url);
+  },
 
   getPost: (postId: string) =>
     apiClient.get(`/newsfeed/posts/${postId}`),

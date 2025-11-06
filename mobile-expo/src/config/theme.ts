@@ -96,6 +96,29 @@ const fontConfig = {
 // Light Theme
 export const lightTheme = MD3LightTheme;
 
-// Dark Theme
-export const darkTheme = MD3DarkTheme;
+// Dark Theme - Threads Style (Pure Black)
+export const darkTheme = {
+  ...MD3DarkTheme,
+  colors: {
+    ...MD3DarkTheme.colors,
+    primary: '#ffffff', // White for primary actions
+    primaryContainer: '#1a1a1a',
+    secondary: '#ffffff',
+    secondaryContainer: '#1a1a1a',
+    tertiary: '#ffffff',
+    error: '#ef5350',
+    errorContainer: '#c62828',
+    background: '#000000', // Pure black like Threads
+    surface: '#000000', // Pure black
+    surfaceVariant: '#101010', // Very dark gray for cards
+    onPrimary: '#000000',
+    onSecondary: '#000000',
+    onTertiary: '#000000',
+    onError: '#ffffff',
+    onBackground: '#ffffff', // White text on black
+    onSurface: '#ffffff', // White text
+    onSurfaceVariant: '#b0b0b0', // Light gray for secondary text
+  },
+  fonts: configureFonts({ config: fontConfig }),
+};
 

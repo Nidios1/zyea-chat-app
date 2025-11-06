@@ -373,7 +373,7 @@ const MediaButton = styled.button`
   align-items: center;
   gap: 8px;
   background: white;
-  border: 1.5px solid #4CAF50;
+  border: 1px solid #4CAF50;
   color: #4CAF50;
   border-radius: 8px;
   padding: 10px 16px;
@@ -384,9 +384,34 @@ const MediaButton = styled.button`
   justify-content: center;
   transition: all 0.2s;
   
+  /* Dark mode: Threads style border - more visible */
+  html[data-theme="dark"] & {
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background: #1a1a1a !important;
+    color: #ffffff !important;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) & {
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      background: #1a1a1a !important;
+      color: #ffffff !important;
+    }
+  }
+  
   &:active {
     background: #f0f8f4;
     opacity: 0.9;
+    
+    html[data-theme="dark"] & {
+      background: #2a2a2a !important;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) & {
+        background: #2a2a2a !important;
+      }
+    }
   }
 `;
 
@@ -412,12 +437,27 @@ const EndOfPostsMessage = styled.div`
 const BackToTopButton = styled.button`
   background: #FF9800;
   color: white;
-  border: none;
+  border: 1px solid transparent;
   border-radius: 8px;
   padding: 12px 24px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  
+  /* Dark mode: Threads style border - more visible */
+  html[data-theme="dark"] & {
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background: #1a1a1a !important;
+    color: #ffffff !important;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) & {
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      background: #1a1a1a !important;
+      color: #ffffff !important;
+    }
+  }
   
   &:active {
     opacity: 0.85;
@@ -639,7 +679,7 @@ const ActionButton = styled.button`
   gap: 8px;
   padding: 10px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
   color: white;
   font-size: 14px;

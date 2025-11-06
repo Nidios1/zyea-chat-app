@@ -14,11 +14,11 @@ import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 
 const PostContainer = styled.div`
-  background: white;
+  background: var(--bg-primary, white);
   border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e1e5e9;
+  box-shadow: 0 2px 8px var(--shadow-color, rgba(0, 0, 0, 0.1));
+  border: 1px solid var(--border-color, #e1e5e9);
   position: relative;
   width: 100%;
   margin-bottom: 1rem;
@@ -63,14 +63,14 @@ const UserDetails = styled.div`
 
 const UserName = styled.div`
   font-weight: 600;
-  color: #333;
+  color: var(--text-primary, #333);
   font-size: 1rem;
   margin-bottom: 0.1rem;
 `;
 
 const PostTime = styled.div`
   font-size: 0.85rem;
-  color: #666;
+  color: var(--text-secondary, #666);
 `;
 
 const PostActions = styled.div`
@@ -82,8 +82,8 @@ const MoreButton = styled.button`
   height: 32px;
   border-radius: 50%;
   border: none;
-  background: #f5f5f5;
-  color: #666;
+  background: var(--bg-tertiary, #f5f5f5);
+  color: var(--text-secondary, #666);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -91,7 +91,7 @@ const MoreButton = styled.button`
   transition: all 0.2s ease;
   
   &:hover {
-    background: #e0e0e0;
+    background: var(--bg-secondary, #e0e0e0);
   }
 `;
 
@@ -99,10 +99,10 @@ const DropdownMenu = styled.div`
   position: absolute;
   top: 100%;
   right: 0;
-  background: white;
+  background: var(--bg-primary, white);
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border: 1px solid #e1e5e9;
+  box-shadow: 0 4px 12px var(--shadow-color, rgba(0, 0, 0, 0.15));
+  border: 1px solid var(--border-color, #e1e5e9);
   z-index: 10;
   min-width: 120px;
   overflow: hidden;
@@ -112,8 +112,8 @@ const DropdownItem = styled.button`
   width: 100%;
   padding: 0.75rem 1rem;
   border: none;
-  background: white;
-  color: #333;
+  background: var(--bg-primary, white);
+  color: var(--text-primary, #333);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -122,14 +122,14 @@ const DropdownItem = styled.button`
   transition: all 0.2s ease;
   
   &:hover {
-    background: #f5f5f5;
+    background: var(--bg-tertiary, #f5f5f5);
   }
   
   &.danger {
     color: #e74c3c;
     
     &:hover {
-      background: #ffeaea;
+      background: rgba(231, 76, 60, 0.1);
     }
   }
 `;
@@ -138,7 +138,7 @@ const PostContent = styled.div`
   margin-bottom: 1rem;
   line-height: 1.6;
   font-size: 1rem;
-  color: #333;
+  color: var(--text-primary, #333);
   white-space: pre-wrap;
   word-wrap: break-word;
 `;
@@ -161,13 +161,13 @@ const PostStats = styled.div`
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-color, #f0f0f0);
   margin-bottom: 0.5rem;
 `;
 
 const LikesCount = styled.div`
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-secondary, #666);
   display: flex;
   align-items: center;
   gap: 0.25rem;
@@ -175,7 +175,7 @@ const LikesCount = styled.div`
 
 const CommentsCount = styled.div`
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-secondary, #666);
 `;
 
 const PostInteractions = styled.div`
@@ -189,7 +189,7 @@ const InteractionButton = styled.button`
   padding: 0.75rem;
   border: none;
   background: transparent;
-  color: #666;
+  color: var(--text-secondary, #666);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -202,7 +202,7 @@ const InteractionButton = styled.button`
   position: relative;
   
   &:hover {
-    background: #f5f5f5;
+    background: var(--bg-tertiary, #f5f5f5);
     transform: scale(1.05);
   }
   
@@ -232,7 +232,7 @@ const InteractionButton = styled.button`
 const CommentSection = styled.div`
   margin-top: 0.75rem;
   padding-top: 0.75rem;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--border-color, #f0f0f0);
 `;
 
 const CommentInput = styled.div`
@@ -258,18 +258,20 @@ const CommentAvatar = styled.div`
 const CommentInputField = styled.input`
   flex: 1;
   padding: 0.75rem 1rem;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border-color, #ddd);
   border-radius: 25px;
   font-size: 0.9rem;
   outline: none;
+  background: var(--bg-primary, white);
+  color: var(--text-primary, #333);
   transition: all 0.2s ease;
   
   &:focus {
-    border-color: #0068ff;
+    border-color: var(--primary-color, #0068ff);
   }
   
   &::placeholder {
-    color: #999;
+    color: var(--text-tertiary, #999);
   }
 `;
 
@@ -307,7 +309,7 @@ const Comment = styled.div`
 `;
 
 const CommentContent = styled.div`
-  background: #f5f5f5;
+  background: var(--bg-tertiary, #f5f5f5);
   padding: 0.5rem 0.75rem;
   border-radius: 12px;
   flex: 1;
@@ -316,13 +318,13 @@ const CommentContent = styled.div`
 const CommentAuthor = styled.div`
   font-weight: 600;
   font-size: 0.85rem;
-  color: #333;
+  color: var(--text-primary, #333);
   margin-bottom: 0.1rem;
 `;
 
 const CommentText = styled.div`
   font-size: 0.85rem;
-  color: #333;
+  color: var(--text-primary, #333);
   line-height: 1.4;
 `;
 

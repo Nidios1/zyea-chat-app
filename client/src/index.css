@@ -69,17 +69,35 @@
   --shadow-color: rgba(0, 0, 0, 0.1);
 }
 
-/* Theme Variables - Dark Mode */
+/* Theme Variables - Dark Mode (Threads Style - Pure Black) */
 :root[data-theme="dark"] {
-  --bg-primary: #1c1c1e;
-  --bg-secondary: #2c2c2e;
-  --bg-tertiary: #3a3a3c;
-  --header-bg: #1a1a1c;
-  --text-primary: #ffffff;
-  --text-secondary: #b0b0b0;
-  --text-tertiary: #808080;
-  --border-color: #3a3a3c;
-  --shadow-color: rgba(0, 0, 0, 0.3);
+  --bg-primary: #000000; /* Pure black like Threads */
+  --bg-secondary: #000000; /* Pure black */
+  --bg-tertiary: #101010; /* Very dark gray for cards */
+  --header-bg: #000000; /* Pure black header */
+  --text-primary: #ffffff; /* White text */
+  --text-secondary: #a0a0a0; /* Light gray for secondary text */
+  --text-tertiary: #808080; /* Medium gray */
+  --border-color: #1a1a1a; /* Very dark gray for borders */
+  --button-border: rgba(255, 255, 255, 0.2); /* More visible border for buttons like Threads (increased from 0.1) */
+  --button-bg: #1a1a1a; /* Dark gray background for buttons */
+  --shadow-color: rgba(0, 0, 0, 0.5);
+}
+
+/* Global button styles for dark mode - Threads style */
+/* Force apply border to all buttons in dark mode - more visible border */
+:root[data-theme="dark"] button:not(.primary):not(.success):not(.danger):not(.secondary):not([class*="gradient"]):not([style*="border: none"]):not([style*="border:none"]) {
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  background: #1a1a1a !important;
+  color: #ffffff !important;
+}
+
+/* Also apply to buttons with transparent/auto backgrounds */
+:root[data-theme="dark"] button[style*="background: transparent"],
+:root[data-theme="dark"] button[style*="background:transparent"] {
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  background: #1a1a1a !important;
+  color: #ffffff !important;
 }
 
 /* Theme Color Variables - Classic */

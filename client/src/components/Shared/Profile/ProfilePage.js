@@ -313,12 +313,12 @@ const StatusDot = styled.div`
 `;
 
 const InfoSection = styled.div`
-  background: white;
+  background: var(--bg-primary, white);
   border-radius: 12px;
   padding: 1rem;
   margin-bottom: 0.75rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  border: 1px solid #f0f0f0;
+  box-shadow: 0 2px 8px var(--shadow-color, rgba(0, 0, 0, 0.05));
+  border: 1px solid var(--border-color, #f0f0f0);
   
   @media (max-width: 768px) {
     padding: 0.75rem;
@@ -335,7 +335,7 @@ const SectionTitle = styled.h3`
   margin: 0 0 0.75rem 0;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #666;
+  color: var(--text-secondary, #666);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   
@@ -355,7 +355,7 @@ const InfoItem = styled.div`
   align-items: center;
   gap: 0.75rem;
   padding: 0.5rem 0;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border-color, #f0f0f0);
 
   &:last-child {
     border-bottom: none;
@@ -376,11 +376,11 @@ const InfoIcon = styled.div`
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: #f5f5f5;
+  background: var(--bg-tertiary, #f5f5f5);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #666;
+  color: var(--text-secondary, #666);
   flex-shrink: 0;
   
   @media (max-width: 768px) {
@@ -400,7 +400,7 @@ const InfoContent = styled.div`
 
 const InfoLabel = styled.div`
   font-size: 0.75rem;
-  color: #999;
+  color: var(--text-tertiary, #999);
   margin-bottom: 0.1rem;
   font-weight: 400;
   
@@ -415,7 +415,7 @@ const InfoLabel = styled.div`
 
 const InfoValue = styled.div`
   font-size: 0.85rem;
-  color: #333;
+  color: var(--text-primary, #333);
   font-weight: 500;
   line-height: 1.3;
   
@@ -441,10 +441,30 @@ const EditButton = styled.button`
   transition: all 0.2s ease;
   font-size: 0.7rem;
 
+  /* Dark mode: Threads style border - more visible */
+  html[data-theme="dark"] & {
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background: #1a1a1a !important;
+    color: #ffffff !important;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) & {
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      background: #1a1a1a !important;
+      color: #ffffff !important;
+    }
+  }
+
   &:hover {
     background: #0068ff;
     color: white;
     border-color: #0068ff;
+    
+    html[data-theme="dark"] & {
+      background: #0068ff !important;
+      border-color: #0068ff !important;
+    }
   }
   
   @media (max-width: 768px) {
@@ -496,10 +516,41 @@ const ActionButton = styled.button`
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   min-width: 120px;
 
+  /* Dark mode: Threads style - visible border, dark background */
+  html[data-theme="dark"] & {
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background: #1a1a1a !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) & {
+      border: 1px solid rgba(255, 255, 255, 0.2) !important;
+      background: #1a1a1a !important;
+      color: #ffffff !important;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+  }
+
   &:hover:not(:disabled) {
     background: #f5f5f5;
     border-color: #0068ff;
     color: #0068ff;
+
+    html[data-theme="dark"] & {
+      background: #2a2a2a !important;
+      border-color: rgba(255, 255, 255, 0.3) !important;
+      color: #ffffff !important;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) & {
+        background: #2a2a2a !important;
+        border-color: rgba(255, 255, 255, 0.3) !important;
+        color: #ffffff !important;
+      }
+    }
   }
 
   &:disabled {

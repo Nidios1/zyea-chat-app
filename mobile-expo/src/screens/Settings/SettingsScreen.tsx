@@ -1,11 +1,22 @@
-import React from 'react';
-import { View, StyleSheet, ScrollView, Switch } from 'react-native';
-import { Text, Card, Divider, useTheme } from 'react-native-paper';
+import React, { useState } from 'react';
+import { View, StyleSheet, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { Text, Card, Divider, useTheme, Button } from 'react-native-paper';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
+import { useUpdates } from '../../hooks/useUpdates';
+import { getCurrentUpdateInfo, formatUpdateVersion } from '../../utils/updateUtils';
+import { UpdateModal } from '../../components/Common/UpdateModal';
+import appJson from '../../../app.json';
 
 const SettingsScreen = () => {
   const theme = useTheme();
   const { isDarkMode, toggleTheme } = useAppTheme();
+  const { checkForUpdates, isChecking, isUpdateAvailable, currentVersion } = useUpdates({
+    checkOnMount: false, // Không tự động check trong settings
+    autoDownload: false,
+  });
+  
+  const updateInfo = getCurrentUpdateInfo();
+  const [showTestModal, setShowTestModal] = useState(false);
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -86,10 +97,86 @@ const SettingsScreen = () => {
             Phiên bản
           </Text>
           <Text style={[styles.settingValue, { color: theme.colors.onSurfaceVariant }]}>
-            1.0.0
+            {appJson.expo.version}
           </Text>
         </View>
+
+        <Divider style={styles.divider} />
+
+        {/* OTA Updates Section */}
+        {updateInfo.isEnabled && (
+          <>
+            <View style={styles.settingItem}>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingLabel, { color: theme.colors.onBackground }]}>
+                  Cập nhật tự động
+                </Text>
+                <Text style={[styles.settingDescription, { color: theme.colors.onSurfaceVariant }]}>
+                  {isUpdateAvailable ? 'Có phiên bản mới' : 'Đã cập nhật mới nhất'}
+                </Text>
+              </View>
+            </View>
+
+            {currentVersion && (
+              <View style={styles.settingItem}>
+                <Text style={[styles.settingLabel, { color: theme.colors.onBackground }]}>
+                  Update ID
+                </Text>
+                <Text style={[styles.settingValue, { color: theme.colors.onSurfaceVariant, fontSize: 11 }]}>
+                  {formatUpdateVersion(currentVersion)}
+                </Text>
+              </View>
+            )}
+
+            <Divider style={styles.divider} />
+
+            <View style={styles.updateActions}>
+              <Button
+                mode="outlined"
+                onPress={checkForUpdates}
+                disabled={isChecking}
+                style={styles.checkButton}
+                icon={isChecking ? () => <ActivityIndicator size="small" color={theme.colors.primary} /> : undefined}
+              >
+                {isChecking ? 'Đang kiểm tra...' : 'Kiểm tra cập nhật'}
+              </Button>
+            </View>
+          </>
+        )}
+
+        {!updateInfo.isEnabled && (
+          <>
+            <View style={styles.settingItem}>
+              <Text style={[styles.settingDescription, { color: theme.colors.onSurfaceVariant }]}>
+                OTA Updates không khả dụng trong chế độ development
+              </Text>
+            </View>
+            
+            <Divider style={styles.divider} />
+            
+            {/* Button test UpdateModal UI */}
+            <View style={styles.updateActions}>
+              <Button
+                mode="contained"
+                onPress={() => setShowTestModal(true)}
+                style={styles.testButton}
+                buttonColor="#FF8C00"
+              >
+                🧪 Test Update Modal UI
+              </Button>
+            </View>
+          </>
+        )}
       </Card>
+      
+      {/* Test UpdateModal */}
+      <UpdateModal
+        visible={showTestModal}
+        onUpdate={() => setShowTestModal(false)}
+        title="Ứng dụng đã có phiên bản mới"
+        message="Bạn vui lòng cập nhật Ứng dụng lên phiên bản mới nhất. Nếu không cập nhật, Bạn sẽ không chạy được phiên bản hiện tại trên điện thoại"
+        updateButtonText="Cập nhật"
+      />
     </ScrollView>
   );
 };
@@ -125,6 +212,18 @@ const styles = StyleSheet.create({
   },
   divider: {
     marginVertical: 8,
+  },
+  settingInfo: {
+    flex: 1,
+  },
+  updateActions: {
+    marginTop: 8,
+  },
+  checkButton: {
+    marginTop: 8,
+  },
+  testButton: {
+    marginTop: 8,
   },
 });
 

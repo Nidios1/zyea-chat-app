@@ -133,20 +133,26 @@ const PrimaryButton = styled.button`
 const SecondaryButton = styled.button`
   width: calc(100% - 24px);
   margin: 8px 12px 16px;
-  background: #f2f4f7;
-  color: #222;
-  border: 1px solid #e6e6e6;
+  background: ${props => props.$isDark ? 'var(--button-bg, #1a1a1a)' : '#f2f4f7'};
+  color: ${props => props.$isDark ? 'var(--text-primary, #ffffff)' : '#222'};
+  border: 1px solid ${props => props.$isDark ? 'var(--button-border, rgba(255, 255, 255, 0.2))' : '#e6e6e6'};
   border-radius: 24px;
   padding: 14px 16px;
   font-weight: 600;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: ${props => props.$isDark ? 'var(--bg-tertiary, #2a2a2a)' : '#e9ecef'};
+    border-color: ${props => props.$isDark ? 'rgba(255, 255, 255, 0.3)' : '#ddd'};
+  }
 `;
 
 const QRButton = styled.button`
   width: calc(100% - 24px);
   margin: 0 12px 16px;
-  background: #fff;
-  color: #0a66ff;
-  border: 2px solid #0a66ff;
+  background: ${props => props.$isDark ? 'var(--button-bg, #1a1a1a)' : '#fff'};
+  color: ${props => props.$isDark ? '#0a66ff' : '#0a66ff'};
+  border: 1px solid ${props => props.$isDark ? 'var(--button-border, rgba(255, 255, 255, 0.2))' : '#0a66ff'};
   border-radius: 24px;
   padding: 14px 16px;
   font-weight: 600;
@@ -155,6 +161,12 @@ const QRButton = styled.button`
   justify-content: center;
   gap: 8px;
   font-size: 16px;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: ${props => props.$isDark ? 'var(--bg-tertiary, #2a2a2a)' : '#f0f7ff'};
+    border-color: ${props => props.$isDark ? 'rgba(10, 102, 255, 0.5)' : '#0056cc'};
+  }
 `;
 
 const FormWrap = styled.form`

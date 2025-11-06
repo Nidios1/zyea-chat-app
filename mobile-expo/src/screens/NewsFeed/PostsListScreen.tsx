@@ -13,8 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Avatar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
-import { newsfeedAPI } from '../../utils/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { newsfeedAPI, friendsAPI } from '../../utils/api';
 import { getInitials, getImageURL, getAvatarURL } from '../../utils/imageUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
@@ -24,20 +24,21 @@ import { useTabBar } from '../../contexts/TabBarContext';
 import PostImagesCarousel from '../../components/NewsFeed/PostImagesCarousel';
 import CommentsBottomSheet from '../../components/NewsFeed/CommentsBottomSheet';
 import ExpandableText from '../../components/Common/ExpandableText';
-import StoriesBar from '../../components/NewsFeed/StoriesBar';
+import FeedTabBar from '../../components/Common/FeedTabBar';
 
 const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.surface,
   },
+  // Threads-style minimal header
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   logoSection: {
     flexDirection: 'row',
@@ -45,15 +46,16 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
     gap: 8,
   },
   logoImage: {
-    width: 32,
-    height: 32,
-    borderRadius: 7,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
   },
   logoText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
-  searchIcon: {
+  headerRight: {
     width: 40,
     height: 40,
     alignItems: 'center',
@@ -62,50 +64,74 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
   listContent: {
     paddingBottom: 20,
   },
+  // Threads-style post card
   postContainer: {
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   postHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
   authorSection: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 10,
     flex: 1,
   },
   authorAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
   },
   authorInfo: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   authorName: {
     fontSize: 15,
     fontWeight: '600',
-    marginBottom: 2,
+    letterSpacing: -0.2,
   },
   postTime: {
     fontSize: 13,
+    marginLeft: 4,
   },
+  postMoreButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -4,
+  },
+  followButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#2c2c2c', // Dark background for both light and dark mode
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+    marginTop: -2,
+  },
+  // Threads-style content
   postContent: {
     fontSize: 15,
-    lineHeight: 22,
+    lineHeight: 20,
     marginBottom: 12,
+    letterSpacing: -0.1,
   },
   imagesContainer: {
-    flexDirection: 'row',
-    gap: 8,
     marginBottom: 12,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
   postImage: {
-    borderRadius: 8,
+    borderRadius: 12,
     width: '100%',
   },
   fullWidthImage: {
@@ -119,65 +145,68 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
     maxHeight: 500,
   },
   imageContainer: {
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: colors.border || '#1a1a1a',
   },
+  // Threads-style actions (simpler, cleaner)
   postActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 20,
-    paddingVertical: 8,
+    gap: 24,
+    paddingTop: 4,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    minWidth: 40,
   },
   actionCount: {
-    fontSize: 14,
-  },
-  separator: {
-    height: 1,
-    marginTop: 8,
+    fontSize: 13,
+    marginLeft: 2,
   },
   emptyContainer: {
-    padding: 40,
+    padding: 60,
     alignItems: 'center',
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 15,
+    textAlign: 'center',
   },
+  // Threads-style FAB
   fab: {
     position: 'absolute',
     right: 16,
     bottom: 80,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 8,
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
   fabIcon: {
-    fontSize: 28,
+    fontSize: 24,
   },
 });
 
 const PostsListScreen = () => {
   const { user } = useAuth();
-  const { colors } = useAppTheme();
+  const { colors, isDarkMode } = useAppTheme();
   const navigation = useNavigation();
   const { setIsVisible } = useTabBar();
+  const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
   const [imageAspectRatios, setImageAspectRatios] = useState<Record<string, number>>({});
   const [showComments, setShowComments] = useState(false);
   const [activePostId, setActivePostId] = useState<string | number | null>(null);
   const [fabVisible, setFabVisible] = useState(false);
+  const [activeTab, setActiveTab] = useState<'all' | 'following'>('all');
   const scrollY = useRef(0);
   const lastScrollY = useRef(0);
   const fabOpacity = useRef(new Animated.Value(0)).current;
@@ -192,30 +221,101 @@ const PostsListScreen = () => {
     }, [setIsVisible])
   );
 
+  // Fetch following list for filtering and checking follow status
+  const { data: followingList = [], isLoading: isLoadingFollowing, refetch: refetchFollowing } = useQuery({
+    queryKey: ['following'],
+    queryFn: async () => {
+      const res = await friendsAPI.getFollowing();
+      // Handle both array response and object with data property
+      return Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    },
+    // Always fetch to check follow status for all posts
+  });
+
+  // Create a Set of following IDs for quick lookup
+  const followingIds = new Set(
+    followingList.map((f: any) => f.following_id || f.id || f.user_id)
+  );
+
   const {
     data: posts = [],
     isLoading,
     refetch,
   } = useQuery({
-    queryKey: ['posts'],
-    queryFn: () => 
-      newsfeedAPI.getPosts().then((res) => {
-        // Filter out posts with videos - videos should only appear in Video tab
-        const allPosts = Array.isArray(res.data) ? res.data : (res.data?.posts || []);
-        return allPosts.filter((post: any) => {
-          // Exclude posts that have video (videoUrl, video_url, or videos field)
-          return !post.videoUrl && 
-                 !post.video_url && 
-                 !post.videos && 
-                 !(post.videos && Array.isArray(post.videos) && post.videos.length > 0);
-        });
-      }),
+    queryKey: ['posts', activeTab],
+    queryFn: async () => {
+      // Pass type to API: 'all' for all public posts, 'following' for following posts
+      const type = activeTab === 'following' ? 'following' : 'all';
+      console.log('📱 Fetching posts with type:', type, 'activeTab:', activeTab);
+      const res = await newsfeedAPI.getPosts(1, type);
+      // Filter out posts with videos - videos should only appear in Video tab
+      const allPosts = Array.isArray(res.data) ? res.data : (res.data?.posts || []);
+      console.log('📱 Received posts:', allPosts.length, 'posts');
+      if (allPosts.length > 0) {
+        const userIds = [...new Set(allPosts.map((p: any) => p.user_id))];
+        console.log('📱 Posts from', userIds.length, 'different users:', userIds);
+        console.log('📱 Current user id:', user?.id);
+      }
+      
+      const filtered = allPosts.filter((post: any) => {
+        // Exclude posts that have video (videoUrl, video_url, or videos field)
+        return !post.videoUrl && 
+               !post.video_url && 
+               !post.videos && 
+               !(post.videos && Array.isArray(post.videos) && post.videos.length > 0);
+      });
+      console.log('📱 Filtered posts (no videos):', filtered.length, 'posts');
+      if (filtered.length > 0) {
+        console.log('📱 Sample filtered posts user_ids:', filtered.slice(0, 5).map((p: any) => ({ id: p.id, user_id: p.user_id, username: p.username || p.full_name })));
+      }
+      return filtered;
+    },
+    enabled: activeTab === 'all' || (activeTab === 'following' && !isLoadingFollowing),
+    staleTime: 0, // Always consider data stale to allow refetch
+    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes (formerly cacheTime)
   });
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await refetch();
-    setRefreshing(false);
+    try {
+      // Invalidate cache to force fresh data
+      await queryClient.invalidateQueries({ queryKey: ['posts', activeTab] });
+      await queryClient.invalidateQueries({ queryKey: ['following'] });
+      
+      // Always refresh following list to get latest follow status
+      await refetchFollowing();
+      
+      // Refetch posts with current activeTab
+      await refetch();
+      
+      console.log('📱 Refresh completed for tab:', activeTab);
+    } catch (error) {
+      console.error('❌ Error refreshing:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleFollow = async (userId: string | number) => {
+    try {
+      await friendsAPI.follow(userId.toString());
+      // Refresh following list to update UI
+      await refetchFollowing();
+    } catch (error: any) {
+      console.error('Error following user:', error);
+      // Show error message if needed
+    }
+  };
+
+  const handleUnfollow = async (userId: string | number) => {
+    try {
+      await friendsAPI.unfollow(userId.toString());
+      // Refresh following list to update UI
+      await refetchFollowing();
+    } catch (error: any) {
+      console.error('Error unfollowing user:', error);
+      // Show error message if needed
+    }
   };
 
   const formatTimeAgo = (date: Date): string => {
@@ -280,7 +380,13 @@ const PostsListScreen = () => {
     // Get author info - API returns user fields directly on post object
     const authorName = item.full_name || item.username || 'Unknown';
     const authorAvatar = item.avatar_url || '';
+    const authorId = item.user_id || item.user?.id;
     const postTime = item.created_at ? formatTimeAgo(new Date(item.created_at)) : '';
+
+    // Check if user is following this author
+    const isFollowing = authorId && followingIds.has(authorId);
+    const isOwnPost = authorId === user?.id;
+    const showFollowButton = !isOwnPost && !isFollowing && activeTab === 'all';
 
     // Format images - show 2 side by side if available
     // Check for image_url (single image) or images (array)
@@ -292,8 +398,8 @@ const PostsListScreen = () => {
     }
     
     return (
-      <View style={[dynamicStyles.postContainer, { backgroundColor: colors.surface }]}>
-        {/* Post Header */}
+      <View style={[dynamicStyles.postContainer, { borderBottomColor: colors.border }]}>
+        {/* Threads-style Post Header */}
         <View style={dynamicStyles.postHeader}>
           <View style={dynamicStyles.authorSection}>
             {authorAvatar ? (
@@ -303,36 +409,47 @@ const PostsListScreen = () => {
               />
             ) : (
               <Avatar.Text
-                size={40}
+                size={28}
                 label={getInitials(authorName)}
                 style={dynamicStyles.authorAvatar}
               />
             )}
             <View style={dynamicStyles.authorInfo}>
               <Text style={[dynamicStyles.authorName, { color: colors.text }]}>{authorName}</Text>
-              <Text style={[dynamicStyles.postTime, { color: colors.textSecondary }]}>{postTime}</Text>
+              {showFollowButton && (
+                <TouchableOpacity
+                  style={dynamicStyles.followButton}
+                  onPress={() => authorId && handleFollow(authorId)}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
+                </TouchableOpacity>
+              )}
+              <Text style={[dynamicStyles.postTime, { color: colors.textSecondary }]}>· {postTime}</Text>
             </View>
           </View>
-          <TouchableOpacity>
-            <MaterialCommunityIcons name="dots-horizontal" size={20} color={colors.textSecondary} />
+          <TouchableOpacity style={dynamicStyles.postMoreButton}>
+            <MaterialCommunityIcons name="dots-horizontal" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
 
-        {/* Post Content */}
+        {/* Threads-style Post Content */}
         {item.content && (
-          <ExpandableText
-            text={item.content}
-            numberOfLines={3}
-            color={colors.text}
-            backgroundColor={colors.surface}
-            linkColor="#3b82f6"
-            charLimitFallback={140}
-          />
+          <View style={{ marginBottom: postImages.length > 0 ? 12 : 0 }}>
+            <ExpandableText
+              text={item.content}
+              numberOfLines={5}
+              color={colors.text}
+              backgroundColor={colors.surface}
+              linkColor={colors.primary || '#3b82f6'}
+              charLimitFallback={200}
+            />
+          </View>
         )}
 
         {/* Post Images */}
         {postImages.length > 0 && (
-          <View style={{ marginTop: 12 }}>
+          <View style={dynamicStyles.imagesContainer}>
             <PostImagesCarousel
               images={postImages}
               onPressImage={(idx) => {
@@ -342,16 +459,18 @@ const PostsListScreen = () => {
           </View>
         )}
 
-        {/* Post Actions */}
+        {/* Threads-style Post Actions */}
         <View style={dynamicStyles.postActions}>
           <TouchableOpacity style={dynamicStyles.actionButton}>
             <MaterialCommunityIcons
               name={item.isLiked ? 'heart' : 'heart-outline'}
-              size={22}
+              size={20}
               color={item.isLiked ? '#e74c3c' : colors.textSecondary}
             />
             {(item.likes_count || 0) > 0 && (
-              <Text style={[dynamicStyles.actionCount, { color: colors.textSecondary }]}>{item.likes_count || 0}</Text>
+              <Text style={[dynamicStyles.actionCount, { color: colors.textSecondary }]}>
+                {item.likes_count || 0}
+              </Text>
             )}
           </TouchableOpacity>
 
@@ -363,37 +482,29 @@ const PostsListScreen = () => {
               setShowComments(true);
             }}
           >
-            <MaterialCommunityIcons name="message-outline" size={22} color={colors.textSecondary} />
+            <MaterialCommunityIcons name="message-outline" size={20} color={colors.textSecondary} />
             {(item.comments_count || 0) > 0 && (
-              <Text style={[dynamicStyles.actionCount, { color: colors.textSecondary }]}>{item.comments_count || 0}</Text>
+              <Text style={[dynamicStyles.actionCount, { color: colors.textSecondary }]}>
+                {item.comments_count || 0}
+              </Text>
             )}
           </TouchableOpacity>
 
           <TouchableOpacity style={dynamicStyles.actionButton}>
-            <MaterialCommunityIcons name="repeat" size={22} color={colors.textSecondary} />
+            <MaterialCommunityIcons name="repeat" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity style={dynamicStyles.actionButton}>
-            <MaterialCommunityIcons name="send-outline" size={22} color={colors.textSecondary} />
+            <MaterialCommunityIcons name="send-outline" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
-
-        {/* Separator */}
-        <View style={[dynamicStyles.separator, { backgroundColor: colors.border }]} />
       </View>
     );
   };
 
-  const handleShowStory = (story) => {
-    // TODO: show StoryViewer here
-  }
-  const handleAddStory = () => {
-    // TODO: open picker/upload
-  }
-
   return (
     <SafeAreaView style={dynamicStyles.container} edges={['top']}>
-      {/* Header Bar */}
+      {/* Threads-style Minimal Header */}
       <View style={[dynamicStyles.headerBar, { borderBottomColor: colors.border }]}>
         <View style={dynamicStyles.logoSection}>
           <Image
@@ -402,10 +513,16 @@ const PostsListScreen = () => {
           />
           <Text style={[dynamicStyles.logoText, { color: colors.text }]}>Zyea+</Text>
         </View>
-        <TouchableOpacity style={dynamicStyles.searchIcon}>
-          <MaterialCommunityIcons name="magnify" size={24} color={colors.text} />
+        <TouchableOpacity style={dynamicStyles.headerRight}>
+          <MaterialCommunityIcons name="magnify" size={22} color={colors.text} />
         </TouchableOpacity>
       </View>
+
+      {/* Feed Tabs */}
+      <FeedTabBar 
+        activeTab={activeTab} 
+        onTabChange={(tabId) => setActiveTab(tabId as 'all' | 'following')} 
+      />
 
       {/* Posts List */}
       <FlatList
@@ -417,12 +534,6 @@ const PostsListScreen = () => {
         onScroll={handleScroll}
         scrollEventThrottle={16}
         contentContainerStyle={dynamicStyles.listContent}
-        ListHeaderComponent={
-          <View>
-            {/* Stories Bar (scrolls with feed) */}
-            <StoriesBar onPressStory={handleShowStory} onAddStory={handleAddStory} />
-          </View>
-        }
         ListEmptyComponent={
           <View style={dynamicStyles.emptyContainer}>
             <Text style={[dynamicStyles.emptyText, { color: colors.textSecondary }]}>Chưa có bài viết nào</Text>

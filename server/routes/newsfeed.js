@@ -58,27 +58,97 @@ router.post('/test-post', async (req, res) => {
 router.get('/posts', async (req, res) => {
   try {
     const userId = req.user.id;
+    // Get type from query - handle both string and undefined
+    // Check both req.query.type and req.query.type (case insensitive)
+    const typeParam = req.query.type;
+    const type = typeParam ? String(typeParam).toLowerCase().trim() : undefined;
     
-    const [posts] = await getConnection().execute(`
-      SELECT 
-        p.*,
-        u.username,
-        u.full_name,
-        u.avatar_url,
-        u.status,
-        CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked
-      FROM posts p
-      JOIN users u ON p.user_id = u.id
-      LEFT JOIN post_likes pl ON p.id = pl.post_id AND pl.user_id = ?
-      LEFT JOIN friends f ON (
-        (f.user_id = ? AND f.friend_id = p.user_id AND f.status = 'accepted') OR
-        (f.friend_id = ? AND f.user_id = p.user_id AND f.status = 'accepted')
-      )
-      LEFT JOIN follows fl ON (fl.follower_id = ? AND fl.following_id = p.user_id)
-      WHERE p.user_id = ? OR f.id IS NOT NULL OR fl.id IS NOT NULL
-      ORDER BY p.created_at DESC
-      LIMIT 50
-    `, [userId, userId, userId, userId, userId]);
+    console.log('📱 [Backend] /posts request - userId:', userId);
+    console.log('📱 [Backend] req.query:', JSON.stringify(req.query));
+    console.log('📱 [Backend] typeParam:', typeParam, 'type:', type, 'typeof:', typeof typeParam);
+    
+    let query, params;
+    
+    // When type is 'all' or undefined/null, show ALL posts from everyone
+    // Explicitly check for 'all' string or undefined/null
+    if (type === 'all' || type === undefined || type === null || type === '') {
+      // Get ALL posts from everyone (like Threads "For you" tab)
+      // Show all posts regardless of privacy setting
+      
+      // Debug: Check total posts in database
+      const [totalPosts] = await getConnection().execute('SELECT COUNT(*) as count FROM posts');
+      const [uniqueUsers] = await getConnection().execute('SELECT COUNT(DISTINCT user_id) as count FROM posts');
+      console.log('📱 [Backend] Total posts in DB:', totalPosts[0].count, 'from', uniqueUsers[0].count, 'users');
+      
+      query = `
+        SELECT 
+          p.*,
+          u.username,
+          u.full_name,
+          u.avatar_url,
+          u.status,
+          CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked
+        FROM posts p
+        JOIN users u ON p.user_id = u.id
+        LEFT JOIN post_likes pl ON p.id = pl.post_id AND pl.user_id = ?
+        ORDER BY p.created_at DESC
+        LIMIT 50
+      `;
+      params = [userId];
+      console.log('📱 [Backend] Fetching ALL posts from everyone, type:', type || 'undefined (defaulting to all)');
+    } else if (type === 'following') {
+      // Get posts from users being followed
+      query = `
+        SELECT 
+          p.*,
+          u.username,
+          u.full_name,
+          u.avatar_url,
+          u.status,
+          CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked
+        FROM posts p
+        JOIN users u ON p.user_id = u.id
+        LEFT JOIN post_likes pl ON p.id = pl.post_id AND pl.user_id = ?
+        JOIN follows fl ON fl.follower_id = ? AND fl.following_id = p.user_id
+        WHERE p.privacy = 'public' OR p.user_id = ?
+        ORDER BY p.created_at DESC
+        LIMIT 50
+      `;
+      params = [userId, userId, userId];
+    } else {
+      // Default: Get posts from user, friends, and following (backward compatibility)
+      query = `
+        SELECT 
+          p.*,
+          u.username,
+          u.full_name,
+          u.avatar_url,
+          u.status,
+          CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked
+        FROM posts p
+        JOIN users u ON p.user_id = u.id
+        LEFT JOIN post_likes pl ON p.id = pl.post_id AND pl.user_id = ?
+        LEFT JOIN friends f ON (
+          (f.user_id = ? AND f.friend_id = p.user_id AND f.status = 'accepted') OR
+          (f.friend_id = ? AND f.user_id = p.user_id AND f.status = 'accepted')
+        )
+        LEFT JOIN follows fl ON (fl.follower_id = ? AND fl.following_id = p.user_id)
+        WHERE p.user_id = ? OR f.id IS NOT NULL OR fl.id IS NOT NULL
+        ORDER BY p.created_at DESC
+        LIMIT 50
+      `;
+      params = [userId, userId, userId, userId, userId];
+    }
+    
+    const [posts] = await getConnection().execute(query, params);
+    console.log('📱 [Backend] Found', posts.length, 'posts for type:', type || 'default');
+    if (posts.length > 0) {
+      const userIds = [...new Set(posts.map((p: any) => p.user_id))];
+      console.log('📱 [Backend] Posts from', userIds.length, 'different users:', userIds);
+      console.log('📱 [Backend] Sample post user_ids:', posts.slice(0, 5).map((p: any) => ({ id: p.id, user_id: p.user_id, username: p.username, isCurrentUser: p.user_id === userId })));
+    } else {
+      console.log('⚠️ [Backend] No posts found! Check database.');
+    }
 
     // Get comments for each post and parse images
     for (let post of posts) {

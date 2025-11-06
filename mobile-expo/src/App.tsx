@@ -41,7 +41,20 @@ const AppContent = () => {
   const { isAuthenticated, loading } = useAuth();
   
   // Check for live updates (chỉ chạy trong production build)
-  const { showUpdateModal, handleUpdate, handleCancel } = useUpdates();
+  // Tự động check khi app mở, check lại mỗi 5 phút khi app ở foreground
+  const {
+    showUpdateModal,
+    isDownloading,
+    downloadProgress,
+    error,
+    handleUpdate,
+    handleCancel,
+    handleRetry,
+  } = useUpdates({
+    checkOnMount: true,
+    checkInterval: 5 * 60 * 1000, // 5 phút
+    autoDownload: true,
+  });
 
   // Ensure loading and isAuthenticated are always boolean, not string
   const isLoading = Boolean(loading);
@@ -65,6 +78,11 @@ const AppContent = () => {
           visible={showUpdateModal}
           onUpdate={handleUpdate}
           onCancel={handleCancel}
+          onRetry={handleRetry}
+          isDownloading={isDownloading}
+          downloadProgress={downloadProgress}
+          error={error}
+          showProgress={true}
         />
       </NavigationContainer>
     </TabBarProvider>

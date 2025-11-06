@@ -81,10 +81,16 @@ const Button = styled.button`
 `;
 
 const SecondaryButton = styled(Button)`
-  background: transparent;
-  border: 1px solid ${props => props.$isDark ? '#444' : '#e6e6e6'};
-  color: ${props => props.$isDark ? '#fff' : '#333'};
+  background: ${props => props.$isDark ? 'var(--button-bg, #1a1a1a)' : 'transparent'};
+  border: 1px solid ${props => props.$isDark ? 'var(--button-border, rgba(255, 255, 255, 0.2))' : '#e6e6e6'};
+  color: ${props => props.$isDark ? 'var(--text-primary, #ffffff)' : '#333'};
   margin-top: 8px;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: ${props => props.$isDark ? 'var(--bg-tertiary, #2a2a2a)' : '#f5f5f5'};
+    border-color: ${props => props.$isDark ? 'rgba(255, 255, 255, 0.3)' : '#ddd'};
+  }
 `;
 
 const Title = styled.div`
