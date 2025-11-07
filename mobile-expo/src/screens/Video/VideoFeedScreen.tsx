@@ -53,6 +53,7 @@ const VideoFeedScreen = () => {
   const [loading, setLoading] = useState(true);
   const [playingIndex, setPlayingIndex] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [isFocused, setIsFocused] = useState(true); // Track if screen is focused
   const videoRefs = useRef<{ [key: string]: Video | null }>({});
   const [expandedCaptions, setExpandedCaptions] = useState<{ [key: string]: boolean }>({});
   const [videoLoadingStates, setVideoLoadingStates] = useState<{ [key: string]: boolean }>({});
@@ -64,39 +65,76 @@ const VideoFeedScreen = () => {
   // Reload videos when screen is focused (after posting new video)
   useFocusEffect(
     React.useCallback(() => {
+      setIsFocused(true);
       loadVideos();
+      
+      // Cleanup: Pause all videos when screen loses focus (when switching tabs)
+      return () => {
+        setIsFocused(false);
+        // Pause all videos when leaving the video tab
+        Object.values(videoRefs.current).forEach(async (ref) => {
+          if (ref) {
+            try {
+              const status = await ref.getStatusAsync();
+              if (status.isLoaded && status.isPlaying) {
+                await ref.pauseAsync();
+              }
+            } catch (error) {
+              // Ignore errors when pausing
+            }
+          }
+        });
+      };
     }, [])
   );
 
   useEffect(() => {
-    // Play video when index changes, but only if videos are loaded
-    if (videos.length > 0 && playingIndex >= 0 && playingIndex < videos.length) {
+    // Play video when index changes, but only if videos are loaded and screen is focused
+    if (isFocused && videos.length > 0 && playingIndex >= 0 && playingIndex < videos.length) {
       // Play immediately without delay for faster response
       playVideo(playingIndex);
+    } else if (!isFocused) {
+      // Pause all videos if screen is not focused
+      Object.values(videoRefs.current).forEach(async (ref) => {
+        if (ref) {
+          try {
+            const status = await ref.getStatusAsync();
+            if (status.isLoaded && status.isPlaying) {
+              await ref.pauseAsync();
+            }
+          } catch (error) {
+            // Ignore errors when pausing
+          }
+        }
+      });
     }
-  }, [playingIndex, videos.length]);
+  }, [playingIndex, videos.length, isFocused]);
 
   const loadVideos = async (isRefresh = false) => {
     try {
       if (!isRefresh) {
         setLoading(true);
       }
-      // Load posts from API and filter for videos
-      const response = await newsfeedAPI.getPosts(1);
+      // Load ALL public posts from API (type: 'all' to show all posts from everyone)
+      const response = await newsfeedAPI.getPosts(1, 'all');
       // Handle both array response and object with posts property
       const posts = Array.isArray(response.data) ? response.data : (response.data?.posts || []);
       
       console.log('Loaded posts:', posts.length);
       console.log('Posts with video:', posts.filter((p: any) => p.videoUrl || p.video_url).length);
       
-      // Filter posts with videos
+      // Filter posts with videos - show ALL public videos from everyone
       // Check for videoUrl, video_url, or videos field
       const videoPosts: VideoItem[] = posts
         .filter((post: any) => {
-          return post.videoUrl || 
+          // Only include posts with videos that are public
+          // Backend already filters by privacy, but we ensure we only show public videos
+          const hasVideo = post.videoUrl || 
                  post.video_url || 
                  post.videos || 
                  (post.videos && Array.isArray(post.videos) && post.videos.length > 0);
+          // Include all videos (public videos are already filtered by backend when type='all')
+          return hasVideo;
         })
         .map((post: any) => {
           // Determine video URL from various possible fields
@@ -223,6 +261,11 @@ const VideoFeedScreen = () => {
   });
 
   const playVideo = async (index: number) => {
+    // Don't play if screen is not focused (tab is not active)
+    if (!isFocused) {
+      return;
+    }
+    
     // Validate index
     if (index < 0 || index >= videos.length || !videos[index]) {
       console.warn('Invalid video index:', index);
@@ -444,12 +487,12 @@ const VideoFeedScreen = () => {
                 }
               }
               
-              // Only play if this video is currently active and matches current index
-              if (isActive && index === currentIndex && index === playingIndex) {
+              // Only play if this video is currently active, matches current index, and screen is focused
+              if (isFocused && isActive && index === currentIndex && index === playingIndex) {
                 // Play immediately - video is already loaded
                 playVideo(index);
-              } else if (!isActive) {
-                // Ensure video is paused if not active
+              } else {
+                // Ensure video is paused if not active or screen is not focused
                 pauseVideo(index);
               }
             }}

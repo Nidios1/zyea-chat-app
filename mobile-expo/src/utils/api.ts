@@ -6,7 +6,7 @@ import { getStoredToken } from './auth';
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000, // 15 seconds timeout (increased from 10s)
+  timeout: 30000, // 30 seconds timeout (increased from 15s for better network reliability)
   headers: {
     'Content-Type': 'application/json',
   },

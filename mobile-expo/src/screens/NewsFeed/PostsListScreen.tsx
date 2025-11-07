@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -16,7 +16,7 @@ import { Text, Avatar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { newsfeedAPI, friendsAPI } from '../../utils/api';
-import { getInitials, getImageURL, getAvatarURL } from '../../utils/imageUtils';
+import { getInitials, getImageURL, getAvatarURL, getVideoURL } from '../../utils/imageUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
 import { PWATheme } from '../../config/PWATheme';
@@ -26,6 +26,7 @@ import PostImagesCarousel from '../../components/NewsFeed/PostImagesCarousel';
 import CommentsBottomSheet from '../../components/NewsFeed/CommentsBottomSheet';
 import ExpandableText from '../../components/Common/ExpandableText';
 import FeedTabBar from '../../components/Common/FeedTabBar';
+import { Video, ResizeMode } from 'expo-av';
 
 const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
   container: {
@@ -67,40 +68,50 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
   },
   // Threads-style post card
   postContainer: {
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   postHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 0,
+    paddingHorizontal: 16,
+    paddingTop: 0,
   },
   authorSection: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 10,
+    gap: 12,
     flex: 1,
   },
   authorAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  avatarContainer: {
+    position: 'relative',
+    width: 40,
+    height: 40,
   },
   authorInfo: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+    flexWrap: 'wrap',
   },
   authorName: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
+    lineHeight: 18,
   },
   postTime: {
-    fontSize: 13,
-    marginLeft: 4,
+    fontSize: 12,
+    marginLeft: 0,
+    lineHeight: 18,
   },
   postMoreButton: {
     width: 32,
@@ -110,26 +121,68 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
     marginTop: -4,
   },
   followButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#2c2c2c', // Dark background for both light and dark mode
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 6,
-    marginTop: -2,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  // Threads-style content
+  // Threads-style content wrapper - aligns with username
+  postContentWrapper: {
+    paddingHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 0,
+  },
   postContent: {
-    fontSize: 15,
+    fontSize: 14,
     lineHeight: 20,
-    marginBottom: 12,
     letterSpacing: -0.1,
+    marginLeft: 52, // Align with username (40px avatar + 12px gap)
   },
   imagesContainer: {
-    marginBottom: 12,
-    borderRadius: 12,
+    marginTop: 8,
+    marginBottom: 0,
+    borderRadius: 0,
     overflow: 'hidden',
+    width: '100%',
+  },
+  videoContainer: {
+    marginTop: 8,
+    marginBottom: 0,
+    width: '100%',
+    overflow: 'hidden',
+  },
+  videoWrapper: {
+    width: '100%',
+    position: 'relative',
+    backgroundColor: '#000000',
+  },
+  video: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    minHeight: 200,
+    maxHeight: 600,
+  },
+  videoPlayButton: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   postImage: {
     borderRadius: 12,
@@ -154,18 +207,23 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
   postActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 24,
-    paddingTop: 4,
+    gap: 20,
+    paddingTop: 8,
+    paddingBottom: 4,
+    paddingHorizontal: 16,
+    marginTop: 4,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     minWidth: 40,
+    paddingVertical: 4,
   },
   actionCount: {
-    fontSize: 13,
-    marginLeft: 2,
+    fontSize: 12,
+    marginLeft: 0,
+    lineHeight: 16,
   },
   emptyContainer: {
     padding: 60,
@@ -206,6 +264,8 @@ const PostsListScreen = () => {
   const [imageAspectRatios, setImageAspectRatios] = useState<Record<string, number>>({});
   const [showComments, setShowComments] = useState(false);
   const [activePostId, setActivePostId] = useState<string | number | null>(null);
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
+  const videoRefs = useRef<{ [key: string]: Video | null }>({});
   const [fabVisible, setFabVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'following'>('all');
   const scrollY = useRef(0);
@@ -251,7 +311,7 @@ const PostsListScreen = () => {
       const type = activeTab === 'following' ? 'following' : 'all';
       console.log('📱 Fetching posts with type:', type, 'activeTab:', activeTab);
       const res = await newsfeedAPI.getPosts(1, type);
-      // Filter out posts with videos - videos should only appear in Video tab
+      // Include all posts (including videos) in news feed
       const allPosts = Array.isArray(res.data) ? res.data : (res.data?.posts || []);
       console.log('📱 Received posts:', allPosts.length, 'posts');
       if (allPosts.length > 0) {
@@ -260,18 +320,9 @@ const PostsListScreen = () => {
         console.log('📱 Current user id:', user?.id);
       }
       
-      const filtered = allPosts.filter((post: any) => {
-        // Exclude posts that have video (videoUrl, video_url, or videos field)
-        return !post.videoUrl && 
-               !post.video_url && 
-               !post.videos && 
-               !(post.videos && Array.isArray(post.videos) && post.videos.length > 0);
-      });
-      console.log('📱 Filtered posts (no videos):', filtered.length, 'posts');
-      if (filtered.length > 0) {
-        console.log('📱 Sample filtered posts user_ids:', filtered.slice(0, 5).map((p: any) => ({ id: p.id, user_id: p.user_id, username: p.username || p.full_name })));
-      }
-      return filtered;
+      // Return all posts (including videos) - videos will be displayed in news feed
+      console.log('📱 Posts with videos:', allPosts.filter((p: any) => p.videoUrl || p.video_url || p.videos).length);
+      return allPosts;
     },
     enabled: activeTab === 'all' || (activeTab === 'following' && !isLoadingFollowing),
     staleTime: 0, // Always consider data stale to allow refetch
@@ -318,6 +369,35 @@ const PostsListScreen = () => {
     } catch (error: any) {
       console.error('Error unfollowing user:', error);
       // Show error message if needed
+    }
+  };
+
+  const handleVideoPress = async (postId: string, videoUrl: string) => {
+    try {
+      // If this video is already playing, pause it
+      if (playingVideoId === postId) {
+        setPlayingVideoId(null);
+        return;
+      }
+      
+      // Set the new playing video ID - useEffect will handle playing
+      const videoRef = videoRefs.current[postId];
+      if (videoRef) {
+        try {
+          const status = await videoRef.getStatusAsync();
+          if (status.isLoaded) {
+            // Reset to beginning before playing
+            await videoRef.setPositionAsync(0);
+          }
+        } catch (error) {
+          // Ignore errors - video might not be loaded yet
+        }
+      }
+      
+      // Set playing video ID - useEffect will handle playing
+      setPlayingVideoId(postId);
+    } catch (error) {
+      console.error('Error handling video press:', error);
     }
   };
 
@@ -379,6 +459,68 @@ const PostsListScreen = () => {
 
   const dynamicStyles = createStyles(colors);
 
+  // Effect to play/pause video when playingVideoId changes
+  useEffect(() => {
+    const playVideo = async () => {
+      const currentPlayingId = playingVideoId;
+      
+      if (currentPlayingId) {
+        const videoRef = videoRefs.current[currentPlayingId];
+        if (videoRef) {
+          try {
+            // Check if video is loaded
+            const status = await videoRef.getStatusAsync();
+            if (status.isLoaded) {
+              // Reset to beginning and play
+              await videoRef.setPositionAsync(0);
+              await videoRef.playAsync();
+            } else {
+              // Video not loaded yet, wait a bit and retry
+              setTimeout(async () => {
+                // Check if still the same video
+                if (playingVideoId === currentPlayingId) {
+                  try {
+                    const retryStatus = await videoRef.getStatusAsync();
+                    if (retryStatus.isLoaded) {
+                      await videoRef.setPositionAsync(0);
+                      await videoRef.playAsync();
+                    }
+                  } catch (error) {
+                    console.error('Error playing video on retry:', error);
+                    if (playingVideoId === currentPlayingId) {
+                      setPlayingVideoId(null);
+                    }
+                  }
+                }
+              }, 200);
+            }
+          } catch (error) {
+            console.error('Error playing video:', error);
+            if (playingVideoId === currentPlayingId) {
+              setPlayingVideoId(null);
+            }
+          }
+        }
+      } else {
+        // Pause all videos when playingVideoId is null
+        Object.values(videoRefs.current).forEach(async (ref) => {
+          if (ref) {
+            try {
+              const status = await ref.getStatusAsync();
+              if (status.isLoaded && status.isPlaying) {
+                await ref.pauseAsync();
+              }
+            } catch (error) {
+              // Ignore errors
+            }
+          }
+        });
+      }
+    };
+    
+    playVideo();
+  }, [playingVideoId]);
+
   const renderPost = ({ item, index }: { item: any, index: number }) => {
     // Get author info - API returns user fields directly on post object
     const authorName = item.full_name || item.username || 'Unknown';
@@ -400,34 +542,51 @@ const PostsListScreen = () => {
       postImages.push(item.image_url);
     }
     
+    // Get video URL - check for videoUrl, video_url, or videos field
+    let postVideoUrl = item.videoUrl || item.video_url;
+    if (!postVideoUrl && item.videos) {
+      postVideoUrl = Array.isArray(item.videos) ? item.videos[0] : item.videos;
+    }
+    if (postVideoUrl) {
+      postVideoUrl = getVideoURL(postVideoUrl);
+    }
+    
+    // Get video thumbnail
+    const videoThumbnail = item.thumbnailUrl || 
+                          (item.images && item.images[0]) || 
+                          item.image_url || 
+                          undefined;
+    
     return (
       <View style={[dynamicStyles.postContainer, { borderBottomColor: colors.border }]}>
         {/* Threads-style Post Header */}
         <View style={dynamicStyles.postHeader}>
           <View style={dynamicStyles.authorSection}>
-            {authorAvatar ? (
-              <Image
-                source={{ uri: getAvatarURL(authorAvatar) }}
-                style={dynamicStyles.authorAvatar}
-              />
-            ) : (
-              <Avatar.Text
-                size={28}
-                label={getInitials(authorName)}
-                style={dynamicStyles.authorAvatar}
-              />
-            )}
-            <View style={dynamicStyles.authorInfo}>
-              <Text style={[dynamicStyles.authorName, { color: colors.text }]}>{authorName}</Text>
+            <View style={dynamicStyles.avatarContainer}>
+              {authorAvatar ? (
+                <Image
+                  source={{ uri: getAvatarURL(authorAvatar) }}
+                  style={dynamicStyles.authorAvatar}
+                />
+              ) : (
+                <Avatar.Text
+                  size={40}
+                  label={getInitials(authorName)}
+                  style={dynamicStyles.authorAvatar}
+                />
+              )}
               {showFollowButton && (
                 <TouchableOpacity
                   style={dynamicStyles.followButton}
                   onPress={() => authorId && handleFollow(authorId)}
                   activeOpacity={0.7}
                 >
-                  <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
+                  <MaterialCommunityIcons name="plus" size={10} color="#000000" />
                 </TouchableOpacity>
               )}
+            </View>
+            <View style={dynamicStyles.authorInfo}>
+              <Text style={[dynamicStyles.authorName, { color: colors.text }]}>{authorName}</Text>
               <Text style={[dynamicStyles.postTime, { color: colors.textSecondary }]}>· {postTime}</Text>
             </View>
           </View>
@@ -436,17 +595,80 @@ const PostsListScreen = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Threads-style Post Content */}
+        {/* Threads-style Post Content - Align with username */}
         {item.content && (
-          <View style={{ marginBottom: postImages.length > 0 ? 12 : 0 }}>
-            <ExpandableText
-              text={item.content}
-              numberOfLines={5}
-              color={colors.text}
-              backgroundColor={colors.surface}
-              linkColor={colors.primary || '#3b82f6'}
-              charLimitFallback={200}
-            />
+          <View style={[dynamicStyles.postContentWrapper, { marginBottom: (postImages.length > 0 || postVideoUrl) ? 0 : 0 }]}>
+            <View style={dynamicStyles.postContent}>
+              <ExpandableText
+                text={item.content}
+                numberOfLines={5}
+                color={colors.text}
+                backgroundColor={colors.surface}
+                linkColor={colors.primary || '#3b82f6'}
+                charLimitFallback={200}
+              />
+            </View>
+          </View>
+        )}
+
+        {/* Post Video */}
+        {postVideoUrl && (
+          <View style={dynamicStyles.videoContainer}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={dynamicStyles.videoWrapper}
+              onPress={() => handleVideoPress(String(item.id), postVideoUrl)}
+            >
+              <Video
+                ref={(ref) => {
+                  videoRefs.current[String(item.id)] = ref;
+                }}
+                source={{ uri: postVideoUrl }}
+                style={dynamicStyles.video}
+                resizeMode={ResizeMode.COVER}
+                shouldPlay={false}
+                useNativeControls={false}
+                isMuted={false}
+                isLooping={false}
+                posterSource={videoThumbnail ? { uri: getImageURL(videoThumbnail) } : undefined}
+                onLoad={async () => {
+                  // Video loaded
+                  const videoRef = videoRefs.current[String(item.id)];
+                  if (videoRef) {
+                    try {
+                      if (playingVideoId === String(item.id)) {
+                        // If this video should be playing, play it now
+                        await videoRef.setPositionAsync(0);
+                        await videoRef.playAsync();
+                      } else {
+                        // Reset to beginning if not playing
+                        await videoRef.setPositionAsync(0);
+                      }
+                    } catch (error) {
+                      // Ignore errors
+                    }
+                  }
+                }}
+                onPlaybackStatusUpdate={(status) => {
+                  if (status.isLoaded) {
+                    if (status.didJustFinish) {
+                      // Video finished playing, reset state
+                      setPlayingVideoId(null);
+                    } else if (status.error) {
+                      // Video error, reset state
+                      console.error('Video playback error:', status.error);
+                      setPlayingVideoId(null);
+                    }
+                  }
+                }}
+              />
+              {/* Play Button Overlay - Hide when playing */}
+              {playingVideoId !== String(item.id) && (
+                <View style={dynamicStyles.videoPlayButton}>
+                  <MaterialCommunityIcons name="play-circle" size={64} color="#FFFFFF" />
+                </View>
+              )}
+            </TouchableOpacity>
           </View>
         )}
 
@@ -467,7 +689,7 @@ const PostsListScreen = () => {
           <TouchableOpacity style={dynamicStyles.actionButton}>
             <MaterialCommunityIcons
               name={item.isLiked ? 'heart' : 'heart-outline'}
-              size={20}
+              size={22}
               color={item.isLiked ? '#e74c3c' : colors.textSecondary}
             />
             {(item.likes_count || 0) > 0 && (
@@ -485,7 +707,7 @@ const PostsListScreen = () => {
               setShowComments(true);
             }}
           >
-            <MaterialCommunityIcons name="message-outline" size={20} color={colors.textSecondary} />
+            <MaterialCommunityIcons name="message-outline" size={22} color={colors.textSecondary} />
             {(item.comments_count || 0) > 0 && (
               <Text style={[dynamicStyles.actionCount, { color: colors.textSecondary }]}>
                 {item.comments_count || 0}
@@ -494,11 +716,11 @@ const PostsListScreen = () => {
           </TouchableOpacity>
 
           <TouchableOpacity style={dynamicStyles.actionButton}>
-            <MaterialCommunityIcons name="repeat" size={20} color={colors.textSecondary} />
+            <MaterialCommunityIcons name="repeat" size={22} color={colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity style={dynamicStyles.actionButton}>
-            <MaterialCommunityIcons name="send-outline" size={20} color={colors.textSecondary} />
+            <MaterialCommunityIcons name="send-outline" size={22} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>

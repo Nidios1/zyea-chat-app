@@ -33,50 +33,84 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const initializeAuth = async () => {
+    // Set maximum timeout for auth initialization (10 seconds)
+    // This prevents app from hanging indefinitely if server is down
+    const MAX_INIT_TIMEOUT = 10000; // 10 seconds
+    const timeoutId = setTimeout(() => {
+      console.warn('⚠️ Auth initialization timeout - proceeding without verification');
+      setLoading(false);
+    }, MAX_INIT_TIMEOUT);
+    
     try {
       const storedToken = await getStoredToken();
       
       if (storedToken) {
         setToken(storedToken);
-        // Verify token and get user info
+        // Verify token and get user info (with timeout protection)
         await verifyToken(storedToken);
       }
     } catch (error) {
       console.error('Auth initialization error:', error);
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
 
-  const verifyToken = async (token: string) => {
+  const verifyToken = async (token: string, retryCount = 0) => {
+    const MAX_RETRIES = 1; // Reduced to 1 retry to avoid long wait
+    const RETRY_DELAY = 2000; // 2 seconds
+    const REQUEST_TIMEOUT = 8000; // 8 seconds per request (reduced from 30s)
+    
     try {
-      // Use apiClient with configured timeout and interceptors
+      console.log(`🔐 Verifying token... (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+      console.log(`🌐 API URL: ${API_BASE_URL}`);
+      
+      // Use apiClient with shorter timeout for faster failure detection
       const response = await apiClient.get('/users/profile', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-        timeout: 15000, // 15 seconds timeout
+        timeout: REQUEST_TIMEOUT, // 8 seconds timeout (reduced for faster response)
       });
 
       if (response.data) {
+        console.log('✅ Token verified successfully');
         setUser(response.data);
       }
     } catch (error: any) {
-      console.error('Token verification failed:', error);
+      const isTimeout = error.code === 'ECONNABORTED' || 
+                       error.message?.includes('timeout') ||
+                       error.message?.includes('exceeded');
+      
+      const isNetworkError = error.code === 'ERR_NETWORK' || 
+                            error.code === 'ECONNREFUSED' ||
+                            error.message?.includes('Network Error');
+      
+      // Retry logic for timeout/network errors (only once)
+      if ((isTimeout || isNetworkError) && retryCount < MAX_RETRIES) {
+        console.warn(`⚠️ Token verification failed (${error.message}), retrying in ${RETRY_DELAY}ms...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        return verifyToken(token, retryCount + 1);
+      }
+      
+      // Only log error if it's not a timeout/network error (to avoid console spam)
+      if (!isTimeout && !isNetworkError) {
+        console.error('❌ Token verification failed:', error.message);
+      } else {
+        console.warn('⚠️ Token verification timeout/network error - server may be down, keeping token for offline use');
+      }
       
       // Only remove token if it's an authentication error (401, 403)
-      // Don't remove token for timeout errors - might be network issue
+      // Don't remove token for timeout/network errors - might be network issue
       if (error.response?.status === 401 || error.response?.status === 403) {
-        // Token invalid, remove it
+        console.warn('🔓 Token invalid or expired, removing...');
         await removeToken();
         setToken(null);
-      } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        // Timeout error - don't remove token, just log it
-        console.warn('Token verification timeout - network may be slow');
-      } else {
-        // Other errors - log but don't remove token
-        console.warn('Token verification error - keeping token:', error.message);
+        setUser(null);
       }
+      // For timeout/network errors, keep the token so user can use app offline
+      // The token will be verified again when network is available
     }
   };
 

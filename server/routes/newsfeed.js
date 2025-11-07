@@ -74,8 +74,8 @@ router.get('/posts', async (req, res) => {
     // Explicitly check for 'all' string or undefined/null
     // IMPORTANT: Default to 'all' if type is not 'following' to show all posts
     if (type !== 'following') {
-      // Get ALL posts from everyone (like Threads "For you" tab)
-      // Show all posts regardless of privacy setting
+      // Get ALL PUBLIC posts from everyone (like Threads "For you" tab)
+      // Show all public posts - everyone can see public posts
       
       // Debug: Check total posts in database
       const [totalPosts] = await getConnection().execute('SELECT COUNT(*) as count FROM posts');
@@ -93,11 +93,12 @@ router.get('/posts', async (req, res) => {
         FROM posts p
         JOIN users u ON p.user_id = u.id
         LEFT JOIN post_likes pl ON p.id = pl.post_id AND pl.user_id = ?
+        WHERE p.privacy = 'public' OR p.user_id = ?
         ORDER BY p.created_at DESC
         LIMIT 50
       `;
-      params = [userId];
-      console.log('📱 [Backend] Fetching ALL posts from everyone, type:', type || 'undefined (defaulting to all)');
+      params = [userId, userId];
+      console.log('📱 [Backend] Fetching ALL PUBLIC posts from everyone, type:', type || 'undefined (defaulting to all)');
     } else if (type === 'following') {
       // Get posts from users being followed
       query = `
@@ -141,9 +142,9 @@ router.get('/posts', async (req, res) => {
     const [posts] = await getConnection().execute(query, params);
     console.log('📱 [Backend] Found', posts.length, 'posts for type:', type || 'default');
     if (posts.length > 0) {
-      const userIds = [...new Set(posts.map((p: any) => p.user_id))];
+      const userIds = [...new Set(posts.map((p) => p.user_id))];
       console.log('📱 [Backend] Posts from', userIds.length, 'different users:', userIds);
-      console.log('📱 [Backend] Sample post user_ids:', posts.slice(0, 5).map((p: any) => ({ id: p.id, user_id: p.user_id, username: p.username, isCurrentUser: p.user_id === userId })));
+      console.log('📱 [Backend] Sample post user_ids:', posts.slice(0, 5).map((p) => ({ id: p.id, user_id: p.user_id, username: p.username, isCurrentUser: p.user_id === userId })));
     } else {
       console.log('⚠️ [Backend] No posts found! Check database.');
     }
