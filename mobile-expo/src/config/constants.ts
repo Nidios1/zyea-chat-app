@@ -1,8 +1,8 @@
 // API Configuration
-export const API_BASE_URL = 'http://192.168.0.104:5000/api';
+export const API_BASE_URL = 'http://192.168.0.103:5000/api';
 
 // Socket Configuration
-export const SOCKET_URL = 'http://192.168.0.104:5000';
+export const SOCKET_URL = 'http://192.168.0.103:5000';
 
 // App Configuration
 export const APP_NAME = 'Zyea+';

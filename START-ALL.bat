@@ -33,8 +33,8 @@ echo ==========================================
 echo   Application is starting...
 echo ==========================================
 echo.
-echo Backend: http://192.168.0.104:5000
-echo Frontend: http://192.168.0.104:3000
+echo Backend: http://192.168.0.103:5000
+echo Frontend: http://192.168.0.103:3000
 echo.
 echo Two command windows have been opened.
 echo Close those windows to stop the servers.

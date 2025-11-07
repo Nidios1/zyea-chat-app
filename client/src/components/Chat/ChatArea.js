@@ -1414,7 +1414,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
       formData.append('conversationId', conversation.id);
 
       // Upload image
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://192.168.0.104:5000/api'}/chat/upload-image`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://192.168.0.103:5000/api'}/chat/upload-image`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`

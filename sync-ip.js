@@ -181,7 +181,99 @@ if (fs.existsSync(capacitorConfigPath)) {
 }
 
 /**
- * 7. Tạo/Cập nhật .env file cho client (optional)
+ * 7. Update mobile-expo/src/config/constants.ts
+ */
+updateFile(
+  path.join(__dirname, 'mobile-expo/src/config/constants.ts'),
+  [
+    {
+      pattern: /export const API_BASE_URL = 'http:\/\/[\d.]+:5000\/api';/g,
+      replacement: `export const API_BASE_URL = '${CONFIG.apiURL}';`
+    },
+    {
+      pattern: /export const SOCKET_URL = 'http:\/\/[\d.]+:5000';/g,
+      replacement: `export const SOCKET_URL = '${CONFIG.socketURL}';`
+    }
+  ],
+  'Mobile Expo Constants (constants.ts)'
+);
+
+/**
+ * 8. Update server/routes/app.js
+ */
+updateFile(
+  path.join(__dirname, 'server/routes/app.js'),
+  [
+    {
+      pattern: /updateUrl: 'http:\/\/[\d.]+:5000\/api\/app\/download\/latest',/g,
+      replacement: `updateUrl: '${CONFIG.apiURL}/app/download/latest',`
+    }
+  ],
+  'Server App Routes (app.js)'
+);
+
+/**
+ * 9. Update START-ALL.bat
+ */
+updateFile(
+  path.join(__dirname, 'START-ALL.bat'),
+  [
+    {
+      pattern: /echo Backend: http:\/\/[\d.]+:5000/g,
+      replacement: `echo Backend: ${CONFIG.serverURL}`
+    },
+    {
+      pattern: /echo Frontend: http:\/\/[\d.]+:3000/g,
+      replacement: `echo Frontend: ${CONFIG.clientURL}`
+    }
+  ],
+  'Start Script (START-ALL.bat)'
+);
+
+/**
+ * 10. Update client/src/utils/liveUpdate.js
+ */
+updateFile(
+  path.join(__dirname, 'client/src/utils/liveUpdate.js'),
+  [
+    {
+      pattern: /const response = await fetch\('http:\/\/[\d.]+:5000\/api\/app\/version'\);/g,
+      replacement: `const response = await fetch('${CONFIG.apiURL}/app/version');`
+    }
+  ],
+  'Live Update (liveUpdate.js)'
+);
+
+/**
+ * 11. Update client/src/components/Desktop/DesktopChatArea.js
+ */
+updateFile(
+  path.join(__dirname, 'client/src/components/Desktop/DesktopChatArea.js'),
+  [
+    {
+      pattern: /\$\{process\.env\.REACT_APP_API_URL \|\| 'http:\/\/[\d.]+:5000\/api'\}\/chat\/upload-image/g,
+      replacement: `\${process.env.REACT_APP_API_URL || '${CONFIG.apiURL}'}/chat/upload-image`
+    }
+  ],
+  'Desktop Chat Area (DesktopChatArea.js)'
+);
+
+/**
+ * 12. Update client/src/components/Shared/Chat/ChatArea.js
+ */
+updateFile(
+  path.join(__dirname, 'client/src/components/Shared/Chat/ChatArea.js'),
+  [
+    {
+      pattern: /\$\{process\.env\.REACT_APP_API_URL \|\| 'http:\/\/[\d.]+:5000\/api'\}\/chat\/upload-image/g,
+      replacement: `\${process.env.REACT_APP_API_URL || '${CONFIG.apiURL}'}/chat/upload-image`
+    }
+  ],
+  'Shared Chat Area (ChatArea.js)'
+);
+
+/**
+ * 13. Tạo/Cập nhật .env file cho client (optional)
  */
 const envPath = path.join(__dirname, 'client/.env.local');
 const envContent = `# Auto-generated from network-config.js

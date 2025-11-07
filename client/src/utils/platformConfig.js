@@ -28,7 +28,7 @@ export const getApiBaseUrl = () => {
   }
 
   // Default API URL
-  const defaultApiUrl = 'http://192.168.0.104:5000/api';
+  const defaultApiUrl = 'http://192.168.0.103:5000/api';
   
   console.log('🌐 Running on web browser');
   console.log('📡 Using API URL:', defaultApiUrl);
@@ -53,7 +53,7 @@ export const getSocketUrl = () => {
   }
 
   // Production
-  const defaultSocketUrl = 'http://192.168.0.104:5000';
+  const defaultSocketUrl = 'http://192.168.0.103:5000';
   
   console.log('🌐 Web - Socket URL:', defaultSocketUrl);
   

@@ -18,7 +18,7 @@ const os = require('os');
  */
 const NETWORK_CONFIG = {
   // Chế độ: 'auto' hoặc 'manual'
-  mode: 'manual', // 'auto' = tự động lấy IP WiFi, 'manual' = dùng IP bên dưới
+  mode: 'auto', // 'auto' = tự động lấy IP WiFi, 'manual' = dùng IP bên dưới
   
   // IP thủ công (chỉ dùng khi mode = 'manual')
   manualIP: '192.168.0.104',
