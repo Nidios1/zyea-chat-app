@@ -35,7 +35,7 @@ const ProfileInformationScreen = () => {
   const { user: currentUser } = useAuth();
   const navigation = useNavigation<ProfileInformationScreenNavigationProp>();
   const route = useRoute<ProfileInformationScreenRouteProp>();
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
   
   // Get userId from route params, or use current user
   const targetUserId = route.params?.userId;
@@ -328,7 +328,12 @@ const ProfileInformationScreen = () => {
           )}
           {isOwnProfile && (
             <TouchableOpacity
-              style={dynamicStyles.coverCameraButton}
+              style={[
+                dynamicStyles.coverCameraButton,
+                {
+                  backgroundColor: isDarkMode ? '#0084ff' : 'rgba(255, 255, 255, 0.9)',
+                }
+              ]}
               onPress={(e) => {
                 e.stopPropagation();
                 setShowCoverActionSheet(true);
@@ -919,7 +924,6 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     alignItems: 'center',
     justifyContent: 'center',
   },

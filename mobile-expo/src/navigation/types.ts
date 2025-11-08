@@ -14,8 +14,8 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   NewsFeed: undefined;
   Video: undefined;
+  Party: undefined;
   Chat: undefined;
-  Notifications: undefined;
   Profile: undefined;
 };
 
@@ -35,8 +35,17 @@ export type ProfileStackParamList = {
   EditProfile: undefined;
   Settings: undefined;
   InterfaceSettings: undefined;
+  FontSizeSettings: undefined;
   PersonalProfile: { userId: string };
   ProfileInformation: { userId?: string } | undefined;
+  Feedback: undefined;
+  Help: undefined;
+  StatusFeed: undefined;
+  ActivityStatus: undefined;
+  ResourceManagement: undefined;
+  DeviceManagement: undefined;
+  Security: undefined;
+  AppInfo: undefined;
 };
 
 export type FriendsStackParamList = {

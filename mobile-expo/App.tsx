@@ -9,6 +9,7 @@ import * as Notifications from 'expo-notifications';
 
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
+import { FontSizeProvider } from './src/contexts/FontSizeContext';
 import { TabBarProvider } from './src/contexts/TabBarContext';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
@@ -108,11 +109,13 @@ const App = () => {
       <GestureHandlerRootView style={{ flex: 1 as const }}>
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
-            <PaperWrapper>
-              <AuthProvider>
-                <AppContent />
-              </AuthProvider>
-            </PaperWrapper>
+            <FontSizeProvider>
+              <PaperWrapper>
+                <AuthProvider>
+                  <AppContent />
+                </AuthProvider>
+              </PaperWrapper>
+            </FontSizeProvider>
           </ThemeProvider>
         </QueryClientProvider>
       </GestureHandlerRootView>

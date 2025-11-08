@@ -52,7 +52,7 @@ const InterfaceSettingsScreen = () => {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.background }]}>
+      <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -129,9 +129,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 16,
+    backgroundColor: 'transparent',
   },
   backButton: {
     padding: 8,
+    backgroundColor: 'transparent',
   },
   title: {
     fontSize: 17,

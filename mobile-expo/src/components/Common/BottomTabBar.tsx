@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,9 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBar } from '../../contexts/TabBarContext';
-import { Feather } from '@expo/vector-icons';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
-import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useQuery } from '@tanstack/react-query';
+import { chatAPI } from '../../utils/api';
 
 interface TabItem {
   id: string;
@@ -33,21 +32,69 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 const BAR_WIDTH = SCREEN_WIDTH * 0.8;   // 80% width
 const BAR_RADIUS = 32;                  // pill/capsule, nên >= 1/2 bar height
 
-// Màu icon tối ưu cho glassmorphism với contrast cao
-const getIconColors = (isDarkMode: boolean, isActive: boolean) => {
+// Màu icon giống Threads - active màu primary, inactive màu textSecondary
+const getIconColors = (colors: any, isActive: boolean) => {
   if (isActive) {
-    // Icon active: màu đậm, contrast cao để nổi bật
-    return isDarkMode ? '#FFFFFF' : '#000000'; // Trắng trên dark, đen trên light
+    // Icon active: màu primary
+    return colors.primary || '#E74C3C';
   } else {
-    // Icon inactive: xám đủ contrast, không quá nhạt
-    return isDarkMode ? '#A0A0A0' : '#707070'; // Xám sáng hơn trên dark, xám đậm hơn trên light
+    // Icon inactive: textSecondary
+    return colors.textSecondary || '#707070';
   }
 };
 
 const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => {
   const insets = useSafeAreaInsets();
   const { isVisible } = useTabBar();
-  const { isDarkMode } = useAppTheme(); // Lấy từ ThemeContext thật
+  const { isDarkMode, colors } = useAppTheme(); // Lấy từ ThemeContext thật
+  
+  // Fetch conversations to get unread count
+  const { data: conversations = [] } = useQuery({
+    queryKey: ['conversations'],
+    queryFn: async () => {
+      const res = await chatAPI.getConversations();
+      return Array.isArray(res.data) ? res.data : (res.data?.conversations || []);
+    },
+    staleTime: 30000, // 30 seconds
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+  
+  // Calculate unread count from conversations
+  const unreadCount = useMemo(() => {
+    return conversations.reduce((total: number, conv: any) => {
+      return total + (conv.unread_count || conv.unreadCount || 0);
+    }, 0);
+  }, [conversations]);
+  
+  // Animation for badge pulse effect
+  const badgeScale = useRef(new Animated.Value(1)).current;
+  
+  useEffect(() => {
+    if (unreadCount > 0) {
+      // Pulse animation when there are unread messages
+      const pulseAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(badgeScale, {
+            toValue: 1.2,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(badgeScale, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulseAnimation.start();
+      
+      return () => {
+        pulseAnimation.stop();
+      };
+    } else {
+      badgeScale.setValue(1);
+    }
+  }, [unreadCount, badgeScale]);
 
   // Helper: get focused nested route name for a tab
   const getFocusedNestedRouteName = (route: any): string | undefined => {
@@ -59,13 +106,13 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
     return getFocusedNestedRouteName(nestedRoute) || nestedRoute.name;
   };
 
-  // Khai báo lại tabItems tránh lỗi không tìm thấy
+  // Khai báo lại tabItems tránh lỗi không tìm thấy - giống Threads
   const tabItems: TabItem[] = [
-    { id: 'NewsFeed', label: '', icon: 'home-variant-outline', badge: null },
-    { id: 'Video', label: '', icon: 'video-outline', badge: null },
-    { id: 'Chat', label: '', icon: 'send', badge: null },
-    { id: 'Notifications', label: '', icon: 'heart-outline', badge: 0 },
-    { id: 'Profile', label: '', icon: 'account-circle', badge: null },
+    { id: 'NewsFeed', label: '', icon: 'home', badge: null },
+    { id: 'Video', label: '', icon: 'eye-outline', badge: null },
+    { id: 'Party', label: 'Party', icon: '', badge: null }, // Text ở giữa
+    { id: 'Chat', label: '', icon: 'message-outline', badge: unreadCount > 0 ? unreadCount : null }, // Badge từ unread count thực tế
+    { id: 'Profile', label: '', icon: 'account-circle-outline', badge: null },
   ];
 
   // 1) Ẩn khi ở tab Profile hoặc Video (fullscreen experience)
@@ -86,48 +133,16 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
   }
   return (
     <View pointerEvents="box-none" style={[styles.absolute]}>
-      <BlurView
-        intensity={24}
-        tint={isDarkMode ? 'dark' : 'light'}
+      <View
         style={[
-          styles.blurBackground,
+          styles.tabBarBackground,
           {
-            width: BAR_WIDTH,
-            borderRadius: BAR_RADIUS,
-            height: 54, // strict pill height
-            marginBottom: insets.bottom ? insets.bottom + 8 : 14,
-            borderWidth: 1,
-            borderColor: isDarkMode 
-              ? 'rgba(255,255,255,0.15)'  // viền nhẹ hơn trên dark
-              : 'rgba(255,255,255,0.22)', // viền kính mờ nhẹ trên light
-            backgroundColor: isDarkMode
-              ? 'rgba(0,0,0,0.25)'        // nền tối trên dark mode
-              : 'rgba(255,255,255,0.06)', // lớp nền sữa rất nhẹ trên light
+            paddingBottom: insets.bottom || 0,
+            backgroundColor: colors.surface || colors.background, // Sử dụng theme colors
+            borderTopColor: colors.border || '#E0E0E0',
           },
         ]}
       >
-        {/* Highlight mép trên kiểu kính */}
-        <LinearGradient
-          colors={isDarkMode 
-            ? ['rgba(255,255,255,0.15)', 'rgba(255,255,255,0.05)', 'rgba(255,255,255,0)']
-            : ['rgba(255,255,255,0.35)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0)']
-          }
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={styles.topHighlight}
-          pointerEvents="none"
-        />
-        {/* Vignette viền để tạo chiều sâu kính */}
-        <LinearGradient
-          colors={isDarkMode
-            ? ['rgba(0,0,0,0.20)', 'rgba(0,0,0,0.00)']
-            : ['rgba(0,0,0,0.10)', 'rgba(0,0,0,0.00)']
-          }
-          start={{ x: 0.5, y: 1 }}
-          end={{ x: 0.5, y: 0 }}
-          style={styles.bottomVignette}
-          pointerEvents="none"
-        />
         <View style={styles.tabsContainer}>
           {state.routes.map((route: any, index: number) => {
             const { options } = descriptors[route.key];
@@ -143,6 +158,15 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
 
               if (!isFocused && !event.defaultPrevented) {
                 navigation.navigate(route.name);
+              } else if (isFocused && route.name === 'NewsFeed') {
+                // If already on NewsFeed tab, navigate to FeedStack and set refresh param
+                const feedStack = navigation.getParent();
+                if (feedStack) {
+                  feedStack.navigate('Feed', { refresh: Date.now() });
+                } else {
+                  // Fallback: navigate with refresh param
+                  navigation.navigate(route.name, { refresh: Date.now() });
+                }
               }
             };
 
@@ -152,6 +176,27 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
                 target: route.key,
               });
             };
+
+            // Nếu là tab "Party", hiển thị text thay vì icon
+            if (tabItem.id === 'Party') {
+              return (
+                <TouchableOpacity
+                  key={route.key}
+                  accessibilityRole="button"
+                  accessibilityState={isFocused ? { selected: true } : {}}
+                  accessibilityLabel={options.tabBarAccessibilityLabel}
+                  testID={options.tabBarTestID}
+                  onPress={onPress}
+                  onLongPress={onLongPress}
+                  style={styles.tabItem}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.partyText, { color: isFocused ? colors.primary || '#E74C3C' : colors.textSecondary || '#707070' }]}>
+                    {tabItem.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            }
 
             return (
               <TouchableOpacity
@@ -166,35 +211,39 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
                 activeOpacity={0.7}
               >
                 <View style={styles.iconContainer}>
-                  {tabItem.id === 'Chat' ? (
-                    <View style={{ transform: [{ rotate: '-20deg' }], marginTop: -2 }}>
-                      <MaterialCommunityIcons
-                        name={tabItem.icon as any}
-                        size={34}
-                        color={getIconColors(isDarkMode, isFocused)}
-                      />
-                    </View>
-                  ) : (
-                    <MaterialCommunityIcons
-                      name={tabItem.icon as any}
-                      size={34}
-                      color={getIconColors(isDarkMode, isFocused)}
-                    />
-                  )}
+                  <MaterialCommunityIcons
+                    name={tabItem.icon as any}
+                    size={28}
+                    color={getIconColors(colors, isFocused)}
+                  />
                   {tabItem.badge !== null && tabItem.badge !== undefined && typeof tabItem.badge === 'number' && tabItem.badge > 0 && (
-                    <View style={styles.badge}>
+                    <Animated.View 
+                      style={[
+                        styles.badge,
+                        {
+                          transform: [{ scale: badgeScale }],
+                        },
+                      ]}
+                    >
                       <Text style={styles.badgeText}>{tabItem.badge > 99 ? '99+' : tabItem.badge}</Text>
-                    </View>
+                    </Animated.View>
                   )}
                   {tabItem.badge === 'dot' && !isFocused && (
-                    <View style={styles.dot} />
+                    <Animated.View 
+                      style={[
+                        styles.dot,
+                        {
+                          transform: [{ scale: badgeScale }],
+                        },
+                      ]}
+                    />
                   )}
                 </View>
               </TouchableOpacity>
             );
           })}
         </View>
-      </BlurView>
+      </View>
     </View>
   );
 };
@@ -206,93 +255,58 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 100,
-    alignItems: 'center',
   },
-  container: {
-    backgroundColor: 'transparent',
-    borderTopWidth: 0,
-    elevation: 0,
-    shadowColor: 'transparent',
-  },
-  blurBackground: {
-    overflow: 'hidden',
-    borderTopWidth: 0,
-    borderRadius: BAR_RADIUS,
-    backgroundColor: 'transparent',
-    height: 54,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
+  tabBarBackground: {
+    width: '100%',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E0E0E0',
+    paddingTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 8,
   },
   tabsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     width: '100%',
-    paddingVertical: 0, // sát mép dọc
-    paddingHorizontal: 2,
+    paddingHorizontal: 8,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    height: '100%',    // đảm bảo icon ở giữa viên capsule
-    paddingHorizontal: 0,
-    // bỏ hoàn toàn minHeight, gap
+    paddingVertical: 4,
   },
   iconContainer: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // Hide label entirely for IG style
-  label: { display: 'none' },
-  // Active underline indicator
-  activeIndicator: {
-    position: 'absolute',
-    bottom: -6,
-    width: 22,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: '#ffffff',
-  },
-  tiltWrapper: {
-    transform: [{ rotate: '45deg' }],
-  },
-  profileActiveWrapper: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#0f0f10',
-    borderWidth: 2,
-    borderColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centerPlusWrapper: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    backgroundColor: '#2a2a2d',
-    alignItems: 'center',
-    justifyContent: 'center',
+  partyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   badge: {
     position: 'absolute',
-    top: -6,
-    right: -8,
-    backgroundColor: '#ff4444',
+    top: -8,
+    right: -10,
+    backgroundColor: '#FF4444',
     borderRadius: 10,
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
     paddingVertical: 2,
-    minWidth: 16,
+    minWidth: 18,
+    height: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   badgeText: {
     color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
   },
   dot: {
     position: 'absolute',
@@ -302,22 +316,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: '#ff4444',
-  },
-  topHighlight: {
-    position: 'absolute',
-    left: 2,
-    right: 2,
-    top: 2,
-    height: 14,
-    borderTopLeftRadius: BAR_RADIUS - 2,
-    borderTopRightRadius: BAR_RADIUS - 2,
-  },
-  bottomVignette: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 12,
   },
 });
 

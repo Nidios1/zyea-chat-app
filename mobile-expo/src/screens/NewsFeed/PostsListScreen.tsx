@@ -10,6 +10,8 @@ import {
   NativeScrollEvent,
   Animated,
   ActivityIndicator,
+  Modal,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, Avatar } from 'react-native-paper';
@@ -20,12 +22,11 @@ import { getInitials, getImageURL, getAvatarURL, getVideoURL } from '../../utils
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
 import { PWATheme } from '../../config/PWATheme';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { useTabBar } from '../../contexts/TabBarContext';
 import PostImagesCarousel from '../../components/NewsFeed/PostImagesCarousel';
 import CommentsBottomSheet from '../../components/NewsFeed/CommentsBottomSheet';
 import ExpandableText from '../../components/Common/ExpandableText';
-import FeedTabBar from '../../components/Common/FeedTabBar';
 import { Video, ResizeMode } from 'expo-av';
 
 const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
@@ -40,17 +41,49 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  headerLeft: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerLeftWithText: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 100,
+    zIndex: 10,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '400',
   },
   logoSection: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   logoImage: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
   },
   logoText: {
     fontSize: 20,
@@ -233,6 +266,40 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
   },
+  // "Có gì mới?" section
+  newPostSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  newPostContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  newPostAvatarContainer: {
+    position: 'relative',
+    width: 48,
+    height: 48,
+  },
+  newPostAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  newPostTextContainer: {
+    flex: 1,
+  },
+  newPostUsername: {
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+    marginBottom: 2,
+  },
+  newPostPrompt: {
+    fontSize: 13,
+    letterSpacing: -0.1,
+  },
   // Threads-style FAB
   fab: {
     position: 'absolute',
@@ -244,7 +311,6 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 4,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -252,15 +318,53 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
   fabIcon: {
     fontSize: 24,
   },
+  // Menu Modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  menuContainer: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 8,
+    paddingBottom: 20,
+    maxHeight: 300,
+  },
+  menuHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  menuContent: {
+    paddingHorizontal: 16,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  menuItemText: {
+    fontSize: 16,
+  },
 });
 
 const PostsListScreen = () => {
   const { user } = useAuth();
   const { colors, isDarkMode } = useAppTheme();
   const navigation = useNavigation();
+  const route = useRoute();
   const { setIsVisible } = useTabBar();
   const queryClient = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  const lastRefreshParam = useRef<number | null>(null);
   const [imageAspectRatios, setImageAspectRatios] = useState<Record<string, number>>({});
   const [showComments, setShowComments] = useState(false);
   const [activePostId, setActivePostId] = useState<string | number | null>(null);
@@ -268,9 +372,12 @@ const PostsListScreen = () => {
   const videoRefs = useRef<{ [key: string]: Video | null }>({});
   const [fabVisible, setFabVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'following'>('all');
+  const [showMenu, setShowMenu] = useState(false);
   const scrollY = useRef(0);
   const lastScrollY = useRef(0);
   const fabOpacity = useRef(new Animated.Value(0)).current;
+  const menuButtonScale = useRef(new Animated.Value(1)).current;
+  const flatListRef = useRef<FlatList>(null);
 
   // Reset tab bar visibility when screen comes into focus
   useFocusEffect(
@@ -281,6 +388,25 @@ const PostsListScreen = () => {
       };
     }, [setIsVisible])
   );
+
+  // Listen for navigation params to trigger refresh when Home tab is pressed
+  useEffect(() => {
+    const params = route.params as any;
+    if (params?.refresh && params.refresh !== lastRefreshParam.current) {
+      lastRefreshParam.current = params.refresh;
+      
+      // Immediately show refresh indicator
+      setRefreshing(true);
+      
+      // Scroll to top with animation
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      
+      // Small delay to show scroll animation, then trigger refresh
+      setTimeout(() => {
+        handleRefresh();
+      }, 200);
+    }
+  }, [route.params, handleRefresh]);
 
   // Fetch following list for filtering and checking follow status
   const { data: followingList = [], isLoading: isLoadingFollowing, refetch: refetchFollowing } = useQuery({
@@ -329,7 +455,7 @@ const PostsListScreen = () => {
     gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes (formerly cacheTime)
   });
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       // Invalidate cache to force fresh data
@@ -348,7 +474,7 @@ const PostsListScreen = () => {
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [queryClient, activeTab, refetchFollowing, refetch]);
 
   const handleFollow = async (userId: string | number) => {
     try {
@@ -730,24 +856,64 @@ const PostsListScreen = () => {
   return (
     <SafeAreaView style={dynamicStyles.container} edges={['top']}>
       {/* Threads-style Minimal Header */}
-      <View style={[dynamicStyles.headerBar, { borderBottomColor: colors.border }]}>
-        <View style={dynamicStyles.logoSection}>
-          <Image
-            source={require('../../../assets/icon.png')}
-            style={dynamicStyles.logoImage}
-          />
-          <Text style={[dynamicStyles.logoText, { color: colors.text }]}>Zyea+</Text>
-        </View>
-        <TouchableOpacity style={dynamicStyles.headerRight}>
-          <MaterialCommunityIcons name="magnify" size={22} color={colors.text} />
-        </TouchableOpacity>
+      <View style={dynamicStyles.headerBar}>
+        {activeTab === 'following' ? (
+          <>
+            <TouchableOpacity 
+              style={dynamicStyles.headerLeftWithText}
+              onPress={() => setActiveTab('all')}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
+              <Text style={[dynamicStyles.backButtonText, { color: colors.text }]}>Quay lại</Text>
+            </TouchableOpacity>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={[dynamicStyles.headerTitle, { color: colors.text }]}>Đang theo dõi</Text>
+            </View>
+            <View style={dynamicStyles.headerRight} />
+          </>
+        ) : (
+          <>
+            <TouchableOpacity 
+              style={dynamicStyles.headerLeft}
+              onPressIn={() => {
+                Animated.spring(menuButtonScale, {
+                  toValue: 0.9,
+                  useNativeDriver: true,
+                  tension: 300,
+                  friction: 10,
+                }).start();
+              }}
+              onPressOut={() => {
+                Animated.spring(menuButtonScale, {
+                  toValue: 1,
+                  useNativeDriver: true,
+                  tension: 300,
+                  friction: 10,
+                }).start();
+              }}
+              onPress={() => {
+                setShowMenu(true);
+              }}
+              activeOpacity={1}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Animated.View style={{ transform: [{ scale: menuButtonScale }] }}>
+                <MaterialCommunityIcons name="menu" size={24} color={colors.text} />
+              </Animated.View>
+            </TouchableOpacity>
+            <View style={dynamicStyles.logoSection}>
+              <Image
+                source={require('../../../assets/icon.png')}
+                style={dynamicStyles.logoImage}
+              />
+            </View>
+            <TouchableOpacity style={dynamicStyles.headerRight}>
+              <MaterialCommunityIcons name="magnify" size={22} color={colors.text} />
+            </TouchableOpacity>
+          </>
+        )}
       </View>
-
-      {/* Feed Tabs */}
-      <FeedTabBar 
-        activeTab={activeTab} 
-        onTabChange={(tabId) => setActiveTab(tabId as 'all' | 'following')} 
-      />
 
       {/* Posts List */}
       {isLoading && !refreshing ? (
@@ -781,14 +947,58 @@ const PostsListScreen = () => {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={posts}
           keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
           renderItem={renderPost}
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary || '#0084ff'}
+              colors={[colors.primary || '#0084ff']}
+              progressBackgroundColor={colors.surface || '#FFFFFF'}
+              title="Đang làm mới..."
+              titleColor={colors.textSecondary || '#666666'}
+            />
+          }
           onScroll={handleScroll}
           scrollEventThrottle={16}
           contentContainerStyle={dynamicStyles.listContent}
+          ListHeaderComponent={
+            activeTab === 'all' ? (
+              <TouchableOpacity
+                style={[dynamicStyles.newPostSection, { borderBottomColor: colors.border }]}
+                onPress={() => navigation.navigate('CreatePost' as never)}
+                activeOpacity={0.7}
+              >
+                <View style={dynamicStyles.newPostContent}>
+                  <View style={dynamicStyles.newPostAvatarContainer}>
+                    {user?.avatar_url ? (
+                      <Image
+                        source={{ uri: getAvatarURL(user.avatar_url) }}
+                        style={dynamicStyles.newPostAvatar}
+                      />
+                    ) : (
+                      <Avatar.Text
+                        size={48}
+                        label={getInitials(user?.full_name || user?.username || 'U')}
+                        style={dynamicStyles.newPostAvatar}
+                      />
+                    )}
+                  </View>
+                  <View style={dynamicStyles.newPostTextContainer}>
+                    <Text style={[dynamicStyles.newPostUsername, { color: colors.text }]}>
+                      {user?.full_name || user?.username || 'Bạn'}
+                    </Text>
+                    <Text style={[dynamicStyles.newPostPrompt, { color: colors.textSecondary }]}>
+                      Có gì mới?
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ) : null
+          }
           ListEmptyComponent={
             <View style={dynamicStyles.emptyContainer}>
               <MaterialCommunityIcons name="newspaper-variant-outline" size={48} color={colors.textSecondary} />
@@ -810,12 +1020,80 @@ const PostsListScreen = () => {
         placeholder={`Bình luận cho ${user?.username || 'bài viết'}`}
       />
 
+      {/* Menu Modal */}
+      <Modal
+        visible={showMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowMenu(false)}
+      >
+        <TouchableOpacity
+          style={dynamicStyles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMenu(false)}
+        >
+          <View 
+            style={[dynamicStyles.menuContainer, { backgroundColor: colors.surface }]}
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+          >
+            <View style={[dynamicStyles.menuHandle, { backgroundColor: colors.border }]} />
+            <View style={dynamicStyles.menuContent}>
+              <TouchableOpacity
+                style={[
+                  dynamicStyles.menuItem,
+                  activeTab === 'all' && { backgroundColor: colors.primary + '20' },
+                  { borderBottomColor: colors.border }
+                ]}
+                onPress={() => {
+                  setActiveTab('all');
+                  setShowMenu(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[dynamicStyles.menuItemText, { 
+                  color: activeTab === 'all' ? colors.primary : colors.text,
+                  fontWeight: activeTab === 'all' ? '600' : '400'
+                }]}>
+                  Tất cả
+                </Text>
+                {activeTab === 'all' && (
+                  <MaterialCommunityIcons name="check" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  dynamicStyles.menuItem,
+                  activeTab === 'following' && { backgroundColor: colors.primary + '20' }
+                ]}
+                onPress={() => {
+                  setActiveTab('following');
+                  setShowMenu(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[dynamicStyles.menuItemText, { 
+                  color: activeTab === 'following' ? colors.primary : colors.text,
+                  fontWeight: activeTab === 'following' ? '600' : '400'
+                }]}>
+                  Đang theo dõi
+                </Text>
+                {activeTab === 'following' && (
+                  <MaterialCommunityIcons name="check" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Floating Action Button */}
       <Animated.View
         style={[
           dynamicStyles.fab,
           {
             backgroundColor: colors.primary || '#0084ff',
+            shadowColor: isDarkMode ? '#000000' : '#000000',
             opacity: fabOpacity,
             transform: [
               {
@@ -842,7 +1120,7 @@ const PostsListScreen = () => {
           <MaterialCommunityIcons
             name="plus"
             size={28}
-            color="#FFFFFF"
+            color={isDarkMode ? '#000000' : '#FFFFFF'}
           />
         </TouchableOpacity>
       </Animated.View>

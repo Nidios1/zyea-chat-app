@@ -1,0 +1,325 @@
+name: Build iOS IPA (Signed)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'mobile-expo/**'
+      - '.github/workflows/build-ipa-signed.yml'
+  workflow_dispatch:
+    inputs:
+      use_signing:
+        description: 'Sign IPA with certificate'
+        required: false
+        default: 'true'
+        type: boolean
+
+jobs:
+  build-ipa:
+    name: Build Signed IPA
+    runs-on: macos-latest
+    
+    defaults:
+      run:
+        working-directory: ./mobile-expo
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: mobile-expo/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./mobile-expo
+        run: |
+          echo "📦 Installing dependencies..."
+          npm install --legacy-peer-deps || npm install
+
+      - name: Setup Expo CLI
+        uses: expo/expo-github-action@v8
+        with:
+          expo-version: latest
+
+      - name: Generate iOS project
+        run: |
+          echo "🔨 Generating iOS project with Expo..."
+          npx expo prebuild --platform ios --clean
+
+      - name: Install CocoaPods dependencies
+        working-directory: ./mobile-expo/ios
+        run: |
+          echo "📦 Installing CocoaPods dependencies..."
+          pod install --repo-update
+
+      # Step: Import certificate and provisioning profile (if available)
+      - name: Setup Code Signing
+        if: ${{ github.event.inputs.use_signing != 'false' && secrets.IOS_CERTIFICATE_BASE64 != '' }}
+        run: |
+          echo "🔐 Setting up code signing..."
+          
+          # Create keychain
+          security create-keychain -p "" build.keychain
+          security list-keychains -s build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          
+          # Import certificate
+          if [ -n "${{ secrets.IOS_CERTIFICATE_BASE64 }}" ]; then
+            echo "📜 Importing certificate..."
+            echo "${{ secrets.IOS_CERTIFICATE_BASE64 }}" | base64 -d > certificate.p12
+            security import certificate.p12 -k build.keychain -P "${{ secrets.IOS_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign || true
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain || true
+            rm -f certificate.p12
+          fi
+          
+          # Import provisioning profile
+          if [ -n "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" ]; then
+            echo "📋 Importing provisioning profile..."
+            echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 -d > profile.mobileprovision
+            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+            UUID=$(grep -aA1 UUID profile.mobileprovision | grep -o "[-A-F0-9]\{36\}" | head -1)
+            cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
+            rm -f profile.mobileprovision
+            echo "✅ Provisioning profile installed: $UUID"
+          fi
+          
+          # List available identities
+          echo "🔍 Available signing identities:"
+          security find-identity -v -p codesigning build.keychain || true
+
+      - name: Find app target and scheme
+        working-directory: ./mobile-expo/ios
+        id: find_targets
+        run: |
+          # Find .xcworkspace or .xcodeproj
+          WORKSPACE=$(find . -name "*.xcworkspace" -maxdepth 1 | head -1)
+          PROJECT=$(find . -name "*.xcodeproj" -maxdepth 1 | head -1)
+          
+          if [ -n "$WORKSPACE" ]; then
+            echo "Found workspace: $WORKSPACE"
+            echo "workspace_path=$WORKSPACE" >> $GITHUB_OUTPUT
+            
+            SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+            echo "scheme_name=$SCHEME" >> $GITHUB_OUTPUT
+            
+            TARGET=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | \
+              grep -A 100 "Targets:" | \
+              grep -v "Targets:" | \
+              grep -v "Pods" | \
+              grep -v "^Expo$" | \
+              grep -v "Test" | \
+              head -1 | xargs)
+            echo "target_name=$TARGET" >> $GITHUB_OUTPUT
+          elif [ -n "$PROJECT" ]; then
+            echo "Found project: $PROJECT"
+            echo "project_path=$PROJECT" >> $GITHUB_OUTPUT
+            
+            SCHEME=$(basename "$PROJECT" .xcodeproj)
+            echo "scheme_name=$SCHEME" >> $GITHUB_OUTPUT
+            
+            TARGET=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | \
+              grep -A 100 "Targets:" | \
+              grep -v "Targets:" | \
+              grep -v "Pods" | \
+              grep -v "^Expo$" | \
+              grep -v "Test" | \
+              head -1 | xargs)
+            echo "target_name=$TARGET" >> $GITHUB_OUTPUT
+          else
+            echo "❌ ERROR: No .xcworkspace or .xcodeproj found!"
+            exit 1
+          fi
+          
+          echo "📱 Scheme: $SCHEME"
+          echo "📱 Target: $TARGET"
+
+      - name: Build IPA
+        working-directory: ./mobile-expo/ios
+        id: build
+        env:
+          CODE_SIGN_IDENTITY: ${{ secrets.IOS_CODE_SIGN_IDENTITY || '' }}
+          PROVISIONING_PROFILE_SPECIFIER: ${{ secrets.IOS_PROVISIONING_PROFILE_SPECIFIER || '' }}
+        run: |
+          WORKSPACE="${{ steps.find_targets.outputs.workspace_path }}"
+          PROJECT="${{ steps.find_targets.outputs.project_path }}"
+          SCHEME="${{ steps.find_targets.outputs.scheme_name }}"
+          TARGET="${{ steps.find_targets.outputs.target_name }}"
+          
+          # Determine if we should sign
+          USE_SIGNING="${{ github.event.inputs.use_signing != 'false' && secrets.IOS_CERTIFICATE_BASE64 != '' }}"
+          
+          if [ "$USE_SIGNING" = "true" ] && [ -n "$CODE_SIGN_IDENTITY" ]; then
+            echo "🔨 Building signed IPA with identity: $CODE_SIGN_IDENTITY"
+          else
+            echo "🔨 Building unsigned IPA (will sign later if needed)..."
+          fi
+          
+          echo "Scheme: $SCHEME"
+          echo "Target: $TARGET"
+          
+          BUILD_SUCCESS=0
+          
+          if [ -n "$WORKSPACE" ]; then
+            if [ "$USE_SIGNING" = "true" ] && [ -n "$CODE_SIGN_IDENTITY" ]; then
+              echo "Building with code signing..."
+              xcodebuild build \
+                -workspace "$WORKSPACE" \
+                -scheme "$SCHEME" \
+                -configuration Release \
+                -sdk iphoneos \
+                -arch arm64 \
+                -derivedDataPath ./build \
+                CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
+                CODE_SIGNING_REQUIRED=YES \
+                CODE_SIGNING_ALLOWED=YES \
+                PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_SPECIFIER" \
+                DEVELOPMENT_TEAM="${{ secrets.IOS_TEAM_ID || '' }}" \
+                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+                CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
+                WARNING_CFLAGS="-Wno-error -Wno-everything" \
+                ONLY_ACTIVE_ARCH=NO \
+                2>&1 | tee /tmp/xcodebuild.log || BUILD_SUCCESS=$?
+            else
+              echo "Building without code signing..."
+              xcodebuild build \
+                -workspace "$WORKSPACE" \
+                -scheme "$SCHEME" \
+                -configuration Release \
+                -sdk iphoneos \
+                -arch arm64 \
+                -derivedDataPath ./build \
+                CODE_SIGN_IDENTITY="" \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGNING_ALLOWED=NO \
+                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+                CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
+                WARNING_CFLAGS="-Wno-error -Wno-everything" \
+                ONLY_ACTIVE_ARCH=NO \
+                2>&1 | tee /tmp/xcodebuild.log || BUILD_SUCCESS=$?
+            fi
+          else
+            if [ "$USE_SIGNING" = "true" ] && [ -n "$CODE_SIGN_IDENTITY" ]; then
+              echo "Building with code signing..."
+              xcodebuild build \
+                -project "$PROJECT" \
+                -target "$TARGET" \
+                -configuration Release \
+                -sdk iphoneos \
+                -arch arm64 \
+                -derivedDataPath ./build \
+                CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
+                CODE_SIGNING_REQUIRED=YES \
+                CODE_SIGNING_ALLOWED=YES \
+                PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_SPECIFIER" \
+                DEVELOPMENT_TEAM="${{ secrets.IOS_TEAM_ID || '' }}" \
+                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+                CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
+                WARNING_CFLAGS="-Wno-error -Wno-everything" \
+                ONLY_ACTIVE_ARCH=NO \
+                2>&1 | tee /tmp/xcodebuild.log || BUILD_SUCCESS=$?
+            else
+              echo "Building without code signing..."
+              xcodebuild build \
+                -project "$PROJECT" \
+                -target "$TARGET" \
+                -configuration Release \
+                -sdk iphoneos \
+                -arch arm64 \
+                -derivedDataPath ./build \
+                CODE_SIGN_IDENTITY="" \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGNING_ALLOWED=NO \
+                GCC_TREAT_WARNINGS_AS_ERRORS=NO \
+                CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
+                WARNING_CFLAGS="-Wno-error -Wno-everything" \
+                ONLY_ACTIVE_ARCH=NO \
+                2>&1 | tee /tmp/xcodebuild.log || BUILD_SUCCESS=$?
+            fi
+          fi
+          
+          # Check build result
+          if [ $BUILD_SUCCESS -ne 0 ]; then
+            echo "⚠️ Build exited with code $BUILD_SUCCESS"
+            ERRORS=$(grep -i "error:" /tmp/xcodebuild.log | grep -v "warning:" | grep -v "note:" | head -20)
+            if [ -n "$ERRORS" ]; then
+              echo "❌ Found build errors:"
+              echo "$ERRORS"
+              exit 1
+            fi
+          fi
+          
+          # Find .app bundle (same logic as unsigned workflow)
+          echo "🔍 Searching for .app bundle..."
+          BUILD_SETTINGS=$(xcodebuild -showBuildSettings -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -derivedDataPath ./build 2>/dev/null || \
+            xcodebuild -showBuildSettings -project "$PROJECT" -target "$TARGET" -configuration Release -derivedDataPath ./build 2>/dev/null)
+          
+          PRODUCT_NAME=$(echo "$BUILD_SETTINGS" | grep "PRODUCT_NAME" | head -1 | sed -n 's/.*PRODUCT_NAME = \(.*\)/\1/p' | xargs)
+          BUILT_PRODUCTS_DIR=$(echo "$BUILD_SETTINGS" | grep "BUILT_PRODUCTS_DIR" | head -1 | sed -n 's/.*BUILT_PRODUCTS_DIR = \(.*\)/\1/p' | xargs)
+          
+          APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | grep -v "\.framework" | grep -v "Pods" | head -1)
+          
+          if [ -z "$APP_BUNDLE" ] && [ -n "$BUILT_PRODUCTS_DIR" ] && [ -n "$PRODUCT_NAME" ]; then
+            APP_BUNDLE="$BUILT_PRODUCTS_DIR/$PRODUCT_NAME.app"
+          fi
+          
+          if [ -z "$APP_BUNDLE" ] || [ ! -d "$APP_BUNDLE" ]; then
+            echo "❌ ERROR: No .app bundle found!"
+            exit 1
+          fi
+          
+          echo "✅ Found app bundle: $APP_BUNDLE"
+          
+          # Create IPA
+          echo "📦 Creating IPA..."
+          rm -rf Payload app.ipa
+          mkdir -p Payload
+          cp -R "$APP_BUNDLE" "Payload/$(basename "$APP_BUNDLE")"
+          zip -r app.ipa Payload/
+          
+          echo "✅ IPA created: app.ipa"
+          echo "ipa_path=app.ipa" >> $GITHUB_OUTPUT
+
+      # Step: Re-sign IPA if needed (for tools like eSign, AltStore, etc.)
+      - name: Re-sign IPA (Optional)
+        if: ${{ github.event.inputs.use_signing == 'false' || secrets.IOS_CERTIFICATE_BASE64 == '' }}
+        working-directory: ./mobile-expo/ios
+        run: |
+          echo "ℹ️ IPA is unsigned. You can sign it manually using:"
+          echo "   - eSign or other iOS signing tools"
+          echo "   - AltStore"
+          echo "   - Sideloadly"
+          echo "   - Or any other re-signing tool"
+          echo ""
+          echo "The unsigned IPA is ready for manual signing."
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa-signed
+          path: mobile-expo/ios/app.ipa
+          retention-days: 30
+
+      - name: Summary
+        run: |
+          echo "## ✅ Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ secrets.IOS_CERTIFICATE_BASE64 }}" ]; then
+            echo "📱 **Signed IPA** has been built successfully!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "📱 **Unsigned IPA** has been built!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **Note:** This IPA is unsigned. Sign it manually before installing:" >> $GITHUB_STEP_SUMMARY
+            echo "- Use eSign, AltStore, Sideloadly, or other signing tools" >> $GITHUB_STEP_SUMMARY
+            echo "- Or configure GitHub Secrets to enable automatic signing" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Download the IPA from the **Artifacts** section above." >> $GITHUB_STEP_SUMMARY
+

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { useColorScheme, StatusBar, AppState, AppStateStatus, Appearance } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PWATheme } from '../config/PWATheme';
@@ -33,30 +33,69 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const [isInitialized, setIsInitialized] = useState(false);
   
   // Track system dark mode state for real-time updates
-  // Handle null case - if systemColorScheme is null (some platforms), default to light
-  const [systemDarkMode, setSystemDarkMode] = useState<boolean>(
-    systemColorScheme !== null && systemColorScheme !== undefined 
-      ? systemColorScheme === 'dark' 
-      : false
-  );
+  // Initialize with Appearance API as primary source (more reliable on iOS)
+  const initialSystemDark = (() => {
+    const appearanceScheme = Appearance.getColorScheme();
+    if (appearanceScheme === 'dark' || appearanceScheme === 'light') {
+      // Use Appearance API as primary source
+      return appearanceScheme === 'dark';
+    }
+    // Fallback to hook if Appearance API returns null
+    if (systemColorScheme === 'dark') return true;
+    if (systemColorScheme === 'light') return false;
+    // Default to false if both return null
+    return false;
+  })();
+  
+  const [systemDarkMode, setSystemDarkMode] = useState<boolean>(initialSystemDark);
 
-  // Function to get current system color scheme directly from Appearance API
+  // Function to get current system color scheme
+  // Priority: Appearance API > useColorScheme hook (more reliable on iOS)
   const getSystemColorScheme = (): 'light' | 'dark' => {
-    const colorScheme = Appearance.getColorScheme();
-    return colorScheme === 'dark' ? 'dark' : 'light';
+    // First, try Appearance API (more reliable on iOS, especially when Remote Debugging is enabled)
+    const appearanceScheme = Appearance.getColorScheme();
+    if (appearanceScheme === 'dark' || appearanceScheme === 'light') {
+      return appearanceScheme;
+    }
+    // Fallback to useColorScheme hook
+    if (systemColorScheme === 'dark' || systemColorScheme === 'light') {
+      return systemColorScheme;
+    }
+    // Default to light if both return null
+    return 'light';
   };
 
   // Function to update system dark mode state from actual system theme
+  // On iOS, Appearance.getColorScheme() is more reliable than useColorScheme hook
+  // especially when Remote Debugging is enabled (which can cause useColorScheme to always return 'light')
   const updateSystemDarkMode = () => {
-    const currentScheme = getSystemColorScheme();
-    const isSystemDark = currentScheme === 'dark';
+    // Get both values
+    const hookValue = systemColorScheme;
+    const appearanceValue = Appearance.getColorScheme();
+    
+    // Priority: Appearance API > useColorScheme hook
+    // This is because Appearance API is more reliable on iOS, especially when Remote Debugging is enabled
+    let finalIsDark = false;
+    
+    if (appearanceValue === 'dark' || appearanceValue === 'light') {
+      // Use Appearance API as primary source (more reliable on iOS)
+      finalIsDark = appearanceValue === 'dark';
+    } else if (hookValue === 'dark' || hookValue === 'light') {
+      // Fallback to hook if Appearance API returns null
+      finalIsDark = hookValue === 'dark';
+    }
+    // If both return null, keep current value (default to false/light)
+    
     console.log('🌓 Checking system color scheme:', {
-      fromHook: systemColorScheme,
-      fromAppearance: currentScheme,
-      isDark: isSystemDark
+      fromHook: hookValue,
+      fromAppearance: appearanceValue,
+      finalIsDark,
+      finalDecision: finalIsDark ? 'dark' : 'light',
+      note: 'Using Appearance API as primary source (more reliable on iOS)'
     });
-    setSystemDarkMode(isSystemDark);
-    return isSystemDark;
+    
+    setSystemDarkMode(finalIsDark);
+    return finalIsDark;
   };
 
   // Listen to system color scheme changes in real-time
@@ -131,17 +170,76 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     loadTheme();
   }, []); // Only run once on mount
 
+  // Force update system theme when themeMode changes to 'system' or systemColorScheme changes
+  useEffect(() => {
+    if (themeMode === 'system') {
+      // Force update system theme immediately when switching to system mode
+      // On iOS, Appearance API is more reliable than useColorScheme hook
+      // (especially when Remote Debugging is enabled)
+      const appearanceScheme = Appearance.getColorScheme();
+      const hookValue = systemColorScheme;
+      
+      // Priority: Appearance API > useColorScheme hook
+      let finalIsDark = false;
+      
+      if (appearanceScheme === 'dark' || appearanceScheme === 'light') {
+        // Use Appearance API as primary source
+        finalIsDark = appearanceScheme === 'dark';
+      } else if (hookValue === 'dark' || hookValue === 'light') {
+        // Fallback to hook if Appearance API returns null
+        finalIsDark = hookValue === 'dark';
+      }
+      
+      console.log('🔄 Theme mode is system, updating:', {
+        fromHook: hookValue,
+        fromAppearance: appearanceScheme,
+        finalIsDark,
+        currentSystemDarkMode: systemDarkMode,
+        note: 'Using Appearance API as primary source'
+      });
+      
+      // Always update to ensure sync with system theme
+      setSystemDarkMode(finalIsDark);
+    }
+  }, [themeMode, systemColorScheme]); // Depend on both themeMode and systemColorScheme
+
   // Save theme mode to storage
   const setThemeMode = async (mode: ThemeMode) => {
     try {
-      await AsyncStorage.setItem('themeMode', mode);
-      setThemeModeState(mode);
-      
-      // If switching to 'system' mode, immediately refresh system theme
+      // If switching to 'system' mode, update system theme FIRST before setting themeMode
+      // This ensures isDarkMode is calculated correctly when themeMode changes
       if (mode === 'system') {
         console.log('🔄 Switching to system mode, refreshing theme...');
-        updateSystemDarkMode();
+        // On iOS, Appearance API is more reliable than useColorScheme hook
+        // (especially when Remote Debugging is enabled)
+        const appearanceScheme = Appearance.getColorScheme();
+        const hookValue = systemColorScheme;
+        
+        // Priority: Appearance API > useColorScheme hook
+        let finalIsDark = false;
+        
+        if (appearanceScheme === 'dark' || appearanceScheme === 'light') {
+          // Use Appearance API as primary source
+          finalIsDark = appearanceScheme === 'dark';
+        } else if (hookValue === 'dark' || hookValue === 'light') {
+          // Fallback to hook if Appearance API returns null
+          finalIsDark = hookValue === 'dark';
+        }
+        
+        console.log('🔄 Immediate system theme update:', {
+          fromHook: hookValue,
+          fromAppearance: appearanceScheme,
+          finalIsDark,
+          note: 'Using Appearance API as primary source'
+        });
+        
+        // Update systemDarkMode FIRST to ensure isDarkMode is calculated correctly
+        setSystemDarkMode(finalIsDark);
       }
+      
+      await AsyncStorage.setItem('themeMode', mode);
+      // Then update themeMode state
+      setThemeModeState(mode);
     } catch (error) {
       console.error('Error saving theme:', error);
     }
@@ -149,9 +247,13 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
   // Compute actual dark mode based on theme mode and system preference
   // Use systemDarkMode state for real-time updates when system theme changes
-  const isDarkMode = themeMode === 'system' 
-    ? systemDarkMode
-    : themeMode === 'dark';
+  // Use useMemo to ensure it recalculates when dependencies change
+  const isDarkMode = useMemo(() => {
+    if (themeMode === 'system') {
+      return systemDarkMode;
+    }
+    return themeMode === 'dark';
+  }, [themeMode, systemDarkMode]);
 
   // Debug logging
   useEffect(() => {
@@ -165,7 +267,10 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   }, [themeMode, systemColorScheme, systemDarkMode, isDarkMode]);
 
   // Get colors based on current mode
-  const colors = isDarkMode ? PWATheme.dark : PWATheme.light;
+  // Use useMemo to ensure it recalculates when isDarkMode changes
+  const colors = useMemo(() => {
+    return isDarkMode ? PWATheme.dark : PWATheme.light;
+  }, [isDarkMode]);
 
   const toggleTheme = () => {
     const modes: ThemeMode[] = ['light', 'dark', 'system'];

@@ -250,4 +250,9 @@ export const uploadAPI = {
   },
 };
 
+export const feedbackAPI = {
+  submitFeedback: (content: string, type?: 'feedback' | 'report' | 'bug', mediaUrl?: string | null) =>
+    apiClient.post('/feedback', { content, type: type || 'feedback', mediaUrl }),
+};
+
 export default apiClient;

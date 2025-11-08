@@ -26,7 +26,7 @@ const FeedTabBar = ({ activeTab, onTabChange }: FeedTabBarProps) => {
   ];
 
   return (
-    <View style={[styles.container, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
+    <View style={[styles.container, { backgroundColor: colors.surface }]}>
       {tabs.map((tab) => (
         <TouchableOpacity
           key={tab.id}
@@ -56,7 +56,6 @@ const FeedTabBar = ({ activeTab, onTabChange }: FeedTabBarProps) => {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    borderBottomWidth: StyleSheet.hairlineWidth,
     paddingVertical: 8,
     paddingHorizontal: 12,
     gap: 8,

@@ -9,8 +9,17 @@ import PostsListScreen from '../screens/NewsFeed/PostsListScreen';
 import ProfileScreen from '../screens/Profile/ProfileScreen';
 import EditProfileScreen from '../screens/Profile/EditProfileScreen';
 import ProfileInformationScreen from '../screens/Profile/ProfileInformationScreen';
+import FeedbackScreen from '../screens/Profile/FeedbackScreen';
+import HelpScreen from '../screens/Profile/HelpScreen';
 import SettingsScreen from '../screens/Settings/SettingsScreen';
 import InterfaceSettingsScreen from '../screens/Settings/InterfaceSettingsScreen';
+import FontSizeSettingsScreen from '../screens/Settings/FontSizeSettingsScreen';
+import StatusFeedScreen from '../screens/Profile/StatusFeedScreen';
+import ActivityStatusScreen from '../screens/Profile/ActivityStatusScreen';
+import ResourceManagementScreen from '../screens/Profile/ResourceManagementScreen';
+import DeviceManagementScreen from '../screens/Profile/DeviceManagementScreen';
+import SecurityScreen from '../screens/Profile/SecurityScreen';
+import AppInfoScreen from '../screens/Profile/AppInfoScreen';
 import FriendsListScreen from '../screens/Friends/FriendsListScreen';
 import NotificationsScreen from '../screens/Notifications/NotificationsScreen';
 import CreatePostScreen from '../screens/NewsFeed/CreatePostScreen';
@@ -85,6 +94,51 @@ const ProfileStackNavigator = () => (
       component={InterfaceSettingsScreen}
       options={{ title: 'Giao diện' }}
     />
+    <ProfileStack.Screen
+      name="Feedback"
+      component={FeedbackScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="Help"
+      component={HelpScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="FontSizeSettings"
+      component={FontSizeSettingsScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="StatusFeed"
+      component={StatusFeedScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="ActivityStatus"
+      component={ActivityStatusScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="ResourceManagement"
+      component={ResourceManagementScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="DeviceManagement"
+      component={DeviceManagementScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="Security"
+      component={SecurityScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="AppInfo"
+      component={AppInfoScreen}
+      options={{ headerShown: false as boolean }}
+    />
   </ProfileStack.Navigator>
 );
 
@@ -107,14 +161,14 @@ const MainNavigator = () => {
         options={{ title: 'Video' }}
       />
       <Tab.Screen 
+        name="Party" 
+        component={NotificationsScreen}
+        options={{ title: 'Party' }}
+      />
+      <Tab.Screen 
         name="Chat" 
         component={ChatStackNavigator}
         options={{ title: 'Tin nhắn' }}
-      />
-      <Tab.Screen 
-        name="Notifications" 
-        component={NotificationsScreen}
-        options={{ title: 'Thông báo' }}
       />
       <Tab.Screen 
         name="Profile" 
