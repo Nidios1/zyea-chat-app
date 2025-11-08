@@ -19,8 +19,9 @@
       "bundleIdentifier": "com.zyea.mobile",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Ứng dụng cần quyền để bạn chọn ảnh đại diện và ảnh bìa.",
-        "NSCameraUsageDescription": "Ứng dụng cần quyền camera để chụp ảnh làm ảnh đại diện hoặc ảnh bìa.",
+        "NSCameraUsageDescription": "Ứng dụng cần quyền camera để chụp ảnh làm ảnh đại diện hoặc ảnh bìa và để thực hiện cuộc gọi video.",
         "NSPhotoLibraryAddUsageDescription": "Ứng dụng cần quyền lưu ảnh đã chỉnh sửa vào thư viện.",
+        "NSMicrophoneUsageDescription": "Ứng dụng cần quyền microphone để thực hiện cuộc gọi thoại và video.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -30,7 +31,9 @@
     "extra": {
       "eas": {
         "projectId": "fa5c683f-f9c5-459e-85a5-98f1856c4d2d"
-      }
+      },
+      "apiUrl": "http://192.168.0.103:5000/api",
+      "socketUrl": "http://192.168.0.103:5000"
     },
     "owner": "hieukka"
   }

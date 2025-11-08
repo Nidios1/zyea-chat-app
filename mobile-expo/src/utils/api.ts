@@ -17,8 +17,6 @@ apiClient.interceptors.request.use(
     const token = await getStoredToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-    } else {
-      console.warn('⚠️ API request without token:', config.url);
     }
     
     // For FormData (React Native), don't set Content-Type - let axios/browser set it
@@ -27,52 +25,19 @@ apiClient.interceptors.request.use(
       delete config.headers['Content-Type'];
     }
     
-    // Log request for debugging
-    if (config.url?.includes('/messages')) {
-      console.log('📤 API Request:', {
-        method: config.method,
-        url: config.url,
-        hasToken: !!token,
-        data: config.data
-      });
-    }
-    
     return config;
   },
   (error) => {
-    console.error('❌ API Request error:', error);
     return Promise.reject(error);
   }
 );
 
 apiClient.interceptors.response.use(
   (response) => {
-    // Log successful responses for messages endpoint
-    if (response.config?.url?.includes('/messages')) {
-      console.log('✅ API Response:', {
-        status: response.status,
-        url: response.config.url,
-        data: response.data
-      });
-    }
     return response;
   },
   async (error) => {
-    // Enhanced error logging
-    if (error.config?.url?.includes('/messages')) {
-      console.error('❌ API Error for messages:', {
-        status: error.response?.status,
-        statusText: error.response?.statusText,
-        url: error.config.url,
-        method: error.config.method,
-        data: error.config.data,
-        responseData: error.response?.data,
-        message: error.message
-      });
-    }
-    
     if (error.response?.status === 401) {
-      console.error('❌ Unauthorized - Token may be expired or invalid');
       // Handle logout if needed
     }
     
@@ -216,7 +181,6 @@ export const newsfeedAPI = {
     const typeParam = type || 'all';
     // Build URL manually to ensure compatibility with React Native
     const url = `/newsfeed/posts?page=${page}&type=${encodeURIComponent(typeParam)}`;
-    console.log('📱 [API] getPosts URL:', url, 'type param:', typeParam, 'original type:', type);
     return apiClient.get(url);
   },
 

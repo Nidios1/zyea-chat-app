@@ -43,10 +43,15 @@ const io = socketIo(server, {
   cors: {
     origin: function (origin, callback) {
       // Allow requests with no origin (mobile apps, curl, etc.)
-      if (!origin) return callback(null, true);
+      if (!origin) {
+        console.log('✅ Socket connection from mobile app (no origin)');
+        return callback(null, true);
+      }
       
-      // Allow localhost and common network IPs
-      const allowedOrigins = [
+      console.log(`🔍 Socket connection from origin: ${origin}`);
+      
+      // Allow localhost and common network IPs (web client on port 3000)
+      const allowedWebOrigins = [
         'http://localhost:3000',
         'http://127.0.0.1:3000',
         /^http:\/\/192\.168\.\d+\.\d+:3000$/,
@@ -54,7 +59,19 @@ const io = socketIo(server, {
         /^http:\/\/172\.\d+\.\d+\.\d+:3000$/
       ];
       
-      const isAllowed = allowedOrigins.some(allowedOrigin => {
+      // Allow server URL itself (mobile app might send this as origin)
+      const serverUrl = process.env.SERVER_URL || 'http://192.168.0.103:5000';
+      const allowedServerOrigins = [
+        serverUrl,
+        `http://localhost:5000`,
+        `http://127.0.0.1:5000`,
+        /^http:\/\/192\.168\.\d+\.\d+:5000$/,
+        /^http:\/\/10\.\d+\.\d+\.\d+:5000$/,
+        /^http:\/\/172\.\d+\.\d+\.\d+:5000$/
+      ];
+      
+      // Check if origin is from web client
+      const isWebClient = allowedWebOrigins.some(allowedOrigin => {
         if (typeof allowedOrigin === 'string') {
           return origin === allowedOrigin;
         } else {
@@ -62,15 +79,29 @@ const io = socketIo(server, {
         }
       });
       
-      if (isAllowed) {
+      // Check if origin is server URL (mobile app)
+      const isServerUrl = allowedServerOrigins.some(allowedOrigin => {
+        if (typeof allowedOrigin === 'string') {
+          return origin === allowedOrigin;
+        } else {
+          return allowedOrigin.test(origin);
+        }
+      });
+      
+      if (isWebClient || isServerUrl) {
+        console.log(`✅ Socket CORS allowed for origin: ${origin}`);
         callback(null, true);
       } else {
-        console.log(`⚠️  Socket CORS blocked origin: ${origin}`);
-        callback(null, true); // Allow for now, can be changed to false for security
+        // For development, allow all origins (can be restricted in production)
+        console.log(`⚠️  Socket CORS unknown origin (allowing for development): ${origin}`);
+        callback(null, true);
       }
     },
-    methods: ["GET", "POST"]
-  }
+    methods: ["GET", "POST"],
+    credentials: true,
+    allowedHeaders: ["Authorization", "Content-Type"]
+  },
+  allowEIO3: true // Allow Engine.IO v3 clients (older versions)
 });
 
 // Middleware

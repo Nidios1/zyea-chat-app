@@ -4,6 +4,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 
 import ChatListScreen from '../screens/Chat/ChatListScreen';
 import ChatDetailScreen from '../screens/Chat/ChatDetailScreen';
+import VideoCallScreen from '../screens/Chat/VideoCallScreen';
 import ContactsScreen from '../screens/Contacts/ContactsScreen';
 import PostsListScreen from '../screens/NewsFeed/PostsListScreen';
 import ProfileScreen from '../screens/Profile/ProfileScreen';
@@ -46,6 +47,14 @@ const ChatStackNavigator = () => (
       component={ChatDetailScreen}
       options={{
         headerShown: false as boolean,
+      }}
+    />
+    <ChatStack.Screen
+      name="VideoCall"
+      component={VideoCallScreen}
+      options={{
+        headerShown: false as boolean,
+        presentation: 'fullScreenModal' as any,
       }}
     />
   </ChatStack.Navigator>

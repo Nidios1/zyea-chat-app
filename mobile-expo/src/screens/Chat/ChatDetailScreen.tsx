@@ -5,9 +5,15 @@ import {
   FlatList,
   TextInput,
   TouchableOpacity,
+  Pressable,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { Text, Appbar, IconButton, Avatar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -24,13 +30,15 @@ import DeleteMessageDialog from '../../components/Chat/DeleteMessageDialog';
 import UserProfileModal from '../../components/Chat/UserProfileModal';
 // Clipboard is optional - use React Native Clipboard if expo-clipboard not available
 import { Clipboard } from 'react-native';
+import { Video, ResizeMode } from 'expo-av';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { chatAPI } from '../../utils/api';
+import { chatAPI, uploadAPI } from '../../utils/api';
 import useSocket from '../../hooks/useSocket';
 import { formatDate, isDifferentDay, getTimeAgo, isRecentActivity } from '../../utils/dateUtils';
 import { getAvatarURL } from '../../utils/imageUtils';
 import { useTheme } from '../../contexts/ThemeContext';
+import { launchImageLibrary, launchCamera } from '../../utils/imagePicker';
 
 type ChatDetailNavigationProp = StackNavigationProp<ChatStackParamList>;
 
@@ -74,33 +82,43 @@ const ChatDetailScreen = () => {
   const [editingMessage, setEditingMessage] = useState<any | null>(null);
   const [showUserProfileModal, setShowUserProfileModal] = useState(false);
   const [selectedUserForProfile, setSelectedUserForProfile] = useState<any | null>(null);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<{ uri: string; type: 'image' | 'video' } | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitializedRef = useRef<boolean>(false); // Track if we've initialized messages
+  const videoRef = useRef<Video>(null);
+  
+  // Threads-like video duration limit: 5 minutes (300 seconds)
+  const MAX_VIDEO_DURATION = 300; // 5 minutes in seconds
   
   const { socket } = useSocket();
 
-  const { data: conversationMessages = [], isLoading: isLoadingMessages, refetch: refetchMessages } = useQuery({
+  const { 
+    data: conversationMessages = [], 
+    isLoading: isLoadingMessages, 
+    isError: isMessagesError,
+    error: messagesError,
+    refetch: refetchMessages,
+    isRefetching: isRefetchingMessages
+  } = useQuery({
     queryKey: ['messages', conversationId],
     queryFn: async () => {
       if (!conversationId) {
-        console.error('❌ ChatDetailScreen - Missing conversationId');
-        return [];
+        throw new Error('Missing conversationId');
       }
       try {
         const response = await chatAPI.getMessages(conversationId);
+        
+        // Axios automatically throws error for status >= 400, so if we get here, response is successful
         // Server returns messages array directly (already reversed: oldest to newest)
         const messages = response.data || [];
-        console.log('📥 ChatDetailScreen - Fetched messages:', messages.length);
-        if (messages.length > 0) {
-          console.log('📥 First message:', { id: messages[0].id, content: messages[0].content });
-        }
         
         // Mark all messages as read when entering conversation
         try {
           await chatAPI.markAllAsRead(conversationId);
-          console.log('✅ Marked all messages as read');
           
           // Update conversations cache immediately to set unread_count = 0
           queryClient.setQueryData(['conversations'], (oldData: any[]) => {
@@ -119,7 +137,6 @@ const ChatDetailScreen = () => {
               return conv;
             });
             
-            console.log('✅ Updated conversations cache - set unread_count to 0');
             return updated;
           });
           
@@ -132,25 +149,67 @@ const ChatDetailScreen = () => {
             });
           }
         } catch (error) {
-          console.error('❌ Error marking messages as read:', error);
+          // Don't throw - marking as read is not critical
         }
         
         return messages;
-      } catch (error) {
-        console.error('❌ ChatDetailScreen - Error fetching messages:', error);
-        return [];
+      } catch (error: any) {
+        // Log detailed error information
+        const status = error?.response?.status;
+        const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+        
+        // Create a more user-friendly error message
+        let userFriendlyMessage = errorMessage;
+        if (status === 500) {
+          userFriendlyMessage = 'Lỗi máy chủ. Vui lòng thử lại sau.';
+        } else if (status === 404) {
+          userFriendlyMessage = 'Không tìm thấy cuộc trò chuyện.';
+        } else if (status === 401) {
+          userFriendlyMessage = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+        } else if (status === 403) {
+          userFriendlyMessage = 'Bạn không có quyền truy cập cuộc trò chuyện này.';
+        } else if (status >= 400 && status < 500) {
+          userFriendlyMessage = `Lỗi yêu cầu (${status}). Vui lòng thử lại.`;
+        } else if (status >= 500) {
+          userFriendlyMessage = 'Lỗi máy chủ. Vui lòng thử lại sau.';
+        }
+        
+        // Create enhanced error object with user-friendly message
+        const enhancedError = new Error(userFriendlyMessage);
+        (enhancedError as any).status = status;
+        (enhancedError as any).originalError = error;
+        
+        // Re-throw enhanced error to let React Query handle retry logic
+        throw enhancedError;
       }
     },
     enabled: !!conversationId, // Only fetch if conversationId exists
     staleTime: 30000, // Consider data fresh for 30 seconds (prevent unnecessary refetch)
     cacheTime: 5 * 60 * 1000, // Keep in cache for 5 minutes (preserve messages when navigating back)
+    retry: (failureCount, error: any) => {
+      // Retry logic: retry up to 3 times for 5xx errors, but not for 4xx errors
+      // Check both enhanced error status and original error response status
+      const status = error?.status || error?.response?.status || error?.originalError?.response?.status;
+      
+      if (status >= 400 && status < 500) {
+        // Don't retry client errors (4xx) - these are usually permanent errors
+        return false;
+      }
+      
+      // Retry server errors (5xx) and network errors (no status) up to 3 times
+      if (failureCount < 3) {
+        return true;
+      }
+      
+      return false;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff: 1s, 2s, 4s
   });
 
   useEffect(() => {
     // Don't reset messages while loading - preserve current state
     // This prevents flashing empty state when navigating back and forth
     if (isLoadingMessages) {
-      console.log('📥 ChatDetailScreen - Still loading messages, preserving current state');
       return;
     }
     
@@ -171,7 +230,6 @@ const ChatDetailScreen = () => {
         
         // Initial load: set messages from server
         if (prevMessages.length === 0 || hasOnlyTempMessages) {
-          console.log('📥 ChatDetailScreen - Initial load, setting messages from server:', reversedMessages.length);
           hasInitializedRef.current = true;
           // Map server fields to client format
           return reversedMessages.map(msg => {
@@ -186,6 +244,10 @@ const ChatDetailScreen = () => {
               ...msg,
               edited: Boolean(isEdited),  // Đảm bảo là boolean
               reactions: msg.reactions ? (typeof msg.reactions === 'string' ? JSON.parse(msg.reactions) : msg.reactions) : [],
+              // Ensure message_type is set (server returns message_type field)
+              message_type: msg.message_type || msg.type || 'text',
+              // Ensure file_url is preserved (server returns file_url for media)
+              file_url: msg.file_url || null,
             };
           });
         }
@@ -228,6 +290,10 @@ const ChatDetailScreen = () => {
               ...msg,
               edited: Boolean(isEdited),  // Đảm bảo là boolean
               reactions: msg.reactions ? (typeof msg.reactions === 'string' ? JSON.parse(msg.reactions) : msg.reactions) : [],
+              // Ensure message_type is set (server returns message_type field)
+              message_type: msg.message_type || msg.type || 'text',
+              // Ensure file_url is preserved (server returns file_url for media)
+              file_url: msg.file_url || null,
             };
           });
           
@@ -243,23 +309,18 @@ const ChatDetailScreen = () => {
               merged.unshift(temp);
             }
           });
-          console.log('📥 ChatDetailScreen - Merged new messages from server:', merged.length);
           return merged;
         }
         
         // No new messages from server, keep current state
-        console.log('📥 ChatDetailScreen - No new messages, keeping current state:', prevMessages.length);
         return prevMessages;
       });
-      
-      console.log('📥 ChatDetailScreen - Updated messages from server');
     } else if (Array.isArray(conversationMessages) && conversationMessages.length === 0) {
       // Empty array from server
       setMessages((prevMessages) => {
         // If we haven't initialized yet (first mount), wait for data
         if (!hasInitializedRef.current && isLoadingMessages === false) {
           // Only reset if this is truly an empty conversation (after loading finished)
-          console.log('📥 ChatDetailScreen - Empty conversation after loading finished');
           hasInitializedRef.current = true;
           return [];
         }
@@ -267,13 +328,11 @@ const ChatDetailScreen = () => {
         // If we already initialized and have messages, preserve them
         // This prevents clearing messages when navigating back and refetch returns empty (cache issue)
         if (hasInitializedRef.current && prevMessages.length > 0) {
-          console.log('📥 ChatDetailScreen - Server returned empty but we have local messages, preserving:', prevMessages.length);
           return prevMessages;
         }
         
         // First time, no messages
         if (prevMessages.length === 0 && !hasInitializedRef.current) {
-          console.log('📥 ChatDetailScreen - No messages in server and local, keeping empty');
           hasInitializedRef.current = true;
           return [];
         }
@@ -286,7 +345,6 @@ const ChatDetailScreen = () => {
   // Reset initialization flag when conversationId changes (navigate to different conversation)
   useEffect(() => {
     hasInitializedRef.current = false;
-    console.log('📥 ChatDetailScreen - Conversation changed, reset initialization flag');
   }, [conversationId]);
   // No dynamic padding change to avoid jumping; keep state but not used for layout shifts
   useEffect(() => {
@@ -308,7 +366,6 @@ const ChatDetailScreen = () => {
       conversationId: conversationId,
       userId: user.id
     });
-    console.log('✅ Emitted viewingConversation');
 
     // Cleanup when leaving conversation
     return () => {
@@ -317,7 +374,6 @@ const ChatDetailScreen = () => {
           conversationId: conversationId,
           userId: user.id
         });
-        console.log('✅ Emitted leftConversation');
         
         // Stop typing when leaving
         if (isTyping) {
@@ -338,8 +394,6 @@ const ChatDetailScreen = () => {
     if (!socket || !conversationId) return;
 
     const handleNewMessage = (socketMessage: any) => {
-      console.log('📥 Received message via socket:', socketMessage);
-      
       // Socket can emit in different formats - handle both
       // Format 1: From server socket handler { senderId, message, timestamp }
       // Format 2: Full message object from API { id, content, sender_id, conversation_id, ... }
@@ -352,11 +406,9 @@ const ChatDetailScreen = () => {
       } else if (socketMessage.senderId && socketMessage.message) {
         // Socket handler format - basic format from server
         // Create message object from basic format
-        console.log('📥 Socket message in basic format, creating message object');
         
         // If this is our own message, remove temp message and refetch to get full data
         if (String(socketMessage.senderId) === String(user?.id)) {
-          console.log('📥 Our own message via socket, refetching to get full data');
           setTimeout(() => {
             refetchMessages();
           }, 500);
@@ -427,7 +479,6 @@ const ChatDetailScreen = () => {
             // Check if message already exists to avoid duplicates
             const exists = prev.some(m => m.id === message.id);
             if (exists) {
-              console.log('📥 Message already exists, skipping duplicate');
               return prev;
             }
             
@@ -438,7 +489,6 @@ const ChatDetailScreen = () => {
               if (!id || !String(id).startsWith('temp-')) return true;
               // Remove temp messages with same content (our optimistic update)
               if (m.content === message.content && m.sender_id === message.sender_id) {
-                console.log('📥 Removing temp message, replacing with real message');
                 return false;
               }
               return true;
@@ -494,7 +544,6 @@ const ChatDetailScreen = () => {
     // Listen for typing indicators
     const handleUserTyping = (data: any) => {
       if (data.conversationId === conversationId && data.userId !== user?.id) {
-        console.log('📝 User typing:', data);
         setTypingUsers((prev) => {
           // Check if user already in list
           const exists = prev.some(u => u.userId === data.userId);
@@ -510,7 +559,6 @@ const ChatDetailScreen = () => {
 
     const handleUserStoppedTyping = (data: any) => {
       if (data.conversationId === conversationId && data.userId !== user?.id) {
-        console.log('📝 User stopped typing:', data);
         setTypingUsers((prev) => prev.filter(u => u.userId !== data.userId));
       }
     };
@@ -518,7 +566,6 @@ const ChatDetailScreen = () => {
     // Listen for message read status updates
     const handleMessageRead = (data: any) => {
       if (data.conversationId === conversationId) {
-        console.log('✅ Message read:', data);
         setMessages((prev) => prev.map(msg => {
           if (data.messageIds && data.messageIds.includes(String(msg.id))) {
             return { ...msg, status: 'read' as const };
@@ -534,7 +581,6 @@ const ChatDetailScreen = () => {
 
     const handleMessageDelivered = (data: any) => {
       if (data.conversationId === conversationId) {
-        console.log('📬 Message delivered:', data);
         setMessages((prev) => prev.map(msg => {
           if (data.messageId && String(msg.id) === String(data.messageId)) {
             return { ...msg, status: 'delivered' as const };
@@ -547,7 +593,6 @@ const ChatDetailScreen = () => {
     // Listen for user viewing conversation (for read receipts)
     const handleUserViewingConversation = (data: any) => {
       if (data.conversationId === conversationId && data.userId === otherUserId) {
-        console.log('👀 Other user is viewing conversation');
         // Mark all our messages as read when other user is viewing
         setMessages((prev) => prev.map(msg => {
           if (msg.sender_id === user?.id) {
@@ -561,12 +606,10 @@ const ChatDetailScreen = () => {
     // Listen for user status changes (online/offline/last_seen updates)
     const handleUserStatusChanged = (data: any) => {
       if (String(data.userId) === String(otherUserId)) {
-        console.log('🔄 User status changed:', data);
         // Update online status
         if (data.status !== undefined) {
           const newIsOnline = data.status === 'online';
           setIsOnline(newIsOnline);
-          console.log(`🔄 Updated online status for user ${otherUserId}: ${newIsOnline}`);
         }
         // Update last_seen when status changes (e.g., going offline)
         if (data.lastSeen) {
@@ -575,7 +618,6 @@ const ChatDetailScreen = () => {
             ? data.lastSeen.toISOString() 
             : data.lastSeen;
           setUserLastSeen(lastSeenValue);
-          console.log(`🔄 Updated last_seen for user ${otherUserId}: ${lastSeenValue}`);
         }
       }
     };
@@ -616,7 +658,6 @@ const ChatDetailScreen = () => {
             const isSame = currentReactionsStr === newReactionsStr;
             
             if (!isSame) {
-              console.log('📬 Received reactionUpdate from socket:', { messageId: data.messageId, reactions: newReactions });
               // Create new object with new reactions array and timestamp to force re-render
               return { 
                 ...msg, 
@@ -694,27 +735,22 @@ const ChatDetailScreen = () => {
 
   const handleForward = () => {
     // TODO: Implement forward functionality
-    console.log('Forward message:', selectedMessage);
   };
 
   const handlePin = () => {
     // TODO: Implement pin functionality
-    console.log('Pin message:', selectedMessage);
   };
 
   const handleSave = () => {
     // TODO: Implement save message functionality
-    console.log('Save message:', selectedMessage);
   };
 
   const handleCreateTask = () => {
     // TODO: Implement create task functionality
-    console.log('Create task for message:', selectedMessage);
   };
 
   const handleSelect = () => {
     // TODO: Implement select message functionality
-    console.log('Select message:', selectedMessage);
   };
 
   const handleReaction = async (emoji: string) => {
@@ -757,7 +793,6 @@ const ChatDetailScreen = () => {
         }
         return msg;
       });
-      console.log('✅ Optimistic update - reactions:', newReactions, 'for message:', messageId);
       return updated;
     });
     
@@ -783,13 +818,11 @@ const ChatDetailScreen = () => {
         conversationId: conversationId,
         userId: user?.id
       });
-      console.log('✅ Emitted reactionUpdate via socket immediately');
     }
     
     // Save to server (update database)
     try {
       await chatAPI.updateReactions(messageId, newReactions);
-      console.log('✅ Reaction saved to server successfully');
     } catch (error) {
       console.error('❌ Error saving reaction to server:', error);
       
@@ -824,7 +857,6 @@ const ChatDetailScreen = () => {
           conversationId: conversationId,
           userId: user?.id
         });
-        console.log('🔄 Rolled back reaction via socket');
       }
     }
   };
@@ -891,23 +923,169 @@ const ChatDetailScreen = () => {
     }
   };
 
-  const handleSend = async () => {
-    console.log('🔵 handleSend called', { 
-      inputText: inputText?.substring(0, 20), 
-      conversationId, 
-      userId: user?.id,
-      hasSocket: !!socket,
-      socketConnected: socket?.connected,
-      otherUserId,
-      isEditing: !!editingMessage
-    });
+  // Handle media picker
+  const handleOpenMediaPicker = () => {
+    setShowMediaPicker(true);
+  };
+
+  const handleCloseMediaPicker = () => {
+    setShowMediaPicker(false);
+  };
+
+  const handlePickImage = async () => {
+    handleCloseMediaPicker();
     
-    if (!inputText || !inputText.trim()) {
-      console.warn('⚠️ Cannot send: inputText is empty');
+    Alert.alert(
+      'Chọn ảnh',
+      'Bạn muốn chụp ảnh mới hay chọn từ thư viện?',
+      [
+        {
+          text: 'Hủy',
+          style: 'cancel',
+        },
+        {
+          text: 'Camera',
+          onPress: async () => {
+            try {
+              const response = await launchCamera({
+                mediaType: 'photo',
+                quality: 0.8,
+              });
+              
+              if (response.assets && response.assets[0]) {
+                setSelectedMedia({
+                  uri: response.assets[0].uri,
+                  type: 'image',
+                });
+              }
+            } catch (error: any) {
+              Alert.alert('Lỗi', 'Không thể mở camera. Vui lòng thử lại.');
+            }
+          },
+        },
+        {
+          text: 'Thư viện',
+          onPress: async () => {
+            try {
+              const response = await launchImageLibrary({
+                mediaType: 'photo',
+                quality: 0.8,
+                selectionLimit: 1,
+              });
+              
+              if (response.assets && response.assets[0]) {
+                setSelectedMedia({
+                  uri: response.assets[0].uri,
+                  type: 'image',
+                });
+              }
+            } catch (error: any) {
+              Alert.alert('Lỗi', 'Không thể mở thư viện ảnh. Vui lòng thử lại.');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  const handlePickVideo = async () => {
+    handleCloseMediaPicker();
+    
+    Alert.alert(
+      'Chọn video',
+      'Bạn muốn quay video mới hay chọn từ thư viện?',
+      [
+        {
+          text: 'Hủy',
+          style: 'cancel',
+        },
+        {
+          text: 'Camera',
+          onPress: async () => {
+            try {
+              const response = await launchCamera({
+                mediaType: 'video',
+                quality: 0.8,
+              });
+              
+              if (response.assets && response.assets[0]) {
+                const videoUri = response.assets[0].uri;
+                if (videoUri) {
+                  setSelectedMedia({
+                    uri: videoUri,
+                    type: 'video',
+                  });
+                }
+              }
+            } catch (error: any) {
+              Alert.alert('Lỗi', 'Không thể mở camera. Vui lòng thử lại.');
+            }
+          },
+        },
+        {
+          text: 'Thư viện',
+          onPress: async () => {
+            try {
+              const response = await launchImageLibrary({
+                mediaType: 'video',
+                quality: 0.8,
+                selectionLimit: 1,
+              });
+              
+              if (response.assets && response.assets[0]) {
+                const videoUri = response.assets[0].uri;
+                if (videoUri) {
+                  setSelectedMedia({
+                    uri: videoUri,
+                    type: 'video',
+                  });
+                }
+              }
+            } catch (error: any) {
+              Alert.alert('Lỗi', 'Không thể mở thư viện video. Vui lòng thử lại.');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  // Check video duration when video is selected
+  const handleVideoLoad = async () => {
+    if (videoRef.current && selectedMedia?.type === 'video') {
+      try {
+        const status = await videoRef.current.getStatusAsync();
+        if (status.isLoaded && status.durationMillis) {
+          const durationSeconds = status.durationMillis / 1000;
+          
+          if (durationSeconds > MAX_VIDEO_DURATION) {
+            Alert.alert(
+              'Video quá dài',
+              `Video không được vượt quá ${MAX_VIDEO_DURATION / 60} phút (${MAX_VIDEO_DURATION} giây). Video của bạn dài ${Math.round(durationSeconds)} giây.`
+            );
+            setSelectedMedia(null);
+            return;
+          }
+        }
+      } catch (error) {
+        // Ignore errors - video might not be loaded yet
+      }
+    }
+  };
+
+  const handleRemoveMedia = () => {
+    setSelectedMedia(null);
+  };
+
+  const handleSend = async () => {
+    // Allow sending even if inputText is empty if there's media
+    if (!inputText?.trim() && !selectedMedia) {
       return;
     }
 
-    // Handle edit message
+    // Handle edit message (editing doesn't support media)
     if (editingMessage) {
       try {
         const response = await chatAPI.updateMessage(editingMessage.id, inputText.trim());
@@ -956,36 +1134,133 @@ const ChatDetailScreen = () => {
       return;
     }
 
-    let messageContent = inputText.trim();
-    if (!messageContent) {
-      console.warn('⚠️ Cannot send: messageContent is empty after trim');
-      return;
+    let messageContent = inputText.trim() || '';
+    let mediaUrl: string | undefined = undefined;
+    let messageType: 'text' | 'image' | 'video' = 'text';
+    const currentMedia = selectedMedia; // Store reference before upload
+
+    // Upload media if selected
+    if (currentMedia) {
+      setUploadingMedia(true);
+      try {
+        if (currentMedia.type === 'image') {
+          // Upload image
+          const formData = new FormData();
+          const imageType = currentMedia.uri.includes('.jpg') || currentMedia.uri.includes('.jpeg') 
+            ? 'image/jpeg' 
+            : currentMedia.uri.includes('.png')
+            ? 'image/png'
+            : 'image/jpeg';
+          const imageName = currentMedia.uri.split('/').pop() || 'image.jpg';
+          
+          formData.append('image', {
+            uri: currentMedia.uri,
+            type: imageType,
+            name: imageName,
+          } as any);
+
+          const uploadRes = await uploadAPI.uploadImage(formData);
+          // Server returns imageUrl for /upload/image endpoint
+          // Format: { success: true, imageUrl: "/uploads/image-xxx.jpg" }
+          const imageUrl = uploadRes?.data?.imageUrl || uploadRes?.data?.url;
+          if (imageUrl) {
+            // Server returns path like "/uploads/image-xxx.jpg"
+            // This will be stored in file_url field in database
+            mediaUrl = imageUrl;
+            messageType = 'image';
+            console.log('✅ Image uploaded successfully:', {
+              imageUrl,
+              mediaUrl,
+              response: uploadRes?.data,
+            });
+          } else {
+            console.error('❌ Upload image response:', uploadRes?.data);
+            throw new Error('Không nhận được URL ảnh từ server');
+          }
+        } else if (currentMedia.type === 'video') {
+          // Upload video
+          const formData = new FormData();
+          const videoType = currentMedia.uri.includes('.mp4') ? 'video/mp4' : 'video/quicktime';
+          const videoName = currentMedia.uri.split('/').pop() || 'video.mp4';
+          
+          formData.append('video', {
+            uri: currentMedia.uri,
+            type: videoType,
+            name: videoName,
+          } as any);
+
+          const uploadRes = await uploadAPI.uploadVideo(formData);
+          // Server returns url for /upload/video endpoint
+          // Format: { success: true, url: "uploads/videos/video-xxx.mp4" }
+          const videoUrl = uploadRes?.data?.url || uploadRes?.data?.videoUrl;
+          if (videoUrl) {
+            // Server returns path like "uploads/videos/video-xxx.mp4" (no leading slash)
+            // Ensure it starts with / for consistency
+            mediaUrl = videoUrl.startsWith('/') ? videoUrl : '/' + videoUrl;
+            messageType = 'video';
+            console.log('✅ Video uploaded successfully:', {
+              videoUrl,
+              mediaUrl,
+              response: uploadRes?.data,
+            });
+          } else {
+            console.error('❌ Upload video response:', uploadRes?.data);
+            throw new Error('Không nhận được URL video từ server');
+          }
+        }
+      } catch (uploadError: any) {
+        setUploadingMedia(false);
+        console.error('Upload media error:', {
+          message: uploadError?.message,
+          response: uploadError?.response?.data,
+          status: uploadError?.response?.status,
+        });
+        const errorMessage = uploadError?.response?.data?.message 
+          || uploadError?.message 
+          || 'Không thể tải media lên. Vui lòng thử lại.';
+        Alert.alert('Lỗi tải media', errorMessage);
+        return;
+      } finally {
+        setUploadingMedia(false);
+      }
     }
 
     // Format message with reply if replying
     if (replyToMessage) {
       const originalMessage = replyToMessage.content || '';
-      messageContent = `Re: ${originalMessage}\n\n${messageContent}`;
+      messageContent = messageContent 
+        ? `Re: ${originalMessage}\n\n${messageContent}`
+        : `Re: ${originalMessage}`;
     }
 
     // Optimistically add message to UI with user info
     const tempMessageId = `temp-${Date.now()}`;
+    // Use file_url for media (server uses file_url field)
     const optimisticMessage = {
       id: tempMessageId,
-      content: messageContent,
+      content: messageContent || (currentMedia ? (currentMedia.type === 'image' ? '📷 Ảnh' : '🎥 Video') : ''),
       sender_id: user.id,
       conversation_id: String(conversationId),
       created_at: new Date().toISOString(),
-      type: 'text',
-      status: 'sent' as const, // Initial status: sent (single checkmark)
+      type: messageType,
+      message_type: messageType, // Also set message_type for compatibility
+      status: 'sent' as const,
       avatar_url: user.avatar_url || null,
       full_name: user.full_name || user.username || '',
       username: user.username || '',
+      // Server uses file_url field, so set it here
+      ...(mediaUrl && { 
+        file_url: mediaUrl,
+        // Also set image_url/video_url for compatibility with MessageBubble
+        image_url: currentMedia?.type === 'image' ? mediaUrl : undefined, 
+        video_url: currentMedia?.type === 'video' ? mediaUrl : undefined,
+      }),
     };
     
     // Add optimistic message immediately
     setMessages((prev) => [optimisticMessage, ...prev]);
     setInputText('');
+    setSelectedMedia(null); // Clear selected media after sending
     setReplyToMessage(null); // Clear reply after sending
     setShowEmojiPicker(false);
       
@@ -1008,29 +1283,40 @@ const ChatDetailScreen = () => {
 
     try {
       // ALWAYS send via API first to save to database (like PWA client)
-      console.log('📤 Sending message via API...', {
-        conversationId: String(conversationId),
-        content: messageContent.substring(0, 50),
-        userId: user.id
-      });
-      
-      const apiResponse = await chatAPI.sendMessage(String(conversationId), messageContent, 'text');
-      console.log('✅ Message sent via API successfully:', apiResponse);
+      const apiResponse = await chatAPI.sendMessage(
+        String(conversationId), 
+        messageContent || (currentMedia ? (currentMedia.type === 'image' ? '📷 Ảnh' : '🎥 Video') : ''), 
+        messageType,
+        mediaUrl
+      );
 
-      // Update optimistic message status from 'sent' to 'delivered' after successful API call
+      // Server returns messageId, but we need to refetch to get full message with file_url
+      // Update optimistic message status and ensure file_url is set
       setMessages((prev) => prev.map(msg => {
         const id = msg?.id;
         if (id && String(id) === tempMessageId) {
-          console.log('📬 Updating message status from sent to delivered');
-          return { ...msg, status: 'delivered' as const };
+          return { 
+            ...msg, 
+            status: 'delivered' as const,
+            // Ensure file_url is set (it should already be set, but double-check)
+            file_url: mediaUrl || msg.file_url,
+            message_type: messageType, // Ensure message_type is set
+          };
         }
         return msg;
       }));
+      
+      // Refetch messages after a short delay to get the real message from server
+      // This ensures we have the correct message with file_url from database
+      setTimeout(() => {
+        refetchMessages().catch((err) => {
+          console.error('❌ Error refetching messages after send:', err);
+        });
+      }, 500);
 
       // Then emit via socket for real-time delivery (if socket connected)
       // This matches PWA client behavior
       if (socket?.connected && otherUserId) {
-        console.log('📤 Emitting message via socket for real-time delivery...');
         socket.emit('sendMessage', {
           receiverId: String(otherUserId),
           message: messageContent,
@@ -1038,7 +1324,6 @@ const ChatDetailScreen = () => {
           conversationId: String(conversationId)
         });
       } else {
-        console.log('⚠️ Socket not connected or missing otherUserId, skipping socket emit');
         // If socket not available, refetch after a delay to get the real message
         setTimeout(() => {
           refetchMessages().catch((err) => {
@@ -1054,27 +1339,17 @@ const ChatDetailScreen = () => {
       // Status will update to 'read' when other user views the conversation (via socket listener)
       
     } catch (error: any) {
-      console.error('❌ Send message error:', error);
-      console.error('❌ Error type:', error?.constructor?.name);
-      console.error('❌ Error response:', error?.response);
-      console.error('❌ Error response data:', error?.response?.data);
-      console.error('❌ Error message:', error?.message);
-      console.error('❌ Error stack:', error?.stack);
-      console.error('❌ Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
-      
       // Remove optimistic message on error
       setMessages((prev) => {
         const filtered = prev.filter(m => {
           const id = m?.id;
           return !id || String(id) !== tempMessageId;
         });
-        console.log('🔄 Removed optimistic message, remaining:', filtered.length);
         return filtered;
       });
       
       // Restore input text
       setInputText(messageContent);
-      console.log('🔄 Restored input text');
       
       // Show error to user (you can use toast/alert here)
       // Alert.alert('Lỗi', 'Không thể gửi tin nhắn. Vui lòng thử lại.');
@@ -1147,7 +1422,6 @@ const ChatDetailScreen = () => {
           <TouchableOpacity 
             style={{ marginLeft: 10, flex: 1 }}
             onPress={() => {
-              console.log('👤 Header name clicked');
               setSelectedUserForProfile({
                 userId: otherUserId,
                 userName: userName,
@@ -1173,8 +1447,120 @@ const ChatDetailScreen = () => {
             ) : null}
           </TouchableOpacity>
         </View>
-        <IconButton icon="phone" iconColor={colors.text} onPress={() => {}} />
-        <IconButton icon="video" iconColor={colors.text} onPress={() => {}} />
+        <IconButton 
+          icon="phone" 
+          iconColor={socket?.connected ? colors.text : colors.textSecondary} 
+          disabled={!socket?.connected}
+          onPress={async () => {
+            if (!conversationId || !otherUserId) {
+              return;
+            }
+
+            // Check socket connection before navigating
+            if (!socket) {
+              Alert.alert(
+                'Không thể kết nối',
+                'Socket chưa được khởi tạo. Vui lòng đợi một chút và thử lại.',
+                [{ text: 'OK' }]
+              );
+              return;
+            }
+
+            if (!socket.connected) {
+              Alert.alert(
+                'Không thể kết nối',
+                'Đang kết nối với server...\n\nVui lòng:\n1. Kiểm tra kết nối mạng\n2. Đợi một chút và thử lại\n3. Đảm bảo server đang chạy',
+                [
+                  { text: 'Thử lại', onPress: () => {
+                    // Force socket reconnect
+                    if (socket && !socket.connected) {
+                      socket.connect();
+                    }
+                    // Try again after a delay
+                    setTimeout(() => {
+                      if (socket?.connected) {
+                        navigation.navigate('VideoCall', {
+                          conversationId: String(conversationId),
+                          userName: userName || 'Người dùng',
+                          otherUserId: String(otherUserId),
+                          isVideo: false,
+                          userAvatarUrl: userAvatarUrl,
+                        });
+                      }
+                    }, 2000);
+                  }},
+                  { text: 'Hủy', style: 'cancel' }
+                ]
+              );
+              return;
+            }
+
+            navigation.navigate('VideoCall', {
+              conversationId: String(conversationId),
+              userName: userName || 'Người dùng',
+              otherUserId: String(otherUserId),
+              isVideo: false,
+              userAvatarUrl: userAvatarUrl,
+            });
+          }} 
+        />
+        <IconButton 
+          icon="video" 
+          iconColor={socket?.connected ? colors.text : colors.textSecondary} 
+          disabled={!socket?.connected}
+          onPress={async () => {
+            if (!conversationId || !otherUserId) {
+              return;
+            }
+
+            // Check socket connection before navigating
+            if (!socket) {
+              Alert.alert(
+                'Không thể kết nối',
+                'Socket chưa được khởi tạo. Vui lòng đợi một chút và thử lại.',
+                [{ text: 'OK' }]
+              );
+              return;
+            }
+
+            if (!socket.connected) {
+              Alert.alert(
+                'Không thể kết nối',
+                'Đang kết nối với server...\n\nVui lòng:\n1. Kiểm tra kết nối mạng\n2. Đợi một chút và thử lại\n3. Đảm bảo server đang chạy',
+                [
+                  { text: 'Thử lại', onPress: () => {
+                    // Force socket reconnect
+                    if (socket && !socket.connected) {
+                      socket.connect();
+                    }
+                    // Try again after a delay
+                    setTimeout(() => {
+                      if (socket?.connected) {
+                        navigation.navigate('VideoCall', {
+                          conversationId: String(conversationId),
+                          userName: userName || 'Người dùng',
+                          otherUserId: String(otherUserId),
+                          isVideo: true,
+                          userAvatarUrl: userAvatarUrl,
+                        });
+                      }
+                    }, 2000);
+                  }},
+                  { text: 'Hủy', style: 'cancel' }
+                ]
+              );
+              return;
+            }
+
+            navigation.navigate('VideoCall', {
+              conversationId: String(conversationId),
+              userName: userName || 'Người dùng',
+              otherUserId: String(otherUserId),
+              isVideo: true,
+              userAvatarUrl: userAvatarUrl,
+            });
+          }} 
+        />
       </Appbar.Header>
 
       {/* Reply Bar - shown below header when replying */}
@@ -1305,11 +1691,43 @@ const ChatDetailScreen = () => {
           ) : null
         }
         ListEmptyComponent={
-          isLoadingMessages ? (
+          isLoadingMessages || isRefetchingMessages ? (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
-              <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>
+              <ActivityIndicator size="large" color={colors.primary || '#0084ff'} />
+              <Text variant="bodyMedium" style={{ color: colors.textSecondary, marginTop: 16 }}>
                 Đang tải tin nhắn...
               </Text>
+            </View>
+          ) : isMessagesError ? (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
+              <MaterialCommunityIcons 
+                name="alert-circle-outline" 
+                size={48} 
+                color={colors.error || '#e74c3c'} 
+              />
+              <Text variant="bodyLarge" style={{ color: colors.error || '#e74c3c', marginTop: 16, textAlign: 'center', fontWeight: '600' }}>
+                Không thể tải tin nhắn
+              </Text>
+              <Text variant="bodyMedium" style={{ color: colors.textSecondary, marginTop: 8, textAlign: 'center' }}>
+                {messagesError instanceof Error 
+                  ? messagesError.message 
+                  : 'Đã xảy ra lỗi khi tải tin nhắn. Vui lòng thử lại.'}
+              </Text>
+              <TouchableOpacity
+                onPress={() => refetchMessages()}
+                style={{
+                  marginTop: 24,
+                  paddingHorizontal: 24,
+                  paddingVertical: 12,
+                  backgroundColor: colors.primary || '#0084ff',
+                  borderRadius: 8,
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>
+                  Thử lại
+                </Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
@@ -1336,23 +1754,81 @@ const ChatDetailScreen = () => {
           if (h && Math.abs(h - inputBarHeight) > 1) setInputBarHeight(h);
         }}
       >
-        {/* Left plus icon with circular bg */}
-        <View style={[
-          styles.circleBtn, 
-          { backgroundColor: isDarkMode ? '#2a2a2b' : '#e0e0e0' }
-        ]}> 
-          <IconButton 
-            icon="plus" 
-            iconColor={colors.textSecondary} 
-            size={22} 
-            onPress={() => {}} 
-          />
-        </View>
-        {/* Input wrapper with emoji toggle inside */}
-        <View style={[
-          styles.inputWrapper,
-          { backgroundColor: isDarkMode ? '#2a2a2b' : '#f0f0f0' }
-        ]}>
+        {/* Media Preview - Facebook style: compact thumbnail */}
+        {selectedMedia && (
+          <View style={[styles.mediaPreviewContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.mediaPreviewThumbnail}>
+              {selectedMedia.type === 'image' ? (
+                <Image
+                  source={{ uri: selectedMedia.uri }}
+                  style={styles.mediaPreviewThumbnailImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.mediaPreviewThumbnailVideo}>
+                  <Video
+                    ref={videoRef}
+                    source={{ uri: selectedMedia.uri }}
+                    style={styles.mediaPreviewThumbnailVideoPlayer}
+                    resizeMode={ResizeMode.COVER}
+                    shouldPlay={false}
+                    useNativeControls={false}
+                    onLoad={handleVideoLoad}
+                  />
+                  <View style={styles.mediaPreviewVideoOverlay}>
+                    <MaterialCommunityIcons name="play-circle" size={24} color="#FFFFFF" />
+                  </View>
+                  <View style={styles.mediaPreviewVideoLabel}>
+                    <MaterialCommunityIcons name="video" size={10} color="#FFFFFF" />
+                    <Text style={styles.mediaPreviewVideoLabelText}>Video</Text>
+                  </View>
+                </View>
+              )}
+              {uploadingMedia && (
+                <View style={styles.mediaPreviewUploadingOverlay}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                </View>
+              )}
+            </View>
+            <View style={styles.mediaPreviewInfo}>
+              <Text style={[styles.mediaPreviewInfoText, { color: colors.text }]} numberOfLines={1}>
+                {selectedMedia.type === 'image' ? 'Ảnh' : 'Video'}
+              </Text>
+              {uploadingMedia && (
+                <Text style={[styles.mediaPreviewInfoSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
+                  Đang tải lên...
+                </Text>
+              )}
+            </View>
+            <TouchableOpacity
+              style={[styles.mediaPreviewCloseBtn, { borderColor: colors.border }]}
+              onPress={handleRemoveMedia}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name="close" size={16} color={colors.text} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Input bar row */}
+        <View style={styles.inputBarRow}>
+          {/* Left plus icon with circular bg */}
+          <View style={[
+            styles.circleBtn, 
+            { backgroundColor: isDarkMode ? '#2a2a2b' : '#e0e0e0' }
+          ]}> 
+            <IconButton 
+              icon="plus" 
+              iconColor={colors.textSecondary} 
+              size={22} 
+              onPress={handleOpenMediaPicker} 
+            />
+          </View>
+          {/* Input wrapper with emoji toggle inside */}
+          <View style={[
+            styles.inputWrapper,
+            { backgroundColor: isDarkMode ? '#2a2a2b' : '#f0f0f0' }
+          ]}>
           <TextInput
             ref={inputRef}
             style={[styles.input, { color: colors.text }]}
@@ -1393,7 +1869,6 @@ const ChatDetailScreen = () => {
             onSubmitEditing={() => {
               // Send message when pressing Enter/Return (only if no line break)
               if (inputText.trim() && !inputText.includes('\n')) {
-                console.log('⌨️ Enter key pressed, sending message');
                 handleSend();
               }
             }}
@@ -1415,12 +1890,11 @@ const ChatDetailScreen = () => {
             />
           </TouchableOpacity>
         </View>
-        {/* Right: mic when empty, send when has text */}
-        {Boolean(inputText.trim()) ? (
+        {/* Right: mic when empty, send when has text or media */}
+        {Boolean(inputText.trim() || selectedMedia) ? (
           <TouchableOpacity
             style={[styles.circleBtn, { backgroundColor: colors.primary }]}
             onPress={() => {
-              console.log('🔘 Send button pressed');
               handleSend();
             }}
             activeOpacity={0.7}
@@ -1431,7 +1905,6 @@ const ChatDetailScreen = () => {
               size={22} 
               onPress={(e) => {
                 e?.stopPropagation?.();
-                console.log('🔘 Send/Edit icon pressed', { editing: !!editingMessage });
                 handleSend();
               }} 
             />
@@ -1446,11 +1919,12 @@ const ChatDetailScreen = () => {
               iconColor={colors.textSecondary} 
               size={22} 
               onPress={() => {
-                console.log('🎤 Microphone button pressed');
+                // TODO: Implement voice message recording
               }} 
             />
           </View>
         )}
+        </View>
       </View>
 
       {/* Simple Emoji panel */}
@@ -1595,6 +2069,50 @@ const ChatDetailScreen = () => {
         userAvatar={selectedUserForProfile?.userAvatar}
         isOwnProfile={selectedUserForProfile?.isOwnProfile}
       />
+
+      {/* Media Picker Modal */}
+      <Modal
+        visible={showMediaPicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={handleCloseMediaPicker}
+        statusBarTranslucent={true}
+      >
+        <Pressable
+          style={[styles.modalOverlay, { backgroundColor: 'rgba(0, 0, 0, 0.5)' }]}
+          onPress={handleCloseMediaPicker}
+        >
+          <Pressable 
+            style={[styles.mediaPickerContainer, { backgroundColor: colors.surface }]}
+            onPress={() => {}}
+          >
+            <View style={[styles.mediaPickerHandle, { backgroundColor: colors.border }]} />
+            <View style={styles.mediaPickerContent}>
+              <TouchableOpacity
+                style={[styles.mediaPickerOption, { borderBottomColor: colors.border }]}
+                onPress={handlePickImage}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="image-outline" size={24} color={colors.text} />
+                <Text style={[styles.mediaPickerOptionText, { color: colors.text }]}>
+                  Chọn ảnh
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.mediaPickerOption}
+                onPress={handlePickVideo}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="video-outline" size={24} color={colors.text} />
+                <Text style={[styles.mediaPickerOptionText, { color: colors.text }]}>
+                  Chọn video
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
     </KeyboardAvoidingView>
   );
 };
@@ -1657,11 +2175,16 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    flexDirection: 'column',
     paddingHorizontal: 8,
     paddingVertical: 8,
     borderTopWidth: 1,
+    gap: 8,
+  },
+  inputBarRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
   },
   input: {
     flex: 1,
@@ -1786,6 +2309,133 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     borderWidth: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  mediaPickerContainer: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 8,
+    paddingBottom: 32,
+    maxHeight: 300,
+  },
+  mediaPickerHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  mediaPickerContent: {
+    paddingHorizontal: 16,
+  },
+  mediaPickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 12,
+  },
+  mediaPickerOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  // Facebook-style compact media preview
+  mediaPreviewContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 12,
+    marginBottom: 8,
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+    maxWidth: '100%',
+  },
+  mediaPreviewThumbnail: {
+    width: 50,
+    height: 50,
+    borderRadius: 6,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+    position: 'relative',
+    flexShrink: 0,
+  },
+  mediaPreviewThumbnailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  mediaPreviewThumbnailVideo: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  mediaPreviewThumbnailVideoPlayer: {
+    width: '100%',
+    height: '100%',
+  },
+  mediaPreviewVideoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  mediaPreviewVideoLabel: {
+    position: 'absolute',
+    bottom: 2,
+    left: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    gap: 3,
+  },
+  mediaPreviewVideoLabelText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '600',
+  },
+  mediaPreviewInfo: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+    gap: 2,
+  },
+  mediaPreviewInfoText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  mediaPreviewInfoSubtext: {
+    fontSize: 12,
+  },
+  mediaPreviewCloseBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    flexShrink: 0,
+    backgroundColor: 'transparent',
+  },
+  mediaPreviewUploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

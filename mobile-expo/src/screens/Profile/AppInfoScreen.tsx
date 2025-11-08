@@ -201,6 +201,11 @@ const AppInfoScreen = () => {
                 <Text style={[dynamicStyles.errorText, { color: colors.error || '#ff4444' }]}>
                   {error}
                 </Text>
+                {error.includes('Channel chưa được cấu hình') && (
+                  <Text style={[dynamicStyles.errorHint, { color: colors.textSecondary }]}>
+                    {'\n'}💡 Tip: App cần được build với EAS Build để có channel. Xem file FIX_OTA_UPDATE_ERROR.md để biết thêm chi tiết.
+                  </Text>
+                )}
               </View>
             )}
 
@@ -392,6 +397,12 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
     fontSize: 13,
     marginLeft: 6,
     flex: 1,
+  },
+  errorHint: {
+    fontSize: 12,
+    marginTop: 8,
+    marginLeft: 22,
+    lineHeight: 18,
   },
   progressContainer: {
     flexDirection: 'row',

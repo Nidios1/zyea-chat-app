@@ -127,6 +127,11 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
     return null;
   }
 
+  // Ẩn hoàn toàn khi đang ở màn hình cuộc gọi (VideoCall)
+  if (currentRoute?.name === 'Chat' && nestedFocused === 'VideoCall') {
+    return null;
+  }
+
   // 2) Ẩn/hiện dựa trên context (dùng cho NewsFeed khi cuộn)
   if (!isVisible) {
     return null;
@@ -150,24 +155,26 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
             const tabItem = tabItems.find(item => item.id === route.name);
             if (!tabItem) return null;
             const onPress = () => {
-              const event = navigation.emit({
-                type: 'tabPress',
-                target: route.key,
-                canPreventDefault: true,
-              });
-
-              if (!isFocused && !event.defaultPrevented) {
+              // Immediately navigate without waiting for event emission
+              if (!isFocused) {
+                // Direct navigation for better responsiveness
                 navigation.navigate(route.name);
               } else if (isFocused && route.name === 'NewsFeed') {
-                // If already on NewsFeed tab, navigate to FeedStack and set refresh param
+                // If already on NewsFeed tab, scroll to top or refresh
                 const feedStack = navigation.getParent();
                 if (feedStack) {
                   feedStack.navigate('Feed', { refresh: Date.now() });
                 } else {
-                  // Fallback: navigate with refresh param
                   navigation.navigate(route.name, { refresh: Date.now() });
                 }
               }
+              
+              // Emit event after navigation for compatibility
+              navigation.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: false,
+              });
             };
 
             const onLongPress = () => {

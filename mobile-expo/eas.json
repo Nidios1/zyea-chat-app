@@ -8,7 +8,8 @@
       "ios": {
         "simulator": false,
         "autoIncrement": true,
-        "buildConfiguration": "Release"
+        "buildConfiguration": "Release",
+        "channel": "preview"
       }
     },
     "adhoc": {
@@ -16,7 +17,8 @@
         "simulator": false,
         "autoIncrement": true,
         "buildConfiguration": "Release",
-        "distribution": "internal"
+        "distribution": "internal",
+        "channel": "preview"
       }
     },
     "unsigned": {
@@ -24,14 +26,16 @@
         "simulator": false,
         "autoIncrement": true,
         "buildConfiguration": "Release",
-        "withoutCredentials": true
+        "withoutCredentials": true,
+        "channel": "preview"
       }
     },
     "production": {
       "ios": {
         "simulator": false,
         "autoIncrement": true,
-        "buildConfiguration": "Release"
+        "buildConfiguration": "Release",
+        "channel": "production"
       }
     }
   },

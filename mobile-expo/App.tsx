@@ -16,6 +16,7 @@ import MainNavigator from './src/navigation/MainNavigator';
 import SplashScreen from './src/components/Splash/SplashScreen';
 import { useUpdates } from './src/hooks/useUpdates';
 import { UpdateModal } from './src/components/Common/UpdateModal';
+import IncomingCallModal from './src/components/Chat/IncomingCallModal';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -85,6 +86,9 @@ const AppContent = () => {
           error={error}
           showProgress={true}
         />
+        
+        {/* Incoming Call Modal - Hiển thị khi có cuộc gọi đến */}
+        {authenticated && <IncomingCallModal />}
       </NavigationContainer>
     </TabBarProvider>
   );

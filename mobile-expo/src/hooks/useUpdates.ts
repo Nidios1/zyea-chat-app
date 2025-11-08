@@ -67,7 +67,6 @@ export function useUpdates(options: UseUpdatesOptions = {}) {
   // Check updates khi mount
   useEffect(() => {
     if (__DEV__ || !Updates.isEnabled) {
-      console.log('[OTA Updates] Disabled in development mode or not enabled');
       return;
     }
 
@@ -105,7 +104,51 @@ export function useUpdates(options: UseUpdatesOptions = {}) {
   }, [checkOnMount, checkInterval]);
 
   const checkForUpdates = useCallback(async () => {
-    if (__DEV__ || !Updates.isEnabled) {
+    // Skip trong development mode
+    if (__DEV__) {
+      setUpdateInfo((prev) => ({
+        ...prev,
+        isChecking: false,
+        error: 'OTA Updates không khả dụng trong chế độ development',
+      }));
+      return;
+    }
+
+    // Kiểm tra Updates có enabled không
+    if (!Updates.isEnabled) {
+      setUpdateInfo((prev) => ({
+        ...prev,
+        isChecking: false,
+        error: 'OTA Updates không được bật trong ứng dụng này',
+      }));
+      return;
+    }
+
+    // Kiểm tra channel và runtimeVersion trước khi check updates
+    const channel = Updates.channel;
+    const runtimeVersion = Updates.runtimeVersion;
+
+    // Kiểm tra channel - cần thiết cho EAS Update
+    if (!channel) {
+      const errorMsg = 'Channel chưa được cấu hình. Ứng dụng cần được build lại với EAS Build và channel đã được cấu hình trong eas.json.';
+      setUpdateInfo((prev) => ({
+        ...prev,
+        isChecking: false,
+        error: errorMsg,
+      }));
+      console.warn('⚠️ Channel not found. App needs to be built with EAS Build and channel configuration.');
+      return;
+    }
+
+    // Kiểm tra runtimeVersion - cần thiết cho EAS Update
+    if (!runtimeVersion) {
+      const errorMsg = 'Runtime version chưa được cấu hình. Vui lòng kiểm tra lại cấu hình trong app.json (runtimeVersion policy).';
+      setUpdateInfo((prev) => ({
+        ...prev,
+        isChecking: false,
+        error: errorMsg,
+      }));
+      console.warn('⚠️ Runtime version not found. Check app.json runtimeVersion configuration.');
       return;
     }
 
@@ -116,10 +159,18 @@ export function useUpdates(options: UseUpdatesOptions = {}) {
         error: null,
       }));
 
+      console.log('🔍 Checking for updates...', {
+        channel,
+        runtimeVersion,
+        updateId: Updates.updateId,
+      });
+
       const update = await Updates.checkForUpdateAsync();
 
       if (update.isAvailable) {
         const newVersion = update.manifest?.id || null;
+        
+        console.log('✅ Update available:', newVersion);
         
         setUpdateInfo((prev) => ({
           ...prev,
@@ -140,19 +191,40 @@ export function useUpdates(options: UseUpdatesOptions = {}) {
           }));
         }
       } else {
+        console.log('ℹ️ No update available');
         setUpdateInfo((prev) => ({
           ...prev,
           isUpdateAvailable: false,
           isChecking: false,
+          error: null,
         }));
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[OTA Updates] Error checking for updates:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      console.error('❌ Error checking for updates:', error);
+      
+      // Xử lý lỗi thiếu channel/headers một cách đặc biệt
+      let userFriendlyError = errorMessage;
+      
+      if (errorMessage.includes('channel-name') || errorMessage.includes('channelName')) {
+        userFriendlyError = 'Channel chưa được cấu hình. Ứng dụng cần được build lại với EAS Build và channel đã được cấu hình trong eas.json.';
+      } else if (errorMessage.includes('runtime-version') || errorMessage.includes('runtimeVersion')) {
+        userFriendlyError = 'Runtime version chưa được cấu hình. Vui lòng kiểm tra lại cấu hình trong app.json (runtimeVersion policy).';
+      } else if (errorMessage.includes('400')) {
+        userFriendlyError = 'Lỗi cấu hình update server. Có thể do thiếu channel hoặc runtime version. Vui lòng build lại app với EAS Build.';
+      } else if (errorMessage.includes('401') || errorMessage.includes('403')) {
+        userFriendlyError = 'Lỗi xác thực. Vui lòng kiểm tra lại EAS project configuration.';
+      } else if (errorMessage.includes('404')) {
+        userFriendlyError = 'Không tìm thấy update server. Vui lòng kiểm tra lại cấu hình trong app.json.';
+      } else if (errorMessage.includes('network') || errorMessage.includes('Network')) {
+        userFriendlyError = 'Lỗi kết nối mạng. Vui lòng kiểm tra lại kết nối internet.';
+      }
+      
       setUpdateInfo((prev) => ({
         ...prev,
         isChecking: false,
-        error: `Không thể kiểm tra cập nhật: ${errorMessage}`,
+        error: userFriendlyError,
       }));
     }
   }, [autoDownload]);
@@ -194,7 +266,6 @@ export function useUpdates(options: UseUpdatesOptions = {}) {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[OTA Updates] Error downloading update:', error);
       setUpdateInfo((prev) => ({
         ...prev,
         isDownloading: false,
@@ -208,7 +279,6 @@ export function useUpdates(options: UseUpdatesOptions = {}) {
     try {
       await Updates.reloadAsync();
     } catch (error) {
-      console.error('[OTA Updates] Error reloading app:', error);
       setUpdateInfo((prev) => ({
         ...prev,
         error: 'Không thể khởi động lại ứng dụng',

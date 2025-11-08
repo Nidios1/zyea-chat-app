@@ -32,7 +32,7 @@ export const getAvatarURL = (avatarPath: string | null | undefined): string => {
   return fullURL;
 };
 
-// Get Image URL
+// Get Image URL - handles both chat images and post images
 export const getImageURL = (imagePath: string | null | undefined): string => {
   if (!imagePath) {
     return '';
@@ -43,18 +43,33 @@ export const getImageURL = (imagePath: string | null | undefined): string => {
     return imagePath;
   }
 
-  // If path already includes /uploads/posts/, use as is
-  if (imagePath.includes('/uploads/posts/')) {
-    return `${API_BASE_URL.replace('/api', '')}${imagePath.startsWith('/') ? imagePath : '/' + imagePath}`;
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  
+  // Normalize path - remove leading slash if present for consistent handling
+  let normalizedPath = imagePath.trim();
+  
+  // If path starts with /uploads/ (with leading slash)
+  if (normalizedPath.startsWith('/uploads/')) {
+    return `${baseUrl}${normalizedPath}`;
+  }
+  
+  // If path starts with uploads/ (without leading slash)
+  if (normalizedPath.startsWith('uploads/')) {
+    return `${baseUrl}/${normalizedPath}`;
+  }
+  
+  // If path contains /uploads/ anywhere (e.g., uploads/posts/... or uploads/videos/...)
+  if (normalizedPath.includes('/uploads/')) {
+    // Ensure it starts with /
+    if (!normalizedPath.startsWith('/')) {
+      normalizedPath = '/' + normalizedPath;
+    }
+    return `${baseUrl}${normalizedPath}`;
   }
 
-  // If path starts with uploads/posts/ (without leading slash)
-  if (imagePath.startsWith('uploads/posts/')) {
-    return `${API_BASE_URL.replace('/api', '')}/${imagePath}`;
-  }
-
-  // Construct full URL from filename only
-  return `${API_BASE_URL.replace('/api', '')}/uploads/posts/${imagePath}`;
+  // Default: assume it's a filename in /uploads/ directory (for chat images)
+  // Server returns paths like: /uploads/image-xxx.jpg or uploads/image-xxx.jpg
+  return `${baseUrl}/uploads/${normalizedPath}`;
 };
 
 // Get Video URL

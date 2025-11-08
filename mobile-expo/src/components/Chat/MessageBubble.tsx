@@ -4,7 +4,7 @@ import { Text, useTheme, Avatar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Swipeable } from 'react-native-gesture-handler';
 import { formatMessageTime } from '../../utils/dateUtils';
-import { getAvatarURL } from '../../utils/imageUtils';
+import { getAvatarURL, getImageURL, getVideoURL } from '../../utils/imageUtils';
 // Haptics is optional - only use if available
 let Haptics: any = null;
 try {
@@ -20,7 +20,11 @@ interface MessageBubbleProps {
     sender_id: string;
     created_at: string;
     type?: string;
+    message_type?: string;
     media_url?: string;
+    image_url?: string;
+    video_url?: string;
+    file_url?: string;
     avatar_url?: string;
     username?: string;
     full_name?: string;
@@ -96,6 +100,51 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   const isOwnMessage = message.sender_id === currentUserId;
   const swipeableRef = useRef<Swipeable>(null);
   const bubbleRef = useRef<View>(null);
+  
+  // Determine message type (image or video)
+  // Server returns message_type, but we also check type for compatibility
+  const messageType = message.message_type || message.type || 'text';
+  const isImageMessage = messageType === 'image';
+  const isVideoMessage = messageType === 'video';
+  
+  // Get media URL - priority: file_url (server field) > image_url/video_url > media_url
+  // Server stores media in file_url field, and uses message_type to distinguish image vs video
+  let imageUrl: string | null | undefined = null;
+  let videoUrl: string | null | undefined = null;
+  
+  if (isImageMessage) {
+    // For image messages, check file_url first (server field)
+    imageUrl = message.file_url || message.image_url || message.media_url;
+  } else if (isVideoMessage) {
+    // For video messages, check file_url first (server field)
+    videoUrl = message.file_url || message.video_url;
+  }
+  
+  // Convert to full URL if needed
+  const fullImageUrl = imageUrl ? getImageURL(imageUrl) : null;
+  const fullVideoUrl = videoUrl ? getVideoURL(videoUrl) : null;
+  
+  // Debug log for troubleshooting
+  if (isImageMessage) {
+    if (!fullImageUrl) {
+      console.warn('⚠️ MessageBubble: Image message but no URL found', {
+        messageType,
+        file_url: message.file_url,
+        image_url: message.image_url,
+        media_url: message.media_url,
+        messageId: message.id,
+        content: message.content,
+      });
+    } else {
+      // Log successful image URL conversion
+      console.log('✅ MessageBubble: Image URL converted', {
+        messageId: message.id,
+        originalUrl: imageUrl,
+        fullUrl: fullImageUrl,
+        messageType,
+      });
+    }
+  }
   
   // Get avatar color based on name
   const getAvatarColor = (name?: string): string => {
@@ -280,15 +329,69 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
               },
             ]}
           >
-            {message.media_url && (
-              <Image
-                source={{ uri: message.media_url }}
-                style={styles.image}
-                resizeMode="cover"
-              />
+            {/* Display image if available */}
+            {fullImageUrl && isImageMessage && (
+              <TouchableOpacity 
+                activeOpacity={0.9}
+                onPress={() => {
+                  // TODO: Open image in full screen viewer
+                }}
+              >
+                <Image
+                  source={{ uri: fullImageUrl }}
+                  style={styles.image}
+                  resizeMode="cover"
+                  onError={(error) => {
+                    console.error('❌ MessageBubble: Failed to load image', {
+                      uri: fullImageUrl,
+                      error,
+                      messageId: message.id,
+                      originalUrl: imageUrl,
+                    });
+                  }}
+                  onLoad={() => {
+                    // Image loaded successfully
+                  }}
+                />
+              </TouchableOpacity>
+            )}
+            
+            {/* Display video thumbnail if available */}
+            {fullVideoUrl && isVideoMessage && (
+              <View style={styles.videoContainer}>
+                <Image
+                  source={{ uri: fullVideoUrl }}
+                  style={styles.videoThumbnail}
+                  resizeMode="cover"
+                />
+                <View style={styles.videoOverlay}>
+                  <MaterialCommunityIcons name="play-circle" size={48} color="#FFFFFF" />
+                </View>
+                <View style={styles.videoLabel}>
+                  <MaterialCommunityIcons name="video" size={14} color="#FFFFFF" />
+                  <Text style={styles.videoLabelText}>Video</Text>
+                </View>
+              </View>
             )}
 
-            {!!message.content && (
+            {/* Display text content if available and not just emoji placeholder */}
+            {/* Hide text if it's just an emoji placeholder (📷 or 🎥) when media is present */}
+            {!!message.content && message.content.trim() && 
+             !(fullImageUrl && message.content.trim().match(/^📷\s*Ảnh?$/)) &&
+             !(fullVideoUrl && message.content.trim().match(/^🎥\s*Video?$/)) && (
+              <Text
+                style={[
+                  styles.text,
+                  isOwnMessage ? styles.ownText : styles.otherText,
+                  (fullImageUrl || fullVideoUrl) && styles.textWithMedia,
+                ]}
+              >
+                {message.content}
+              </Text>
+            )}
+            
+            {/* Show placeholder text only if media failed to load */}
+            {((isImageMessage && !fullImageUrl) || (isVideoMessage && !fullVideoUrl)) && message.content && (
               <Text
                 style={[
                   styles.text,
@@ -487,10 +590,55 @@ const styles = StyleSheet.create({
     color: '#e5e5e5',
   },
   image: {
-    width: 200,
+    width: '100%',
+    maxWidth: 250,
     height: 200,
-    borderRadius: 8,
-    marginBottom: 8,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  videoContainer: {
+    width: '100%',
+    maxWidth: 250,
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 4,
+    position: 'relative',
+    backgroundColor: '#000',
+    overflow: 'hidden',
+  },
+  videoThumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  videoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  videoLabel: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    gap: 4,
+  },
+  videoLabelText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  textWithMedia: {
+    marginTop: 8,
   },
   timeContainer: {
     flexDirection: 'row',

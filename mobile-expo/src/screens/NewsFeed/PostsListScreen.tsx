@@ -5,6 +5,7 @@ import {
   FlatList,
   Image,
   TouchableOpacity,
+  Pressable,
   Dimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
@@ -381,8 +382,8 @@ const PostsListScreen = () => {
   const scrollY = useRef(0);
   const lastScrollY = useRef(0);
   const fabOpacity = useRef(new Animated.Value(0)).current;
-  const menuButtonScale = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<FlatList>(null);
+  const [isChangingTab, setIsChangingTab] = useState(false); // Prevent multiple tab changes
 
   // Reset tab bar visibility when screen comes into focus
   useFocusEffect(
@@ -929,31 +930,13 @@ const PostsListScreen = () => {
           <>
             <TouchableOpacity 
               style={dynamicStyles.headerLeft}
-              onPressIn={() => {
-                Animated.spring(menuButtonScale, {
-                  toValue: 0.9,
-                  useNativeDriver: true,
-                  tension: 300,
-                  friction: 10,
-                }).start();
-              }}
-              onPressOut={() => {
-                Animated.spring(menuButtonScale, {
-                  toValue: 1,
-                  useNativeDriver: true,
-                  tension: 300,
-                  friction: 10,
-                }).start();
-              }}
               onPress={() => {
                 setShowMenu(true);
               }}
-              activeOpacity={1}
+              activeOpacity={0.7}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Animated.View style={{ transform: [{ scale: menuButtonScale }] }}>
-                <MaterialCommunityIcons name="menu" size={24} color={colors.text} />
-              </Animated.View>
+              <MaterialCommunityIcons name="menu" size={24} color={colors.text} />
             </TouchableOpacity>
             <View style={dynamicStyles.logoSection}>
               <Image
@@ -1077,18 +1060,17 @@ const PostsListScreen = () => {
       <Modal
         visible={showMenu}
         transparent={true}
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setShowMenu(false)}
+        statusBarTranslucent={true}
       >
-        <TouchableOpacity
+        <Pressable
           style={dynamicStyles.modalOverlay}
-          activeOpacity={1}
           onPress={() => setShowMenu(false)}
         >
-          <View 
+          <Pressable 
             style={[dynamicStyles.menuContainer, { backgroundColor: colors.surface }]}
-            onStartShouldSetResponder={() => true}
-            onMoveShouldSetResponder={() => true}
+            onPress={() => {}} // Prevent closing when pressing on menu content
           >
             <View style={[dynamicStyles.menuHandle, { backgroundColor: colors.border }]} />
             <View style={dynamicStyles.menuContent}>
@@ -1096,13 +1078,25 @@ const PostsListScreen = () => {
                 style={[
                   dynamicStyles.menuItem,
                   activeTab === 'all' && { backgroundColor: colors.primary + '20' },
-                  { borderBottomColor: colors.border }
+                  { borderBottomColor: colors.border },
+                  isChangingTab && { opacity: 0.6 }
                 ]}
                 onPress={() => {
+                  if (isChangingTab) return;
+                  if (activeTab === 'all') {
+                    setShowMenu(false);
+                    return;
+                  }
+                  setIsChangingTab(true);
                   setActiveTab('all');
                   setShowMenu(false);
+                  // Reset flag after a short delay
+                  setTimeout(() => {
+                    setIsChangingTab(false);
+                  }, 300);
                 }}
                 activeOpacity={0.7}
+                disabled={isChangingTab}
               >
                 <Text style={[dynamicStyles.menuItemText, { 
                   color: activeTab === 'all' ? colors.primary : colors.text,
@@ -1117,13 +1111,25 @@ const PostsListScreen = () => {
               <TouchableOpacity
                 style={[
                   dynamicStyles.menuItem,
-                  activeTab === 'following' && { backgroundColor: colors.primary + '20' }
+                  activeTab === 'following' && { backgroundColor: colors.primary + '20' },
+                  isChangingTab && { opacity: 0.6 }
                 ]}
                 onPress={() => {
+                  if (isChangingTab) return;
+                  if (activeTab === 'following') {
+                    setShowMenu(false);
+                    return;
+                  }
+                  setIsChangingTab(true);
                   setActiveTab('following');
                   setShowMenu(false);
+                  // Reset flag after a short delay
+                  setTimeout(() => {
+                    setIsChangingTab(false);
+                  }, 300);
                 }}
                 activeOpacity={0.7}
+                disabled={isChangingTab}
               >
                 <Text style={[dynamicStyles.menuItemText, { 
                   color: activeTab === 'following' ? colors.primary : colors.text,
@@ -1136,8 +1142,8 @@ const PostsListScreen = () => {
                 )}
               </TouchableOpacity>
             </View>
-          </View>
-        </TouchableOpacity>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* Floating Action Button */}

@@ -21,7 +21,8 @@ export type MainTabParamList = {
 
 export type ChatStackParamList = {
   ChatList: undefined;
-  ChatDetail: { conversationId: string; userName: string; subTitle?: string };
+  ChatDetail: { conversationId: string; userName: string; subTitle?: string; otherUserId?: string; userAvatarUrl?: string; isOnline?: boolean; lastSeen?: string };
+  VideoCall: { conversationId: string; userName: string; otherUserId: string; isVideo: boolean; userAvatarUrl?: string; isIncoming?: boolean; offer?: any };
 };
 
 export type NewsFeedStackParamList = {
