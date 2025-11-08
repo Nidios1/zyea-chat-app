@@ -107,6 +107,9 @@ export const usersAPI = {
   getProfile: (userId?: string) =>
     apiClient.get(userId ? `/users/${userId}` : '/users/profile'),
 
+  getUserStats: (userId: string) =>
+    apiClient.get(`/users/${userId}/stats`),
+
   updateProfile: (data: any) =>
     apiClient.put('/users/profile', data),
 
@@ -175,6 +178,27 @@ export const friendsAPI = {
 
   unfollow: (followingId: string) =>
     apiClient.delete(`/friends/follow/${followingId}`),
+
+  block: (blockedUserId: string) =>
+    apiClient.post('/friends/block', { blockedUserId }),
+
+  unblock: (blockedUserId: string) =>
+    apiClient.delete(`/friends/block/${blockedUserId}`),
+
+  mute: (mutedUserId: string) =>
+    apiClient.post('/friends/mute', { mutedUserId }),
+
+  unmute: (mutedUserId: string) =>
+    apiClient.delete(`/friends/mute/${mutedUserId}`),
+
+  restrict: (restrictedUserId: string) =>
+    apiClient.post('/friends/restrict', { restrictedUserId }),
+
+  unrestrict: (restrictedUserId: string) =>
+    apiClient.delete(`/friends/restrict/${restrictedUserId}`),
+
+  report: (reportedUserId: string, reason?: string, description?: string) =>
+    apiClient.post('/friends/report', { reportedUserId, reason, description }),
 };
 
 export const notificationsAPI = {

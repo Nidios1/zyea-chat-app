@@ -28,6 +28,7 @@ export type NewsFeedStackParamList = {
   Feed: undefined;
   PostDetail: { postId: string };
   CreatePost: undefined;
+  OtherUserProfile: { userId: string };
 };
 
 export type ProfileStackParamList = {

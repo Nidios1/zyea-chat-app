@@ -2,22 +2,34 @@ import { API_BASE_URL } from '../config/constants';
 
 // Get Avatar URL
 export const getAvatarURL = (avatarPath: string | null | undefined): string => {
-  if (!avatarPath) {
+  if (!avatarPath || avatarPath.trim() === '' || avatarPath === 'null' || avatarPath === 'undefined') {
+    console.log('⚠️ getAvatarURL: Empty or invalid avatarPath:', avatarPath);
     return '';
   }
 
   // If already a full URL
   if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
+    console.log('✅ getAvatarURL: Already full URL:', avatarPath);
     return avatarPath;
   }
 
+  // Ensure path starts with / if it doesn't
+  let cleanPath = avatarPath;
+  if (!cleanPath.startsWith('/')) {
+    cleanPath = '/' + cleanPath;
+  }
+
   // If path already includes /uploads/avatars/, use as is
-  if (avatarPath.includes('/uploads/avatars/')) {
-    return `${API_BASE_URL.replace('/api', '')}${avatarPath}`;
+  if (cleanPath.includes('/uploads/avatars/')) {
+    const fullURL = `${API_BASE_URL.replace('/api', '')}${cleanPath}`;
+    console.log('✅ getAvatarURL: Constructed URL from path:', fullURL);
+    return fullURL;
   }
 
   // Construct full URL
-  return `${API_BASE_URL.replace('/api', '')}/uploads/avatars/${avatarPath}`;
+  const fullURL = `${API_BASE_URL.replace('/api', '')}/uploads/avatars${cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath}`;
+  console.log('✅ getAvatarURL: Constructed URL:', fullURL);
+  return fullURL;
 };
 
 // Get Image URL

@@ -130,10 +130,129 @@ router.get('/search/phone', async (req, res) => {
   }
 });
 
-// Get user profile
+// Get user profile (must be before /:id route)
 router.get('/profile', (req, res) => {
   console.log('Users profile endpoint - req.user:', req.user);
   res.json(req.user);
+});
+
+// Get friends list (must be before /:id route to avoid conflict)
+router.get('/friends', async (req, res) => {
+  try {
+    const connection = getConnection();
+
+    const [friends] = await connection.execute(`
+      SELECT u.id, u.username, u.full_name, u.avatar_url, u.status, u.last_seen, f.status as friendship_status
+      FROM friends f
+      JOIN users u ON f.friend_id = u.id
+      WHERE f.user_id = ? AND f.status = 'accepted'
+      ORDER BY u.full_name
+    `, [req.user.id]);
+
+    res.json(friends);
+  } catch (error) {
+    console.error('Get friends error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get user stats (followers/following counts) by ID
+router.get('/:id/stats', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
+
+    const connection = getConnection();
+    
+    // Get followers count
+    const [followersCount] = await connection.execute(
+      `SELECT COUNT(*) as count FROM follows WHERE following_id = ?`,
+      [id]
+    );
+    
+    // Get following count
+    const [followingCount] = await connection.execute(
+      `SELECT COUNT(*) as count FROM follows WHERE follower_id = ?`,
+      [id]
+    );
+    
+    res.json({
+      followersCount: followersCount[0]?.count || 0,
+      followingCount: followingCount[0]?.count || 0,
+    });
+  } catch (error) {
+    console.error('Error fetching user stats:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get user by ID (must be after all specific routes like /profile, /friends)
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('📱 [GET /users/:id] Request - userId:', id);
+    
+    if (!id) {
+      return res.status(400).json({ message: 'User ID is required' });
+    }
+
+    const connection = getConnection();
+    if (!connection) {
+      console.error('❌ Database connection not available');
+      return res.status(500).json({ message: 'Database connection error' });
+    }
+
+    // Chỉ SELECT các cột có trong database (không có bio, location, website)
+    const [users] = await connection.execute(
+      `SELECT id, username, full_name, email, phone, avatar_url, cover_url, status, created_at 
+       FROM users 
+       WHERE id = ?`,
+      [id]
+    );
+
+    if (users.length === 0) {
+      console.log('⚠️ User not found:', id);
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Get followers and following counts
+    const [followersCount] = await connection.execute(
+      `SELECT COUNT(*) as count FROM follows WHERE following_id = ?`,
+      [id]
+    );
+    
+    const [followingCount] = await connection.execute(
+      `SELECT COUNT(*) as count FROM follows WHERE follower_id = ?`,
+      [id]
+    );
+
+    const user = users[0];
+    user.followers_count = followersCount[0]?.count || 0;
+    user.following_count = followingCount[0]?.count || 0;
+
+    console.log('✅ User found:', {
+      id: user.id,
+      username: user.username,
+      full_name: user.full_name,
+      avatar_url: user.avatar_url,
+      hasAvatar: !!user.avatar_url,
+      followers_count: user.followers_count,
+      following_count: user.following_count
+    });
+
+    res.json(user);
+  } catch (error) {
+    console.error('❌ Get user by ID error:', error.message);
+    console.error('❌ Error code:', error.code);
+    console.error('❌ SQL Message:', error.sqlMessage);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 });
 
 // Update user profile
@@ -150,26 +269,6 @@ router.put('/profile', async (req, res) => {
     res.json({ message: 'Profile updated successfully' });
   } catch (error) {
     console.error('Update profile error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Get friends list
-router.get('/friends', async (req, res) => {
-  try {
-    const connection = getConnection();
-
-    const [friends] = await connection.execute(`
-      SELECT u.id, u.username, u.full_name, u.avatar_url, u.status, u.last_seen, f.status as friendship_status
-      FROM friends f
-      JOIN users u ON f.friend_id = u.id
-      WHERE f.user_id = ? AND f.status = 'accepted'
-      ORDER BY u.full_name
-    `, [req.user.id]);
-
-    res.json(friends);
-  } catch (error) {
-    console.error('Get friends error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

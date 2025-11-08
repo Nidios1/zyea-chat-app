@@ -24,6 +24,7 @@ import FriendsListScreen from '../screens/Friends/FriendsListScreen';
 import NotificationsScreen from '../screens/Notifications/NotificationsScreen';
 import CreatePostScreen from '../screens/NewsFeed/CreatePostScreen';
 import VideoFeedScreen from '../screens/Video/VideoFeedScreen';
+import OtherUserProfileScreen from '../screens/Profile/OtherUserProfileScreen';
 import BottomTabBar from '../components/Common/BottomTabBar';
 import { ChatStackParamList, MainTabParamList } from './types';
 
@@ -61,6 +62,11 @@ const FeedStackNavigator = () => (
     <FeedStack.Screen
       name="CreatePost"
       component={CreatePostScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <FeedStack.Screen
+      name="OtherUserProfile"
+      component={OtherUserProfileScreen}
       options={{ headerShown: false as boolean }}
     />
   </FeedStack.Navigator>

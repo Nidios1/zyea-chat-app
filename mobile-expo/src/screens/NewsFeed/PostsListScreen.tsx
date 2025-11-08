@@ -27,6 +27,7 @@ import { useTabBar } from '../../contexts/TabBarContext';
 import PostImagesCarousel from '../../components/NewsFeed/PostImagesCarousel';
 import CommentsBottomSheet from '../../components/NewsFeed/CommentsBottomSheet';
 import ExpandableText from '../../components/Common/ExpandableText';
+import FullScreenImageViewer from '../../components/Common/FullScreenImageViewer';
 import { Video, ResizeMode } from 'expo-av';
 
 const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
@@ -373,6 +374,10 @@ const PostsListScreen = () => {
   const [fabVisible, setFabVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'following'>('all');
   const [showMenu, setShowMenu] = useState(false);
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [imageViewerImages, setImageViewerImages] = useState<string[]>([]);
+  const [imageViewerIndex, setImageViewerIndex] = useState(0);
+  const [imageViewerPostData, setImageViewerPostData] = useState<any>(null);
   const scrollY = useRef(0);
   const lastScrollY = useRef(0);
   const fabOpacity = useRef(new Animated.Value(0)).current;
@@ -688,7 +693,15 @@ const PostsListScreen = () => {
         {/* Threads-style Post Header */}
         <View style={dynamicStyles.postHeader}>
           <View style={dynamicStyles.authorSection}>
-            <View style={dynamicStyles.avatarContainer}>
+            <TouchableOpacity
+              style={dynamicStyles.avatarContainer}
+              onPress={() => {
+                if (authorId && authorId !== user?.id) {
+                  navigation.navigate('OtherUserProfile' as never, { userId: authorId.toString() } as never);
+                }
+              }}
+              activeOpacity={0.7}
+            >
               {authorAvatar ? (
                 <Image
                   source={{ uri: getAvatarURL(authorAvatar) }}
@@ -704,17 +717,30 @@ const PostsListScreen = () => {
               {showFollowButton && (
                 <TouchableOpacity
                   style={dynamicStyles.followButton}
-                  onPress={() => authorId && handleFollow(authorId)}
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    if (authorId) {
+                      handleFollow(authorId);
+                    }
+                  }}
                   activeOpacity={0.7}
                 >
                   <MaterialCommunityIcons name="plus" size={10} color="#000000" />
                 </TouchableOpacity>
               )}
-            </View>
-            <View style={dynamicStyles.authorInfo}>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={dynamicStyles.authorInfo}
+              onPress={() => {
+                if (authorId && authorId !== user?.id) {
+                  navigation.navigate('OtherUserProfile' as never, { userId: authorId.toString() } as never);
+                }
+              }}
+              activeOpacity={0.7}
+            >
               <Text style={[dynamicStyles.authorName, { color: colors.text }]}>{authorName}</Text>
               <Text style={[dynamicStyles.postTime, { color: colors.textSecondary }]}>· {postTime}</Text>
-            </View>
+            </TouchableOpacity>
           </View>
           <TouchableOpacity style={dynamicStyles.postMoreButton}>
             <MaterialCommunityIcons name="dots-horizontal" size={18} color={colors.textSecondary} />
@@ -804,7 +830,34 @@ const PostsListScreen = () => {
             <PostImagesCarousel
               images={postImages}
               onPressImage={(idx) => {
-                // navigation.navigate('PostDetail' as never, { postId: item.id } as never);
+                // Open full screen image viewer
+                setImageViewerImages(postImages);
+                setImageViewerIndex(idx);
+                setImageViewerPostData({
+                  id: item.id,
+                  likes: item.likes_count || 0,
+                  comments: item.comments_count || 0,
+                  isLiked: item.isLiked || false,
+                  onLike: () => {
+                    // Handle like - you can implement this based on your API
+                    console.log('Like post:', item.id);
+                  },
+                  onComment: () => {
+                    // Open comments
+                    setActivePostId(item.id);
+                    setShowComments(true);
+                    setShowImageViewer(false);
+                  },
+                  onRepost: () => {
+                    // Handle repost
+                    console.log('Repost post:', item.id);
+                  },
+                  onShare: () => {
+                    // Handle share
+                    console.log('Share post:', item.id);
+                  },
+                });
+                setShowImageViewer(true);
               }}
             />
           </View>
@@ -1124,6 +1177,15 @@ const PostsListScreen = () => {
           />
         </TouchableOpacity>
       </Animated.View>
+
+      {/* Full Screen Image Viewer */}
+      <FullScreenImageViewer
+        visible={showImageViewer}
+        images={imageViewerImages}
+        initialIndex={imageViewerIndex}
+        onClose={() => setShowImageViewer(false)}
+        postData={imageViewerPostData}
+      />
     </SafeAreaView>
   );
 };

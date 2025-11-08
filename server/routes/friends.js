@@ -405,6 +405,160 @@ router.delete('/block/:blockedUserId', async (req, res) => {
   }
 });
 
+// Mute user notifications
+router.post('/mute', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { mutedUserId } = req.body;
+    const connection = getConnection();
+
+    if (!mutedUserId || mutedUserId === userId) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    // Create or update mute relationship in friends table
+    // First check if record exists
+    const [existing] = await connection.execute(`
+      SELECT id FROM friends WHERE user_id = ? AND friend_id = ?
+    `, [userId, mutedUserId]);
+    
+    if (existing.length > 0) {
+      // Update existing record
+      await connection.execute(`
+        UPDATE friends SET muted = TRUE WHERE user_id = ? AND friend_id = ?
+      `, [userId, mutedUserId]);
+    } else {
+      // Create new record with muted status
+      await connection.execute(`
+        INSERT INTO friends (user_id, friend_id, status, muted)
+        VALUES (?, ?, 'pending', TRUE)
+      `, [userId, mutedUserId]);
+    }
+
+    res.json({ message: 'User muted successfully' });
+  } catch (error) {
+    console.error('Error muting user:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Unmute user notifications
+router.delete('/mute/:mutedUserId', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const mutedUserId = req.params.mutedUserId;
+
+    const [result] = await getConnection().execute(`
+      UPDATE friends 
+      SET muted = FALSE 
+      WHERE user_id = ? AND friend_id = ? AND muted = TRUE
+    `, [userId, mutedUserId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Mute relationship not found' });
+    }
+
+    res.json({ message: 'User unmuted successfully' });
+  } catch (error) {
+    console.error('Error unmuting user:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Restrict user
+router.post('/restrict', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { restrictedUserId } = req.body;
+    const connection = getConnection();
+
+    if (!restrictedUserId || restrictedUserId === userId) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    // Create or update restrict relationship
+    // First check if record exists
+    const [existing] = await connection.execute(`
+      SELECT id FROM friends WHERE user_id = ? AND friend_id = ?
+    `, [userId, restrictedUserId]);
+    
+    if (existing.length > 0) {
+      // Update existing record
+      await connection.execute(`
+        UPDATE friends SET restricted = TRUE WHERE user_id = ? AND friend_id = ?
+      `, [userId, restrictedUserId]);
+    } else {
+      // Create new record with restricted status
+      await connection.execute(`
+        INSERT INTO friends (user_id, friend_id, status, restricted)
+        VALUES (?, ?, 'pending', TRUE)
+      `, [userId, restrictedUserId]);
+    }
+
+    res.json({ message: 'User restricted successfully' });
+  } catch (error) {
+    console.error('Error restricting user:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Unrestrict user
+router.delete('/restrict/:restrictedUserId', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const restrictedUserId = req.params.restrictedUserId;
+
+    const [result] = await getConnection().execute(`
+      UPDATE friends 
+      SET restricted = FALSE 
+      WHERE user_id = ? AND friend_id = ? AND restricted = TRUE
+    `, [userId, restrictedUserId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Restrict relationship not found' });
+    }
+
+    res.json({ message: 'User unrestricted successfully' });
+  } catch (error) {
+    console.error('Error unrestricting user:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Report user
+router.post('/report', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { reportedUserId, reason, description } = req.body;
+    const connection = getConnection();
+
+    if (!reportedUserId || reportedUserId === userId) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    // Insert report into reports table (if exists) or create a simple log
+    // For now, we'll just log it and return success
+    console.log('User report:', {
+      reporterId: userId,
+      reportedUserId,
+      reason,
+      description,
+      timestamp: new Date().toISOString()
+    });
+
+    // You can create a reports table later if needed
+    // await connection.execute(`
+    //   INSERT INTO reports (reporter_id, reported_user_id, reason, description)
+    //   VALUES (?, ?, ?, ?)
+    // `, [userId, reportedUserId, reason || 'other', description || '']);
+
+    res.json({ message: 'User reported successfully. We will review this report.' });
+  } catch (error) {
+    console.error('Error reporting user:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Get followers
 router.get('/followers', async (req, res) => {
   try {
@@ -504,7 +658,9 @@ router.get('/check-status/:userId', async (req, res) => {
     if (blockedByMe.length > 0) {
       return res.json({ 
         friendship_status: 'blocked_by_me',
-        isFollowing: false
+        isFollowing: false,
+        isMuted: false,
+        isRestricted: false
       });
     }
     
@@ -517,9 +673,22 @@ router.get('/check-status/:userId', async (req, res) => {
     if (blockedByThem.length > 0) {
       return res.json({ 
         friendship_status: 'blocked_by_them',
-        isFollowing: false
+        isFollowing: false,
+        isMuted: false,
+        isRestricted: false
       });
     }
+    
+    // Check mute and restrict status
+    const [muteStatus] = await getConnection().execute(`
+      SELECT muted FROM friends 
+      WHERE user_id = ? AND friend_id = ? AND muted = TRUE
+    `, [currentUserId, targetUserId]);
+    
+    const [restrictStatus] = await getConnection().execute(`
+      SELECT restricted FROM friends 
+      WHERE user_id = ? AND friend_id = ? AND restricted = TRUE
+    `, [currentUserId, targetUserId]);
     
     // Check if they are friends
     const [friendship] = await getConnection().execute(`
@@ -536,7 +705,9 @@ router.get('/check-status/:userId', async (req, res) => {
       
       return res.json({ 
         friendship_status: 'friend',
-        isFollowing: follow.length > 0
+        isFollowing: follow.length > 0,
+        isMuted: muteStatus.length > 0,
+        isRestricted: restrictStatus.length > 0
       });
     }
     
@@ -549,7 +720,9 @@ router.get('/check-status/:userId', async (req, res) => {
     if (sentRequest.length > 0) {
       return res.json({ 
         friendship_status: 'pending_sent',
-        isFollowing: false
+        isFollowing: false,
+        isMuted: muteStatus.length > 0,
+        isRestricted: restrictStatus.length > 0
       });
     }
     
@@ -562,7 +735,9 @@ router.get('/check-status/:userId', async (req, res) => {
     if (receivedRequest.length > 0) {
       return res.json({ 
         friendship_status: 'pending_received',
-        isFollowing: false
+        isFollowing: false,
+        isMuted: muteStatus.length > 0,
+        isRestricted: restrictStatus.length > 0
       });
     }
     
@@ -574,7 +749,9 @@ router.get('/check-status/:userId', async (req, res) => {
     
     res.json({ 
       friendship_status: 'none',
-      isFollowing: follow.length > 0
+      isFollowing: follow.length > 0,
+      isMuted: muteStatus.length > 0,
+      isRestricted: restrictStatus.length > 0
     });
     
   } catch (error) {
