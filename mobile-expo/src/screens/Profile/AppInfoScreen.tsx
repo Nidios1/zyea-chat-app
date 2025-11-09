@@ -45,8 +45,8 @@ const AppInfoScreen = () => {
     handleCancel,
     handleRetry,
   } = useUpdates({
-    checkOnMount: false,
-    autoDownload: false,
+    checkOnMount: true, // Tự động check update khi mở màn hình
+    autoDownload: false, // Không tự động download, để user quyết định
   });
 
   const handleCheckUpdate = async () => {
@@ -195,7 +195,7 @@ const AppInfoScreen = () => {
               )}
             </View>
 
-            {error && (
+            {error && !updateInfo.channel && (
               <View style={[dynamicStyles.errorContainer, { backgroundColor: (colors.error || '#ff4444') + '20' }]}>
                 <MaterialCommunityIcons name="alert-circle" size={16} color={colors.error || '#ff4444'} />
                 <Text style={[dynamicStyles.errorText, { color: colors.error || '#ff4444' }]}>
@@ -206,6 +206,16 @@ const AppInfoScreen = () => {
                     {'\n'}💡 Tip: App cần được build với EAS Build để có channel. Xem file FIX_OTA_UPDATE_ERROR.md để biết thêm chi tiết.
                   </Text>
                 )}
+              </View>
+            )}
+            
+            {/* Chỉ hiển thị error khác (không phải channel) nếu có channel */}
+            {error && updateInfo.channel && !error.includes('Channel chưa được cấu hình') && (
+              <View style={[dynamicStyles.errorContainer, { backgroundColor: (colors.error || '#ff4444') + '20' }]}>
+                <MaterialCommunityIcons name="alert-circle" size={16} color={colors.error || '#ff4444'} />
+                <Text style={[dynamicStyles.errorText, { color: colors.error || '#ff4444' }]}>
+                  {error}
+                </Text>
               </View>
             )}
 

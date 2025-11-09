@@ -127,9 +127,20 @@ export function useUpdates(options: UseUpdatesOptions = {}) {
     // Kiểm tra channel và runtimeVersion trước khi check updates
     const channel = Updates.channel;
     const runtimeVersion = Updates.runtimeVersion;
+    const currentUpdateId = Updates.updateId;
 
-    // Kiểm tra channel - cần thiết cho EAS Update
-    if (!channel) {
+    // Nếu app đã có Update ID, nghĩa là đã được build với EAS Build
+    // Không cần check channel nữa vì app đã có update embedded
+    if (currentUpdateId) {
+      // App đã được build với EAS Build, có thể có hoặc không có channel
+      // Nhưng vẫn có thể check update
+      console.log('✅ App has Update ID, proceeding with update check...', {
+        updateId: currentUpdateId,
+        channel: channel || 'default',
+        runtimeVersion: runtimeVersion || 'unknown',
+      });
+    } else if (!channel) {
+      // Chỉ báo lỗi nếu không có Update ID VÀ không có channel
       const errorMsg = 'Channel chưa được cấu hình. Ứng dụng cần được build lại với EAS Build và channel đã được cấu hình trong eas.json.';
       setUpdateInfo((prev) => ({
         ...prev,
@@ -141,7 +152,8 @@ export function useUpdates(options: UseUpdatesOptions = {}) {
     }
 
     // Kiểm tra runtimeVersion - cần thiết cho EAS Update
-    if (!runtimeVersion) {
+    // Nhưng nếu đã có Update ID, có thể bỏ qua check này
+    if (!runtimeVersion && !currentUpdateId) {
       const errorMsg = 'Runtime version chưa được cấu hình. Vui lòng kiểm tra lại cấu hình trong app.json (runtimeVersion policy).';
       setUpdateInfo((prev) => ({
         ...prev,
@@ -153,10 +165,12 @@ export function useUpdates(options: UseUpdatesOptions = {}) {
     }
 
     try {
+      // Clear error nếu app đã có Update ID (đã được build với EAS Build)
+      // Điều này đảm bảo không hiển thị cảnh báo channel nếu app đã được build đúng cách
       setUpdateInfo((prev) => ({
         ...prev,
         isChecking: true,
-        error: null,
+        error: currentUpdateId && prev.error?.includes('Channel chưa được cấu hình') ? null : prev.error,
       }));
 
       console.log('🔍 Checking for updates...', {
