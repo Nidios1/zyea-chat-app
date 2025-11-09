@@ -164,6 +164,9 @@ export const friendsAPI = {
 
   report: (reportedUserId: string, reason?: string, description?: string) =>
     apiClient.post('/friends/report', { reportedUserId, reason, description }),
+
+  checkFriendshipStatus: (userId: string) =>
+    apiClient.get(`/friends/check-status/${userId}`),
 };
 
 export const notificationsAPI = {

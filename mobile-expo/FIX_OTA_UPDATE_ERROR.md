@@ -239,3 +239,5 @@ Lỗi "channel-name": Required xảy ra vì app chưa được build với EAS B
 
 Sau khi build với EAS Build, channel và runtimeVersion sẽ được tự động set, và OTA Updates sẽ hoạt động bình thường.
 
+
+

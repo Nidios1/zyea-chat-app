@@ -10,20 +10,39 @@ const useSocket = () => {
   const socketRef = useRef<Socket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
+  const hasJoinedRef = useRef<boolean>(false); // Track if user has joined
   const maxReconnectAttempts = 5;
 
   useEffect(() => {
     if (!user || !token) {
       // Clean up if no user/token
       if (socketRef.current) {
+        console.log('🔌 Cleaning up socket: no user/token');
         socketRef.current.close();
         socketRef.current = null;
         setSocket(null);
         setIsConnected(false);
+        hasJoinedRef.current = false;
       }
       return;
     }
 
+    // Prevent multiple socket instances
+    if (socketRef.current && socketRef.current.connected) {
+      console.log('🔌 Socket already connected, skipping initialization');
+      return;
+    }
+
+    // Clean up existing socket if any
+    if (socketRef.current) {
+      console.log('🔌 Cleaning up existing socket before creating new one');
+      socketRef.current.removeAllListeners();
+      socketRef.current.close();
+      socketRef.current = null;
+    }
+
+    console.log('🔌 Initializing socket connection...');
+    
     // Initialize socket with reconnection settings
     const newSocket = io(SOCKET_URL, {
       auth: {
@@ -36,11 +55,13 @@ const useSocket = () => {
       reconnectionAttempts: maxReconnectAttempts,
       timeout: 20000,
       forceNew: false,
+      autoConnect: true,
     });
 
     socketRef.current = newSocket;
     setSocket(newSocket);
     reconnectAttemptsRef.current = 0;
+    hasJoinedRef.current = false;
 
     // Connection event
     newSocket.on('connect', () => {
@@ -48,18 +69,35 @@ const useSocket = () => {
       setIsConnected(true);
       reconnectAttemptsRef.current = 0; // Reset attempts on successful connection
       
-      // Join user's room
-      newSocket.emit('join', user.id);
+      // Only join if not already joined (prevent duplicate joins)
+      if (!hasJoinedRef.current && user?.id) {
+        console.log(`🔌 Joining room for user ${user.id}`);
+        hasJoinedRef.current = true;
+        newSocket.emit('join', user.id);
+      } else if (hasJoinedRef.current) {
+        console.log('⚠️ User already joined, skipping duplicate join');
+      }
     });
 
     newSocket.on('disconnect', (reason) => {
       console.log('⚠️ Socket disconnected:', reason);
       setIsConnected(false);
+      hasJoinedRef.current = false; // Reset join flag on disconnect
       
-      // If disconnect was not intentional, try to reconnect
+      // Log disconnect reason for debugging
       if (reason === 'io server disconnect') {
+        console.log('📡 Server disconnected the socket, will attempt to reconnect');
         // Server disconnected the socket, try to reconnect manually
         newSocket.connect();
+      } else if (reason === 'io client disconnect') {
+        console.log('📱 Client intentionally disconnected');
+        // Client disconnected intentionally, don't auto-reconnect
+      } else if (reason === 'ping timeout') {
+        console.log('⏱️ Connection timeout, will attempt to reconnect');
+      } else if (reason === 'transport close') {
+        console.log('🚫 Transport closed, will attempt to reconnect');
+      } else if (reason === 'transport error') {
+        console.log('❌ Transport error, will attempt to reconnect');
       }
     });
 
@@ -91,6 +129,13 @@ const useSocket = () => {
       console.log(`✅ Socket reconnected after ${attemptNumber} attempts`);
       setIsConnected(true);
       reconnectAttemptsRef.current = 0;
+      
+      // Re-join room after reconnection
+      if (user?.id && !hasJoinedRef.current) {
+        console.log(`🔌 Re-joining room for user ${user.id} after reconnect`);
+        hasJoinedRef.current = true;
+        newSocket.emit('join', user.id);
+      }
     });
 
     newSocket.on('reconnect_attempt', (attemptNumber) => {
@@ -113,17 +158,22 @@ const useSocket = () => {
 
     // Cleanup
     return () => {
+      console.log('🔌 Cleaning up socket on unmount');
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
       if (socketRef.current) {
+        // Remove all listeners before closing
+        socketRef.current.removeAllListeners();
         socketRef.current.close();
         socketRef.current = null;
       }
       setSocket(null);
       setIsConnected(false);
+      hasJoinedRef.current = false;
     };
-  }, [user, token]);
+  }, [user?.id, token]); // Only depend on user.id and token to prevent unnecessary reconnects
 
   // Helper function to wait for socket connection
   const waitForConnection = (timeout: number = 10000): Promise<boolean> => {

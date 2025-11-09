@@ -175,3 +175,5 @@ Hoặc kiểm tra trong iOS:
 - Phải include UDID của thiết bị (với Development profile)
 - Phải match với certificate đang sử dụng
 
+
+

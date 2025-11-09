@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -11,6 +11,7 @@ import {
   Modal,
   Dimensions,
   FlatList,
+  RefreshControl,
 } from 'react-native';
 import { Text, Avatar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -55,6 +56,7 @@ const ProfileInformationScreen = () => {
   const [showCoverActionSheet, setShowCoverActionSheet] = useState(false);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [imageViewerUrl, setImageViewerUrl] = useState<string>('');
+  const [refreshing, setRefreshing] = useState(false);
 
   // Load target user info if viewing other user's profile
   useEffect(() => {
@@ -90,33 +92,74 @@ const ProfileInformationScreen = () => {
     }
   }, [user]);
 
-  const loadPosts = async () => {
+  const loadPosts = useCallback(async (isRefresh = false) => {
     if (!user?.id) return;
     
     try {
-      setLoading(true);
+      if (!isRefresh) {
+        setLoading(true);
+      }
+      
+      // Reset posts before loading to avoid duplicates
+      if (isRefresh) {
+        setPosts([]);
+        setMediaFiles([]);
+      }
+      
       const response = await newsfeedAPI.getPosts();
       const allPosts = Array.isArray(response.data) ? response.data : response.data?.posts || [];
       
       // Filter posts for target user (could be current user or another user)
       const userIdToFilter = user.id;
-      const userPosts = allPosts.filter((post: any) => 
-        post.user_id === userIdToFilter || 
-        post.authorId === userIdToFilter ||
-        post.user?.id === userIdToFilter ||
-        post.user_id?.toString() === userIdToFilter?.toString() ||
-        post.authorId?.toString() === userIdToFilter?.toString()
-      );
-      setPosts(userPosts);
+      const userPosts = allPosts.filter((post: any) => {
+        const postUserId = post.user_id || post.authorId || post.user?.id;
+        return postUserId?.toString() === userIdToFilter?.toString();
+      });
       
-      // Load media files
-      loadMediaFiles(userPosts, user);
+      // Use Set to avoid duplicate posts by ID
+      const seenPostIds = new Set<string | number>();
+      const uniquePosts = userPosts.filter((post: any) => {
+        const postId = post.id;
+        if (postId && seenPostIds.has(postId)) {
+          return false;
+        }
+        if (postId) {
+          seenPostIds.add(postId);
+        }
+        return true;
+      });
+      
+      setPosts(uniquePosts);
+      
+      // Load media files after posts are set
+      loadMediaFiles(uniquePosts, user);
     } catch (error) {
       console.error('Error loading posts:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
+  
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      // Reload target user if viewing other user's profile
+      if (targetUserId && targetUserId !== currentUser?.id?.toString()) {
+        try {
+          const response = await usersAPI.getProfile(targetUserId);
+          setTargetUser(response.data);
+        } catch (error) {
+          console.error('Error refreshing user profile:', error);
+        }
+      }
+      // Reload posts
+      await loadPosts(true);
+    } catch (error) {
+      console.error('Error refreshing:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [targetUserId, currentUser?.id, loadPosts]);
 
   const loadMediaFiles = (userPosts: any[], targetUserData?: any) => {
     const media: any[] = [];
@@ -147,22 +190,58 @@ const ProfileInformationScreen = () => {
       });
     }
     
-    // Add media from posts
+    // Add media from posts - use Set to avoid duplicates
+    const seenUrls = new Set<string>();
     userPosts.forEach(post => {
-      if (post.image_url) {
+      // Handle single image_url
+      if (post.image_url && !seenUrls.has(post.image_url)) {
+        seenUrls.add(post.image_url);
         media.push({
           type: 'photo',
           url: post.image_url,
-          id: `post_${post.id || Date.now()}_${Math.random()}`,
+          id: `post_${post.id || Date.now()}_img`,
           postId: post.id
         });
       }
-      if (post.video_url) {
+      
+      // Handle images array
+      if (post.images && Array.isArray(post.images)) {
+        post.images.forEach((imgUrl: string, imgIndex: number) => {
+          if (imgUrl && !seenUrls.has(imgUrl)) {
+            seenUrls.add(imgUrl);
+            media.push({
+              type: 'photo',
+              url: imgUrl,
+              id: `post_${post.id || Date.now()}_img_${imgIndex}`,
+              postId: post.id
+            });
+          }
+        });
+      }
+      
+      // Handle video
+      if (post.video_url && !seenUrls.has(post.video_url)) {
+        seenUrls.add(post.video_url);
         media.push({
           type: 'video',
           url: post.video_url,
-          id: `post_${post.id || Date.now()}_video_${Math.random()}`,
+          id: `post_${post.id || Date.now()}_video`,
           postId: post.id
+        });
+      }
+      
+      // Handle videos array
+      if (post.videos && Array.isArray(post.videos)) {
+        post.videos.forEach((videoUrl: string, videoIndex: number) => {
+          if (videoUrl && !seenUrls.has(videoUrl)) {
+            seenUrls.add(videoUrl);
+            media.push({
+              type: 'video',
+              url: videoUrl,
+              id: `post_${post.id || Date.now()}_video_${videoIndex}`,
+              postId: post.id
+            });
+          }
         });
       }
     });
@@ -170,17 +249,12 @@ const ProfileInformationScreen = () => {
     setMediaFiles(media);
   };
 
-  useEffect(() => {
-    if (posts.length > 0 || user?.avatar_url || user?.cover_url) {
-      loadMediaFiles(posts, user);
-    }
-  }, [avatarUrl, coverUrl, posts.length, user?.avatar_url, user?.cover_url]);
-
+  // Load posts when user changes
   useEffect(() => {
     if (user?.id) {
-      loadPosts();
+      loadPosts(false);
     }
-  }, [user?.id, targetUserId]);
+  }, [user?.id, targetUserId, loadPosts]);
 
   const formatTime = () => {
     const now = new Date();
@@ -306,7 +380,17 @@ const ProfileInformationScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={dynamicStyles.scrollView}>
+      <ScrollView 
+        style={dynamicStyles.scrollView}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary || '#0084ff'}
+            colors={[colors.primary || '#0084ff']}
+          />
+        }
+      >
         {/* Cover Photo */}
         <TouchableOpacity 
           style={dynamicStyles.coverContainer}

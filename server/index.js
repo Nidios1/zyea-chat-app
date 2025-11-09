@@ -269,10 +269,22 @@ io.on('connection', (socket) => {
 
   // Join user to their personal room
   socket.on('join', async (userId) => {
-    socket.join(userId);
+    // Prevent duplicate joins from the same socket
+    if (socket.userId === userId && socket.rooms.has(userId.toString())) {
+      console.log(`⚠️ User ${userId} already joined room, skipping duplicate join`);
+      return;
+    }
+    
+    // Leave previous room if switching users (shouldn't happen but safety check)
+    if (socket.userId && socket.userId !== userId) {
+      console.log(`🔄 User switching from ${socket.userId} to ${userId}`);
+      socket.leave(socket.userId.toString());
+    }
+    
+    socket.join(userId.toString());
     socket.userId = userId; // Store userId in socket for disconnect handling
     socket.lastActivity = Date.now(); // Track last activity time
-    console.log(`User ${userId} joined their room`);
+    console.log(`✅ User ${userId} joined their room (socket: ${socket.id})`);
     
     // Update user status to online when they join
     try {
@@ -282,13 +294,15 @@ io.on('connection', (socket) => {
         'UPDATE users SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?',
         ['online', userId]
       );
-      console.log(`User ${userId} status updated to online`);
+      console.log(`✅ User ${userId} status updated to online`);
       
       // ✅ Tối ưu: Query friends một lần và emit batch
       const [friends] = await connection.execute(`
         SELECT f.user_id FROM friends f 
         WHERE f.friend_id = ? AND f.status = 'accepted'
       `, [userId]);
+      
+      console.log(`📋 Found ${friends.length} friends for user ${userId}`);
       
       // ✅ Tối ưu: Prepare status change data một lần
       const statusData = {
@@ -298,9 +312,14 @@ io.on('connection', (socket) => {
       };
       
       // Emit online status to all friends
-      friends.forEach(friend => {
-        socket.to(friend.user_id.toString()).emit('userStatusChanged', statusData);
-      });
+      if (friends.length > 0) {
+        friends.forEach(friend => {
+          socket.to(friend.user_id.toString()).emit('userStatusChanged', statusData);
+        });
+        console.log(`📤 Notified ${friends.length} friends about ${userId}'s status change to online`);
+      } else {
+        console.log(`ℹ️ User ${userId} has no friends to notify`);
+      }
     } catch (error) {
       console.error('❌ Error updating user status on join:', error);
     }

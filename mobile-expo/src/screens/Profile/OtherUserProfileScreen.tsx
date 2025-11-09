@@ -265,11 +265,29 @@ const OtherUserProfileScreen = () => {
   useEffect(() => {
     if (postsData) {
       if (page === 1) {
-        // First page - replace all posts
-        setAllPosts(postsData);
+        // First page - replace all posts, but use Set to avoid duplicates
+        const seenPostIds = new Set<string | number>();
+        const uniquePosts = postsData.filter((post: any) => {
+          const postId = post.id;
+          if (postId && seenPostIds.has(postId)) {
+            return false;
+          }
+          if (postId) {
+            seenPostIds.add(postId);
+          }
+          return true;
+        });
+        setAllPosts(uniquePosts);
       } else {
-        // Subsequent pages - append to existing posts
-        setAllPosts(prev => [...prev, ...postsData]);
+        // Subsequent pages - append to existing posts, but avoid duplicates
+        setAllPosts(prev => {
+          const existingIds = new Set(prev.map((p: any) => p.id).filter(Boolean));
+          const newPosts = postsData.filter((post: any) => {
+            const postId = post.id;
+            return !postId || !existingIds.has(postId);
+          });
+          return [...prev, ...newPosts];
+        });
       }
       // Check if there are more posts to load
       setHasMore(postsData.length > 0);
@@ -747,12 +765,44 @@ const OtherUserProfileScreen = () => {
         }}
         scrollEventThrottle={400}
       >
+        {/* Cover Photo */}
+        {userProfile?.cover_url && (
+          <TouchableOpacity 
+            style={dynamicStyles.coverContainer}
+            activeOpacity={0.9}
+            onPress={() => {
+              // Open cover image in full screen viewer
+              setImageViewerImages([getImageURL(userProfile.cover_url)]);
+              setImageViewerIndex(0);
+              setImageViewerPostData(null);
+              setShowImageViewer(true);
+            }}
+          >
+            <Image 
+              source={{ uri: getImageURL(userProfile.cover_url) }} 
+              style={dynamicStyles.coverImage}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
+        )}
+        
         {/* Profile Section */}
-        <View style={dynamicStyles.profileSection}>
-          {/* Top Row: Avatar (Left) and Stats (Right) */}
-          <View style={dynamicStyles.topRow}>
-            {/* Profile Picture with Gradient Border - Left Side */}
-            <View style={dynamicStyles.avatarWrapper}>
+        <View style={[dynamicStyles.profileSection, userProfile?.cover_url && dynamicStyles.profileSectionWithCover]}>
+          {/* Avatar - positioned absolutely when cover exists */}
+          {userProfile?.cover_url && (
+            <TouchableOpacity 
+              style={dynamicStyles.avatarWrapperWithCover}
+              activeOpacity={0.9}
+              onPress={() => {
+                if (userProfile?.avatar_url) {
+                  // Open avatar in full screen viewer
+                  setImageViewerImages([getAvatarURL(userProfile.avatar_url)]);
+                  setImageViewerIndex(0);
+                  setImageViewerPostData(null);
+                  setShowImageViewer(true);
+                }
+              }}
+            >
               <LinearGradient
                 colors={['#FF6B9D', '#C44569', '#FF8E53', '#FFA07A', '#FFD700', '#98D8C8', '#FF6B9D']}
                 start={{ x: 0, y: 0 }}
@@ -788,7 +838,7 @@ const OtherUserProfileScreen = () => {
                       justifyContent: 'center', 
                       alignItems: 'center',
                     }]}>
-                      <Text style={{ fontSize: 36, fontWeight: '600', color: '#FFFFFF' }}>
+                      <Text style={{ fontSize: 42, fontWeight: '600', color: '#FFFFFF' }}>
                         {getInitials(userProfile?.full_name || userProfile?.username || 'Người dùng')}
                       </Text>
                     </View>
@@ -798,19 +848,95 @@ const OtherUserProfileScreen = () => {
                       backgroundColor: '#9C27B0', 
                       justifyContent: 'center', 
                       alignItems: 'center',
-                      borderRadius: 47,
+                      borderRadius: 56.5,
                     }]}>
-                      <Text style={{ fontSize: 36, fontWeight: '600', color: '#FFFFFF' }}>
+                      <Text style={{ fontSize: 42, fontWeight: '600', color: '#FFFFFF' }}>
                         {getInitials(userProfile?.full_name || userProfile?.username || 'Người dùng')}
                       </Text>
                     </View>
                   )}
                 </View>
               </LinearGradient>
-            </View>
+            </TouchableOpacity>
+          )}
+          
+          {/* Top Row: Avatar (Left) and Stats (Right) */}
+          <View style={dynamicStyles.topRow}>
+            {/* Profile Picture with Gradient Border - Left Side (only when no cover) */}
+            {!userProfile?.cover_url && (
+              <TouchableOpacity 
+                style={dynamicStyles.avatarWrapper}
+                activeOpacity={0.9}
+                onPress={() => {
+                  if (userProfile?.avatar_url) {
+                    // Open avatar in full screen viewer
+                    setImageViewerImages([getAvatarURL(userProfile.avatar_url)]);
+                    setImageViewerIndex(0);
+                    setImageViewerPostData(null);
+                    setShowImageViewer(true);
+                  }
+                }}
+              >
+                <LinearGradient
+                  colors={['#FF6B9D', '#C44569', '#FF8E53', '#FFA07A', '#FFD700', '#98D8C8', '#FF6B9D']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={dynamicStyles.avatarGradient}
+                >
+                  <View style={[dynamicStyles.avatarInner, { backgroundColor: colors.surface }]}>
+                    {userProfile?.avatar_url ? (
+                      <Image
+                        key={`avatar-${userProfile?.id}`}
+                        source={{ uri: getAvatarURL(userProfile.avatar_url) }}
+                        style={dynamicStyles.avatar}
+                        resizeMode="cover"
+                        onError={(e) => {
+                          console.error('❌ Avatar image load error:', {
+                            uri: getAvatarURL(userProfile.avatar_url),
+                            originalUrl: userProfile.avatar_url,
+                            error: e.nativeEvent.error,
+                          });
+                          setAvatarLoadError(true);
+                        }}
+                        onLoad={() => {
+                          console.log('✅ Avatar loaded:', getAvatarURL(userProfile.avatar_url));
+                          setAvatarLoadError(false);
+                        }}
+                        onLoadStart={() => {
+                          console.log('🔄 Loading avatar:', getAvatarURL(userProfile.avatar_url));
+                        }}
+                      />
+                    ) : (
+                      <View style={[dynamicStyles.avatar, { 
+                        backgroundColor: '#9C27B0', 
+                        justifyContent: 'center', 
+                        alignItems: 'center',
+                      }]}>
+                        <Text style={{ fontSize: 42, fontWeight: '600', color: '#FFFFFF' }}>
+                          {getInitials(userProfile?.full_name || userProfile?.username || 'Người dùng')}
+                        </Text>
+                      </View>
+                    )}
+                    {avatarLoadError && userProfile?.avatar_url && (
+                      <View style={[StyleSheet.absoluteFill, { 
+                        backgroundColor: '#9C27B0', 
+                        justifyContent: 'center', 
+                        alignItems: 'center',
+                        borderRadius: 56.5,
+                      }]}>
+                        <Text style={{ fontSize: 42, fontWeight: '600', color: '#FFFFFF' }}>
+                          {getInitials(userProfile?.full_name || userProfile?.username || 'Người dùng')}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
 
             {/* Stats - Right Side, aligned with avatar top */}
-            <View style={dynamicStyles.statsContainer}>
+            {!userProfile?.cover_url && (
+              <View style={dynamicStyles.statsContainer}>
               <View style={dynamicStyles.statItem}>
                 <Text style={[dynamicStyles.statNumber, { color: colors.text }]}>
                   {formatNumber(postsCount)}
@@ -836,6 +962,37 @@ const OtherUserProfileScreen = () => {
                 </Text>
               </View>
             </View>
+            )}
+            
+            {/* Stats when cover exists - positioned to the right of avatar */}
+            {userProfile?.cover_url && (
+              <View style={dynamicStyles.statsContainerWithCover}>
+                <View style={dynamicStyles.statItem}>
+                  <Text style={[dynamicStyles.statNumber, { color: colors.text }]}>
+                    {formatNumber(postsCount)}
+                  </Text>
+                  <Text style={[dynamicStyles.statLabel, { color: colors.textSecondary }]}>
+                    bài viết
+                  </Text>
+                </View>
+                <View style={dynamicStyles.statItem}>
+                  <Text style={[dynamicStyles.statNumber, { color: colors.text }]}>
+                    {formatNumber(followersCount)}
+                  </Text>
+                  <Text style={[dynamicStyles.statLabel, { color: colors.textSecondary }]}>
+                    người theo dõi
+                  </Text>
+                </View>
+                <View style={dynamicStyles.statItem}>
+                  <Text style={[dynamicStyles.statNumber, { color: colors.text }]}>
+                    {formatNumber(followingCount)}
+                  </Text>
+                  <Text style={[dynamicStyles.statLabel, { color: colors.textSecondary }]}>
+                    đang theo dõi
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
 
           {/* User Name with Ribbon Icon - Below avatar, aligned left */}
@@ -1595,44 +1752,67 @@ const createStyles = (colors: typeof PWATheme.light) =>
     scrollView: {
       flex: 1,
     },
+    coverContainer: {
+      position: 'relative',
+      height: 180, // Same height as ProfileInformationScreen for consistency
+      width: '100%',
+      backgroundColor: colors.border,
+    },
+    coverImage: {
+      width: '100%',
+      height: '100%',
+    },
     profileSection: {
       paddingHorizontal: 16,
       paddingTop: 16,
+    },
+    profileSectionWithCover: {
+      paddingTop: 60, // Space for bottom half of avatar (avatar height 120, so 60px below cover)
+      marginTop: 0,
+      backgroundColor: colors.surface, // Ensure background for avatar overlap
     },
     topRow: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       marginBottom: 12,
+      position: 'relative',
     },
     avatarWrapper: {
       marginRight: 20,
     },
+    avatarWrapperWithCover: {
+      position: 'absolute',
+      top: -60, // Position avatar so half is on cover (avatar height 120, so half = 60)
+      left: 16, // Same as ProfileInformationScreen
+      zIndex: 10,
+      marginRight: 0, // Remove margin when positioned absolutely
+    },
     avatarGradient: {
-      width: 100,
-      height: 100,
-      borderRadius: 50,
+      width: 120,
+      height: 120,
+      borderRadius: 60,
       padding: 3.5,
       justifyContent: 'center',
       alignItems: 'center',
     },
     avatarInner: {
-      width: 94,
-      height: 94,
-      borderRadius: 47,
+      width: 113,
+      height: 113,
+      borderRadius: 56.5,
       overflow: 'hidden',
       backgroundColor: 'transparent',
     },
     avatar: {
-      width: 94,
-      height: 94,
-      borderRadius: 47,
+      width: 113,
+      height: 113,
+      borderRadius: 56.5,
       backgroundColor: 'transparent',
     },
     nameContainer: {
       flexDirection: 'row',
       alignItems: 'center',
       marginLeft: 0,
-      marginTop: 8,
+      marginTop: 4, // Reduced from 8 to push name up closer to avatar
       marginBottom: 12,
     },
     userName: {
@@ -1649,6 +1829,14 @@ const createStyles = (colors: typeof PWATheme.light) =>
       justifyContent: 'space-around',
       alignItems: 'flex-start',
       paddingTop: 8,
+    },
+    statsContainerWithCover: {
+      flex: 1,
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      alignItems: 'flex-start',
+      paddingTop: 8,
+      marginLeft: 140, // Space for larger avatar (120 + 20 padding) when it's positioned absolutely
     },
     statItem: {
       alignItems: 'center',
