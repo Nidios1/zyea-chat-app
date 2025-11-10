@@ -28,6 +28,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { getStoredToken } from '../../utils/auth';
 import { newsfeedAPI, usersAPI } from '../../utils/api';
 import { NewsFeedStackParamList } from '../../navigation/types';
+import { useQuery } from '@tanstack/react-query';
 
 type ProfileInformationScreenNavigationProp = StackNavigationProp<ProfileStackParamList>;
 type ProfileInformationScreenRouteProp = RouteProp<ProfileStackParamList, 'ProfileInformation'>;
@@ -79,6 +80,30 @@ const ProfileInformationScreen = () => {
 
   // Use targetUser if viewing other profile, otherwise use currentUser
   const user = targetUser || currentUser;
+  const userId = user?.id?.toString();
+
+  // Fetch followers count
+  const { data: userStats } = useQuery({
+    queryKey: ['userStats', userId],
+    queryFn: async () => {
+      if (!userId) return { followersCount: 0, followingCount: 0 };
+      try {
+        const res = await usersAPI.getUserStats(userId);
+        return {
+          followersCount: res.data?.followersCount || res.data?.followers_count || 0,
+          followingCount: res.data?.followingCount || res.data?.following_count || 0,
+        };
+      } catch (error) {
+        console.error('Error fetching user stats:', error);
+        // Fallback: try to get from user object
+        return {
+          followersCount: user?.followers_count || user?.followers?.length || 0,
+          followingCount: user?.following_count || user?.following?.length || 0,
+        };
+      }
+    },
+    enabled: !!userId,
+  });
 
   useEffect(() => {
     if (user?.avatar_url) {
@@ -545,18 +570,9 @@ const ProfileInformationScreen = () => {
                 <MaterialCommunityIcons name="account-outline" size={16} color={colors.textSecondary} />
               </View>
               <Text style={[dynamicStyles.infoText, { color: colors.textSecondary }]}>
-                Có {user?.followers?.length || 0} người theo dõi
+                Có {userStats?.followersCount || 0} người theo dõi
               </Text>
             </View>
-
-            <TouchableOpacity style={dynamicStyles.infoItem}>
-              <View style={[dynamicStyles.infoIcon, { backgroundColor: colors.backgroundSecondary }]}>
-                <MaterialCommunityIcons name="account-group-outline" size={16} color={colors.textSecondary} />
-              </View>
-              <Text style={[dynamicStyles.infoText, { color: colors.textSecondary }]}>
-                Sơ đồ tổ chức
-              </Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -1230,6 +1246,7 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+
   },
   tabText: {
     fontSize: 15,
@@ -1339,4 +1356,5 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
   },
 });
 
+export default ProfileInformationScreen;
 export default ProfileInformationScreen;

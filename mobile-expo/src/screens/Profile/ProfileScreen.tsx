@@ -8,6 +8,8 @@ import {
   SafeAreaView,
   Animated,
   Modal,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Text, Avatar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -22,6 +24,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { PWATheme } from '../../config/PWATheme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import appJson from '../../../app.json';
+import { TextInput } from 'react-native-paper';
 
 type ProfileScreenNavigationProp = StackNavigationProp<ProfileStackParamList>;
 
@@ -39,13 +42,16 @@ interface MenuGroup {
 }
 
 const ProfileScreen = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, login } = useAuth();
   const navigation = useNavigation<ProfileScreenNavigationProp>();
   const { colors, themeMode, setThemeMode, isDarkMode } = useTheme();
   const insets = useSafeAreaInsets();
   const [isScrolled, setIsScrolled] = useState(false);
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [activityStatusEnabled, setActivityStatusEnabled] = useState(true);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [userNote, setUserNote] = useState('');
+  const [isSavingNote, setIsSavingNote] = useState(false);
   const lastScrollY = useRef(0);
   const avatarOpacity = useRef(new Animated.Value(1)).current;
   const avatarScale = useRef(new Animated.Value(1)).current;
@@ -63,6 +69,24 @@ const ProfileScreen = () => {
     };
     loadActivityStatus();
   }, []);
+
+  // Load user note
+  useEffect(() => {
+    const loadUserNote = async () => {
+      try {
+        const noteKey = `user_note_${user?.id}`;
+        const saved = await AsyncStorage.getItem(noteKey);
+        if (saved !== null) {
+          setUserNote(saved);
+        }
+      } catch (error) {
+        console.error('Error loading user note:', error);
+      }
+    };
+    if (user?.id) {
+      loadUserNote();
+    }
+  }, [user?.id]);
 
   // Listen for activity status changes when returning from ActivityStatusScreen
   useFocusEffect(
@@ -112,6 +136,54 @@ const ProfileScreen = () => {
       console.warn('Scroll error:', error);
     }
   }, [isScrolled, avatarOpacity, avatarScale]);
+
+  const handleAvatarPress = () => {
+    navigation.navigate('SelfDestructPost');
+  };
+
+  const handleSaveNote = async () => {
+    setIsSavingNote(true);
+    try {
+      const noteKey = `user_note_${user?.id}`;
+      await AsyncStorage.setItem(noteKey, userNote);
+      Alert.alert('Thành công', 'Đã lưu ghi chú thành công!');
+      setShowNoteModal(false);
+    } catch (error) {
+      console.error('Error saving note:', error);
+      Alert.alert('Lỗi', 'Không thể lưu ghi chú. Vui lòng thử lại.');
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
+  const handleDeleteNote = async () => {
+    Alert.alert(
+      'Xóa ghi chú',
+      'Bạn có chắc chắn muốn xóa ghi chú này?',
+      [
+        {
+          text: 'Hủy',
+          style: 'cancel',
+        },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const noteKey = `user_note_${user?.id}`;
+              await AsyncStorage.removeItem(noteKey);
+              setUserNote('');
+              Alert.alert('Thành công', 'Đã xóa ghi chú!');
+              setShowNoteModal(false);
+            } catch (error) {
+              console.error('Error deleting note:', error);
+              Alert.alert('Lỗi', 'Không thể xóa ghi chú. Vui lòng thử lại.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleMenuPress = (menuId: string) => {
     switch (menuId) {
@@ -301,18 +373,19 @@ const ProfileScreen = () => {
                 style={dynamicStyles.headerAvatar}
               />
             )}
-            {/* Camera button for changing avatar */}
+            {/* Note button */}
             <TouchableOpacity
               style={[
-                dynamicStyles.cameraButton, 
+                dynamicStyles.noteButton, 
                 { 
-                  backgroundColor: isDarkMode ? '#0084ff' : colors.primary,
-                  borderColor: colors.surface,
+                  backgroundColor: '#fff',
+                  borderColor: '#000',
                 }
               ]}
-              onPress={() => navigation.navigate('EditProfile')}
+              onPress={handleAvatarPress}
+              activeOpacity={0.7}
             >
-              <MaterialCommunityIcons name="camera" size={12} color="#fff" />
+              <MaterialCommunityIcons name="plus" size={14} color="#000" />
             </TouchableOpacity>
           </Animated.View>
           <View style={dynamicStyles.headerInfo}>
@@ -327,7 +400,10 @@ const ProfileScreen = () => {
           </View>
         </View>
 
-        <TouchableOpacity style={dynamicStyles.qrButton}>
+        <TouchableOpacity
+          style={dynamicStyles.qrButton}
+          onPress={() => navigation.navigate('QRScanner')}
+        >
           <MaterialCommunityIcons name="qrcode-scan" size={24} color={colors.text} />
         </TouchableOpacity>
       </View>
@@ -547,6 +623,85 @@ const ProfileScreen = () => {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Note Modal */}
+      <Modal
+        visible={showNoteModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowNoteModal(false)}
+      >
+        <TouchableOpacity
+          style={dynamicStyles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowNoteModal(false)}
+        >
+          <View
+            style={[dynamicStyles.noteModalContainer, { backgroundColor: colors.surface, paddingBottom: Math.max(insets.bottom, 20) }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={dynamicStyles.modalHeader}>
+              <Text style={[dynamicStyles.modalTitle, { color: colors.text }]}>
+                Ghi chú về {userName}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowNoteModal(false)}
+                style={dynamicStyles.modalCloseButton}
+              >
+                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={dynamicStyles.noteContent}>
+              <TextInput
+                mode="outlined"
+                placeholder="Thêm ghi chú về người này (chỉ bạn mới thấy)..."
+                value={userNote}
+                onChangeText={setUserNote}
+                multiline
+                numberOfLines={8}
+                style={[dynamicStyles.noteInput, { backgroundColor: colors.background }]}
+                contentStyle={{ color: colors.text, minHeight: 150 }}
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                textColor={colors.text}
+              />
+            </View>
+
+            <View style={dynamicStyles.noteActions}>
+              {userNote.trim() && (
+                <TouchableOpacity
+                  style={[dynamicStyles.noteDeleteButton, { backgroundColor: colors.error + '20' }]}
+                  onPress={handleDeleteNote}
+                >
+                  <MaterialCommunityIcons name="delete-outline" size={20} color={colors.error} />
+                  <Text style={[dynamicStyles.noteDeleteText, { color: colors.error }]}>
+                    Xóa ghi chú
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[
+                  dynamicStyles.noteSaveButton,
+                  { backgroundColor: colors.primary },
+                  isSavingNote && { opacity: 0.6 }
+                ]}
+                onPress={handleSaveNote}
+                disabled={isSavingNote}
+              >
+                {isSavingNote ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="check" size={20} color="#fff" />
+                    <Text style={dynamicStyles.noteSaveText}>Lưu</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -585,17 +740,25 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
     height: 64,
     borderRadius: 32,
   },
-  cameraButton: {
+  noteButton: {
     position: 'absolute',
     bottom: 0,
-    right: 0,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    left: 0,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: colors.surface,
+    borderColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   headerInfo: {
     alignItems: 'center',
@@ -732,6 +895,52 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
   },
   themeOptionDescription: {
     fontSize: 13,
+  },
+  noteModalContainer: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+  },
+  noteContent: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  noteInput: {
+    minHeight: 150,
+  },
+  noteActions: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    gap: 12,
+    alignItems: 'center',
+  },
+  noteDeleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 8,
+  },
+  noteDeleteText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  noteSaveButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  noteSaveText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
 

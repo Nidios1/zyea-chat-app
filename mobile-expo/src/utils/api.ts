@@ -4,26 +4,71 @@ import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { API_BASE_URL } from '../config/constants';
 import { getStoredToken } from './auth';
 
+// Helper function to detect FormData safely
+const isFormData = (data: any): boolean => {
+  if (!data || typeof data !== 'object') {
+    return false;
+  }
+  
+  // Check if it's FormData by checking for common FormData methods/properties
+  // This works better in React Native than instanceof
+  return (
+    (typeof FormData !== 'undefined' && data instanceof FormData) ||
+    (data.constructor && data.constructor.name === 'FormData') ||
+    (typeof data.append === 'function' && typeof data.getAll === 'function')
+  );
+};
+
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000, // 30 seconds timeout (increased from 15s for better network reliability)
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  // Don't set default Content-Type here - set it conditionally in interceptor
 });
 
 apiClient.interceptors.request.use(
   async (config) => {
+    // NOTE: This interceptor may show "property is not configurable" error in Expo Go
+    // but works fine in production builds (IPA). This is a known Expo Go limitation.
+    
+    // Initialize headers as plain object to avoid non-configurable property issues
+    const headers: Record<string, string> = {};
+    
+    // Copy existing headers if they exist (safe copy)
+    if (config.headers) {
+      try {
+        // Try to get headers as object
+        const existingHeaders = config.headers as any;
+        if (typeof existingHeaders === 'object') {
+          Object.keys(existingHeaders).forEach(key => {
+            const value = existingHeaders[key];
+            if (value !== undefined && value !== null) {
+              headers[key] = String(value);
+            }
+          });
+        }
+      } catch (e) {
+        // If copying fails, continue with empty headers
+      }
+    }
+
+    // Add auth token
     const token = await getStoredToken();
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      headers.Authorization = `Bearer ${token}`;
     }
     
-    // For FormData (React Native), don't set Content-Type - let axios/browser set it
-    if (config.data instanceof FormData) {
-      // Remove Content-Type header to let the browser/axios set it with boundary
-      delete config.headers['Content-Type'];
+    // For FormData (React Native), don't set Content-Type - let axios set it automatically
+    // For other requests, set Content-Type to application/json
+    if (!isFormData(config.data)) {
+      // Only set Content-Type if it's not already set
+      if (!headers['Content-Type'] && !headers['content-type']) {
+        headers['Content-Type'] = 'application/json';
+      }
     }
+    // For FormData, don't set Content-Type - axios will handle it automatically with boundary
+    
+    // Assign the new headers object (this avoids modifying non-configurable properties)
+    config.headers = headers as any;
     
     return config;
   },
@@ -66,6 +111,16 @@ export const authAPI = {
     apiClient.post('/auth/forgot-password', { email }),
 
   verifyToken: () => apiClient.get('/users/profile'),
+
+  // QR Login endpoints
+  qrLoginInit: (qrToken: string) =>
+    apiClient.post('/auth/qr-login-init', { qrToken }),
+
+  qrLoginConfirm: (qrToken: string, userId: string) =>
+    apiClient.post('/auth/qr-login-confirm', { qrToken, userId }),
+
+  qrLoginStatus: (qrToken: string) =>
+    apiClient.post('/auth/qr-login-status', { qrToken }),
 };
 
 export const usersAPI = {
@@ -210,28 +265,40 @@ export const newsfeedAPI = {
 };
 
 export const uploadAPI = {
-  uploadImage: (formData: FormData) =>
-    apiClient.post('/upload/image', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  uploadImage: (formData: FormData) => {
+    // Don't manually set Content-Type - let axios set it automatically with boundary
+    // React Native requires this to work correctly
+    // Don't pass headers at all - let interceptor handle it
+    return apiClient.post('/upload/image', formData, {
+      transformRequest: (data) => {
+        // Return FormData as-is for React Native
+        return data;
+      },
+    });
+  },
 
-  uploadAvatar: (formData: FormData) =>
-    apiClient.post('/upload/avatar', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  uploadAvatar: (formData: FormData) => {
+    // Don't manually set Content-Type - let axios set it automatically with boundary
+    return apiClient.post('/upload/avatar', formData, {
+      transformRequest: (data) => {
+        return data;
+      },
+    });
+  },
 
-  uploadPostImage: (formData: FormData) =>
-    apiClient.post('/upload/post', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  uploadPostImage: (formData: FormData) => {
+    // Don't manually set Content-Type - let axios set it automatically with boundary
+    return apiClient.post('/upload/post', formData, {
+      transformRequest: (data) => {
+        return data;
+      },
+    });
+  },
 
   uploadVideo: (formData: FormData) => {
     // Don't set Content-Type header - let axios set it automatically with boundary
     const config: AxiosRequestConfig = {
       timeout: 120000, // 2 minutes timeout for video upload
-      headers: {
-        // Remove Content-Type - axios will set it automatically with boundary
-      },
       transformRequest: (data) => {
         // Return FormData as-is for React Native
         return data;

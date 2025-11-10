@@ -4,7 +4,8 @@ import { createStackNavigator } from '@react-navigation/stack';
 
 import ChatListScreen from '../screens/Chat/ChatListScreen';
 import ChatDetailScreen from '../screens/Chat/ChatDetailScreen';
-import VideoCallScreen from '../screens/Chat/VideoCallScreen';
+// Tạm thời disable VideoCall để tránh lỗi WebRTC trong Expo Go
+// import VideoCallScreen from '../screens/Chat/VideoCallScreen';
 import ContactsScreen from '../screens/Contacts/ContactsScreen';
 import PostsListScreen from '../screens/NewsFeed/PostsListScreen';
 import ProfileScreen from '../screens/Profile/ProfileScreen';
@@ -21,6 +22,8 @@ import ResourceManagementScreen from '../screens/Profile/ResourceManagementScree
 import DeviceManagementScreen from '../screens/Profile/DeviceManagementScreen';
 import SecurityScreen from '../screens/Profile/SecurityScreen';
 import AppInfoScreen from '../screens/Profile/AppInfoScreen';
+import SelfDestructPostScreen from '../screens/Profile/SelfDestructPostScreen';
+import QRScannerScreen from '../screens/Profile/QRScannerScreen';
 import FriendsListScreen from '../screens/Friends/FriendsListScreen';
 import NotificationsScreen from '../screens/Notifications/NotificationsScreen';
 import CreatePostScreen from '../screens/NewsFeed/CreatePostScreen';
@@ -49,14 +52,15 @@ const ChatStackNavigator = () => (
         headerShown: false as boolean,
       }}
     />
-    <ChatStack.Screen
+    {/* Tạm thời disable VideoCall để tránh lỗi WebRTC trong Expo Go */}
+    {/* <ChatStack.Screen
       name="VideoCall"
       component={VideoCallScreen}
       options={{
         headerShown: false as boolean,
         presentation: 'fullScreenModal' as any,
       }}
-    />
+    /> */}
   </ChatStack.Navigator>
 );
 
@@ -152,6 +156,16 @@ const ProfileStackNavigator = () => (
     <ProfileStack.Screen
       name="AppInfo"
       component={AppInfoScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="SelfDestructPost"
+      component={SelfDestructPostScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="QRScanner"
+      component={QRScannerScreen}
       options={{ headerShown: false as boolean }}
     />
   </ProfileStack.Navigator>

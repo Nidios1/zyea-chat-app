@@ -19,7 +19,7 @@
       "bundleIdentifier": "com.zyea.mobile",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Ứng dụng cần quyền để bạn chọn ảnh đại diện và ảnh bìa.",
-        "NSCameraUsageDescription": "Ứng dụng cần quyền camera để chụp ảnh làm ảnh đại diện hoặc ảnh bìa và để thực hiện cuộc gọi video.",
+        "NSCameraUsageDescription": "Ứng dụng cần quyền camera để chụp ảnh làm ảnh đại diện hoặc ảnh bìa, để thực hiện cuộc gọi video và để quét mã QR đăng nhập.",
         "NSPhotoLibraryAddUsageDescription": "Ứng dụng cần quyền lưu ảnh đã chỉnh sửa vào thư viện.",
         "NSMicrophoneUsageDescription": "Ứng dụng cần quyền microphone để thực hiện cuộc gọi thoại và video.",
         "ITSAppUsesNonExemptEncryption": false

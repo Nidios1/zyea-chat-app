@@ -48,6 +48,8 @@ export type ProfileStackParamList = {
   DeviceManagement: undefined;
   Security: undefined;
   AppInfo: undefined;
+  SelfDestructPost: undefined;
+  QRScanner: undefined;
 };
 
 export type FriendsStackParamList = {

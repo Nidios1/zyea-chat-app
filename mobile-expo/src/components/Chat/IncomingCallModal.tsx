@@ -1,190 +1,153 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
-  Dimensions,
-  Vibration,
-} from 'react-native';
-import { Text, Avatar } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { ChatStackParamList } from '../../navigation/types';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, Image } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
-import { getAvatarURL } from '../../utils/imageUtils';
 import useSocket from '../../hooks/useSocket';
-import { usersAPI } from '../../utils/api';
-import { useQuery } from '@tanstack/react-query';
-import { useRingingSound } from '../../hooks/useRingingSound';
+import { useAuth } from '../../contexts/AuthContext';
 
-type IncomingCallNavigationProp = StackNavigationProp<ChatStackParamList>;
-
-interface IncomingCall {
+interface IncomingCallData {
   from: string;
-  conversationId: string;
-  userName: string;
-  userAvatarUrl?: string;
   isVideo: boolean;
-  offer?: any;
+  conversationId?: string;
+  callerInfo?: {
+    id: string;
+    full_name?: string;
+    username?: string;
+    avatar?: string;
+  };
 }
 
 const IncomingCallModal: React.FC = () => {
-  const { isDarkMode, colors } = useTheme();
-  const navigation = useNavigation<IncomingCallNavigationProp>();
-  const { socket } = useSocket();
-  const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
-  const [callerUserId, setCallerUserId] = useState<string | null>(null);
-  const [callStatus, setCallStatus] = useState<'idle' | 'ringing' | 'calling' | 'connecting' | 'connected' | 'ended'>('idle');
-
-  // Play ringing sound when incoming call is showing
-  useRingingSound(isVisible && incomingCall ? 'ringing' : 'idle');
-
-  // Fetch caller user info
-  const { data: callerUser } = useQuery({
-    queryKey: ['user', callerUserId],
-    queryFn: async () => {
-      if (!callerUserId) return null;
-      const response = await usersAPI.getProfile(callerUserId);
-      return response.data;
-    },
-    enabled: !!callerUserId,
-  });
+  const { colors, isDarkMode } = useTheme();
+  const { user } = useAuth();
+  const { socket, isConnected } = useSocket();
+  const [incomingCall, setIncomingCall] = useState<IncomingCallData | null>(null);
+  const [callerInfo, setCallerInfo] = useState<any>(null);
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !isConnected) {
+      return;
+    }
 
-    const handleCallOffer = (data: {
-      from: string;
-      conversationId: string;
-      isVideo: boolean;
-      offer: any;
-    }) => {
+    const handleIncomingCall = (data: IncomingCallData) => {
       console.log('📞 Incoming call:', data);
+      setIncomingCall(data);
       
-      // Set caller user ID to fetch user info
-      setCallerUserId(data.from);
-      
-      // Set incoming call with basic info (will update when user data loads)
-      setIncomingCall({
-        from: data.from,
-        conversationId: data.conversationId,
-        userName: 'Người dùng', // Will be updated when user data loads
-        userAvatarUrl: undefined,
-        isVideo: data.isVideo,
-        offer: data.offer,
-      });
-      
-      setIsVisible(true);
-      setCallStatus('ringing'); // Trigger ringing sound
+      // If caller info is provided, use it
+      if (data.callerInfo) {
+        setCallerInfo(data.callerInfo);
+      }
     };
 
-    socket.on('call-offer', handleCallOffer);
+    socket.on('call-offer', handleIncomingCall);
 
     return () => {
-      socket.off('call-offer', handleCallOffer);
-      setCallStatus('idle'); // Stop ringing sound on cleanup
+      socket.off('call-offer', handleIncomingCall);
     };
-  }, [socket]);
-
-  // Update incoming call when user data loads
-  useEffect(() => {
-    if (callerUser && incomingCall) {
-      setIncomingCall({
-        ...incomingCall,
-        userName: callerUser.full_name || callerUser.username || 'Người dùng',
-        userAvatarUrl: callerUser.avatar_url,
-      });
-    }
-  }, [callerUser]);
+  }, [socket, isConnected]);
 
   const handleAccept = () => {
-    if (!incomingCall) return;
+    if (!incomingCall || !socket) return;
     
-    setCallStatus('idle'); // Stop ringing sound
-    setIsVisible(false);
-    
-    // Store offer in a way that VideoCallScreen can access it
-    // We'll pass it via navigation params
-    navigation.navigate('VideoCall', {
+    console.log('✅ Accepting call');
+    socket.emit('call-answer', {
+      to: incomingCall.from,
+      accepted: true,
       conversationId: incomingCall.conversationId,
-      userName: incomingCall.userName,
-      otherUserId: incomingCall.from,
-      isVideo: incomingCall.isVideo,
-      userAvatarUrl: incomingCall.userAvatarUrl,
-      isIncoming: true,
-      offer: incomingCall.offer, // Pass the offer
     });
     
+    // TODO: Navigate to call screen or handle call acceptance
+    // For now, just close the modal
     setIncomingCall(null);
-    setCallerUserId(null);
+    setCallerInfo(null);
   };
 
   const handleReject = () => {
     if (!incomingCall || !socket) return;
     
-    setCallStatus('idle'); // Stop ringing sound
-    setIsVisible(false);
-    
-    // Emit reject event
-    socket.emit('call-rejected', {
+    console.log('❌ Rejecting call');
+    socket.emit('call-answer', {
       to: incomingCall.from,
+      accepted: false,
+      conversationId: incomingCall.conversationId,
     });
     
     setIncomingCall(null);
-    setCallerUserId(null);
+    setCallerInfo(null);
   };
 
-  if (!incomingCall || !isVisible) {
+  const handleDismiss = () => {
+    if (incomingCall && socket) {
+      // Auto-reject if dismissed
+      socket.emit('call-answer', {
+        to: incomingCall.from,
+        accepted: false,
+        conversationId: incomingCall.conversationId,
+      });
+    }
+    setIncomingCall(null);
+    setCallerInfo(null);
+  };
+
+  if (!incomingCall) {
     return null;
   }
 
+  const callerName = callerInfo?.full_name || callerInfo?.username || 'Người gọi';
+  const callerAvatar = callerInfo?.avatar || null;
+  const isVideoCall = incomingCall.isVideo;
+
   return (
     <Modal
-      visible={isVisible}
-      transparent={true}
+      visible={!!incomingCall}
+      transparent
       animationType="fade"
-      onRequestClose={handleReject}
+      onRequestClose={handleDismiss}
     >
-      <View style={styles.container}>
-        <View style={[styles.content, { backgroundColor: colors.surface }]}>
+      <View style={[styles.overlay, { backgroundColor: 'rgba(0, 0, 0, 0.8)' }]}>
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
           {/* Avatar */}
-          <Avatar.Image
-            size={100}
-            source={{ uri: getAvatarURL(incomingCall.userAvatarUrl || '') }}
-            style={[styles.avatar, { backgroundColor: colors.primary }]}
-          />
-          
-          {/* User Name */}
-          <Text style={[styles.userName, { color: colors.text }]} variant="headlineSmall">
-            {incomingCall.userName}
+          <View style={styles.avatarContainer}>
+            {callerAvatar ? (
+              <Image
+                source={{ uri: callerAvatar }}
+                style={styles.avatar}
+                defaultSource={require('../../../assets/icon.png')}
+              />
+            ) : (
+              <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>
+                <Text style={[styles.avatarText, { color: '#fff' }]}>
+                  {callerName.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Caller Name */}
+          <Text style={[styles.callerName, { color: colors.text }]}>
+            {callerName}
           </Text>
-          
+
           {/* Call Type */}
-          <Text style={[styles.callType, { color: colors.textSecondary }]} variant="bodyMedium">
-            {incomingCall.isVideo ? 'Cuộc gọi video đến' : 'Cuộc gọi thoại đến'}
+          <Text style={[styles.callType, { color: colors.textSecondary }]}>
+            {isVideoCall ? 'Cuộc gọi video đến...' : 'Cuộc gọi thoại đến...'}
           </Text>
 
           {/* Action Buttons */}
-          <View style={styles.actions}>
+          <View style={styles.buttonContainer}>
+            {/* Reject Button */}
             <TouchableOpacity
-              style={[styles.actionButton, styles.rejectButton]}
+              style={[styles.button, styles.rejectButton]}
               onPress={handleReject}
             >
-              <MaterialCommunityIcons name="phone-hangup" size={32} color="#fff" />
+              <Text style={styles.rejectButtonText}>✕</Text>
             </TouchableOpacity>
-            
+
+            {/* Accept Button */}
             <TouchableOpacity
-              style={[styles.actionButton, styles.acceptButton]}
+              style={[styles.button, styles.acceptButton, { backgroundColor: colors.primary }]}
               onPress={handleAccept}
             >
-              <MaterialCommunityIcons 
-                name={incomingCall.isVideo ? "video" : "phone"} 
-                size={32} 
-                color="#fff" 
-              />
+              <Text style={styles.acceptButtonText}>📞</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -194,57 +157,95 @@ const IncomingCallModal: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
+  overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  content: {
-    width: '80%',
+  container: {
+    width: '85%',
     maxWidth: 400,
     borderRadius: 20,
-    padding: 32,
+    padding: 30,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  avatarContainer: {
+    marginBottom: 20,
   },
   avatar: {
-    marginBottom: 24,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: '#fff',
   },
-  userName: {
+  avatarPlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
+  avatarText: {
+    fontSize: 48,
+    fontWeight: 'bold',
+  },
+  callerName: {
     fontSize: 24,
-    fontWeight: '600',
+    fontWeight: 'bold',
     marginBottom: 8,
     textAlign: 'center',
   },
   callType: {
     fontSize: 16,
-    marginBottom: 32,
+    marginBottom: 30,
     textAlign: 'center',
   },
-  actions: {
+  buttonContainer: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 32,
+    justifyContent: 'space-around',
     width: '100%',
+    paddingHorizontal: 20,
   },
-  actionButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  button: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   rejectButton: {
-    backgroundColor: '#ef4444',
+    backgroundColor: '#ff4444',
+  },
+  rejectButtonText: {
+    fontSize: 32,
+    color: '#fff',
+    fontWeight: 'bold',
   },
   acceptButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#4CAF50',
+  },
+  acceptButtonText: {
+    fontSize: 32,
+    color: '#fff',
   },
 });
 
