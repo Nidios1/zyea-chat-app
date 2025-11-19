@@ -40,6 +40,9 @@ jobs:
         run: |
           echo "📦 Installing dependencies..."
           npm install --legacy-peer-deps || npm install
+          echo "✅ Dependencies installed"
+          # Verify react-native-worklets is installed
+          npm list react-native-worklets || echo "⚠️ react-native-worklets not found in node_modules"
 
       - name: Setup Expo CLI
         uses: expo/expo-github-action@v8
@@ -55,6 +58,11 @@ jobs:
         working-directory: ./mobile-expo/ios
         run: |
           echo "📦 Installing CocoaPods dependencies..."
+          # Clean CocoaPods cache first
+          pod cache clean --all || true
+          # Update repo
+          pod repo update || true
+          # Install pods
           pod install --repo-update
 
       - name: Find app target and scheme
