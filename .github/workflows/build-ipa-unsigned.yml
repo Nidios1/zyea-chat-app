@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       profile:
-        description: 'Build profile'
+        description: 'Build profile (unsigned, preview, production)'
         required: false
         default: 'unsigned'
 
@@ -20,217 +20,108 @@ jobs:
     name: Build Unsigned IPA
     runs-on: macos-14
     
-    defaults:
-      run:
-        working-directory: ./mobile-expo
-    
     steps:
-      - name: Checkout repository
+      - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20.x'
           cache: 'npm'
           cache-dependency-path: mobile-expo/package-lock.json
 
-      - name: Install dependencies
-        working-directory: ./mobile-expo
-        run: |
-          echo "📦 Installing dependencies..."
-          npm install --legacy-peer-deps || npm install
-          echo "✅ Dependencies installed"
-          # Verify react-native-worklets is installed
-          npm list react-native-worklets || echo "⚠️ react-native-worklets not found in node_modules"
-
-      - name: Setup Expo CLI
+      - name: 🔨 Setup Expo CLI
         uses: expo/expo-github-action@v8
         with:
           expo-version: latest
           eas-version: latest
 
-      - name: Setup CocoaPods
+      - name: ⚙️ Install dependencies
+        working-directory: ./mobile-expo
+        run: |
+          echo "📦 Installing dependencies..."
+          npm install --legacy-peer-deps || npm install
+          echo "✅ Dependencies installed"
+
+      - name: ☕️ Setup CocoaPods
         run: |
           echo "☕️ Setting up CocoaPods..."
           sudo gem install cocoapods
           pod --version
-          
-      - name: Setup Xcode
+
+      - name: 🔨 Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
 
-      - name: Generate iOS project
+      - name: 🏗️ Generate iOS project
         working-directory: ./mobile-expo
         run: |
           echo "🔨 Generating iOS project with Expo..."
           npx expo prebuild --platform ios --clean
           
-          # Verify iOS directory was created
           if [ ! -d "ios" ]; then
             echo "❌ ERROR: iOS directory not found after prebuild"
             exit 1
           fi
           echo "✅ iOS project generated successfully"
 
-      - name: Install CocoaPods dependencies
+      - name: 📦 Install CocoaPods dependencies
         working-directory: ./mobile-expo/ios
         run: |
           echo "📦 Installing CocoaPods dependencies..."
-          # Clean CocoaPods cache first
-          pod cache clean --all || true
-          # Update repo
-          pod repo update || true
-          # Install pods
           pod install --repo-update || pod install
           
-          # Verify pods were installed
           if [ ! -d "Pods" ]; then
             echo "❌ ERROR: Pods directory not found after installation"
             exit 1
           fi
           echo "✅ CocoaPods dependencies installed"
 
-      - name: Prepare codegen (if needed)
-        working-directory: ./mobile-expo
-        run: |
-          echo "🔨 Preparing for codegen generation..."
-          # Codegen will be generated automatically during Xcode build
-          # Just ensure node_modules are properly set up
-          if [ ! -d "node_modules/@react-native/codegen" ]; then
-            echo "⚠️ @react-native/codegen not found, reinstalling..."
-            npm install --legacy-peer-deps
-          fi
-          echo "✅ Codegen preparation completed"
-
-      - name: Prepare build environment
+      - name: 🔍 Find Xcode project files
         working-directory: ./mobile-expo/ios
+        id: find_project
         run: |
-          echo "🔨 Preparing build environment..."
-          # Create build directory
-          mkdir -p ./build
-          
-          # Find workspace
-          WORKSPACE=$(find . -name "*.xcworkspace" -maxdepth 1 | head -1)
-          
-          if [ -n "$WORKSPACE" ]; then
-            echo "Found workspace: $WORKSPACE"
-            
-            # List all available schemes
-            echo "Available schemes:"
-            xcodebuild -list -workspace "$WORKSPACE" || true
-            
-            # Clean derived data to avoid stale builds
-            echo "Cleaning derived data..."
-            rm -rf ~/Library/Developer/Xcode/DerivedData/* || true
-          fi
-          
-          echo "✅ Build environment prepared"
-
-      - name: Find app target and scheme
-        working-directory: ./mobile-expo/ios
-        id: find_targets
-        run: |
-          echo "🔍 Searching for Xcode project files..."
-          ls -la
-          
-          # Find .xcworkspace or .xcodeproj
           WORKSPACE=$(find . -name "*.xcworkspace" -maxdepth 1 | head -1)
           PROJECT=$(find . -name "*.xcodeproj" -maxdepth 1 | head -1)
           
           if [ -n "$WORKSPACE" ]; then
             echo "✅ Found workspace: $WORKSPACE"
             echo "workspace_path=$WORKSPACE" >> $GITHUB_OUTPUT
-            
-            # Get scheme (usually same as workspace name without extension)
             SCHEME=$(basename "$WORKSPACE" .xcworkspace)
             echo "scheme_name=$SCHEME" >> $GITHUB_OUTPUT
-            
-            # Get app target (first target that's not Pods/Expo/Test)
-            TARGET=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | \
-              grep -A 100 "Targets:" | \
-              grep -v "Targets:" | \
-              grep -v "Pods" | \
-              grep -v "^Expo$" | \
-              grep -v "Test" | \
-              head -1 | xargs)
-            
-            if [ -z "$TARGET" ]; then
-              echo "⚠️ Could not find target from workspace, trying schemes..."
-              SCHEMES=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
-              if [ -n "$SCHEMES" ]; then
-                TARGET="$SCHEMES"
-                echo "Using scheme as target: $TARGET"
-              fi
-            fi
-            
-            echo "target_name=$TARGET" >> $GITHUB_OUTPUT
           elif [ -n "$PROJECT" ]; then
             echo "✅ Found project: $PROJECT"
             echo "project_path=$PROJECT" >> $GITHUB_OUTPUT
-            
             SCHEME=$(basename "$PROJECT" .xcodeproj)
             echo "scheme_name=$SCHEME" >> $GITHUB_OUTPUT
-            
-            TARGET=$(xcodebuild -list -project "$PROJECT" 2>/dev/null | \
-              grep -A 100 "Targets:" | \
-              grep -v "Targets:" | \
-              grep -v "Pods" | \
-              grep -v "^Expo$" | \
-              grep -v "Test" | \
-              head -1 | xargs)
-            
-            if [ -z "$TARGET" ]; then
-              TARGET="$SCHEME"
-              echo "Using project name as target: $TARGET"
-            fi
-            
-            echo "target_name=$TARGET" >> $GITHUB_OUTPUT
           else
             echo "❌ ERROR: No .xcworkspace or .xcodeproj found!"
-            echo "Current directory contents:"
             ls -la
             exit 1
           fi
           
           echo "📱 Scheme: $SCHEME"
-          echo "📱 Target: $TARGET"
-          
-          if [ -z "$SCHEME" ] || [ -z "$TARGET" ]; then
-            echo "❌ ERROR: Could not determine scheme or target"
-            exit 1
-          fi
 
-      - name: Build IPA (unsigned)
+      - name: 🏗️ Build IPA (unsigned)
         working-directory: ./mobile-expo/ios
         id: build
         run: |
-          WORKSPACE="${{ steps.find_targets.outputs.workspace_path }}"
-          PROJECT="${{ steps.find_targets.outputs.project_path }}"
-          SCHEME="${{ steps.find_targets.outputs.scheme_name }}"
-          TARGET="${{ steps.find_targets.outputs.target_name }}"
+          WORKSPACE="${{ steps.find_project.outputs.workspace_path }}"
+          PROJECT="${{ steps.find_project.outputs.project_path }}"
+          SCHEME="${{ steps.find_project.outputs.scheme_name }}"
           
           echo "🔨 Building unsigned IPA..."
           echo "Scheme: $SCHEME"
-          echo "Target: $TARGET"
-          echo "Workspace: $WORKSPACE"
-          echo "Project: $PROJECT"
           
           # Clean build directory
           rm -rf ./build
           mkdir -p ./build
           
-          # Set build log file
-          BUILD_LOG="./build/xcodebuild.log"
-          
-          # Build: use -scheme for workspace, -target for project
+          # Build the app (using build instead of archive for unsigned)
           if [ -n "$WORKSPACE" ]; then
-            echo "Building with workspace and scheme..."
-            set -o pipefail
-            
-            # Build the app - codegen will be generated automatically
-            echo "Building app with all dependencies..."
+            echo "Building with workspace..."
             xcodebuild build \
               -workspace "$WORKSPACE" \
               -scheme "$SCHEME" \
@@ -241,50 +132,19 @@ jobs:
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGNING_ENTITLEMENTS="" \
-              GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              ONLY_ACTIVE_ARCH=NO \
-              CLANG_ENABLE_MODULES=YES \
               ENABLE_BITCODE=NO \
               -allowProvisioningUpdates \
               -skipPackagePluginValidation \
               -skipMacroValidation \
-              GENERATE_INFOPLIST_FILE=YES \
               COMPILER_INDEX_STORE_ENABLE=NO \
               SWIFT_COMPILATION_MODE=wholemodule \
               SWIFT_OPTIMIZATION_LEVEL=-O \
-              2>&1 | tee "$BUILD_LOG" || {
-                BUILD_EXIT_CODE=$?
-                echo "⚠️ Build exited with code $BUILD_EXIT_CODE"
-                
-                # Check if .app was created despite errors
-                APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | grep -v "\.framework" | grep -v "Pods" | head -1)
-                if [ -n "$APP_BUNDLE" ] && [ -d "$APP_BUNDLE" ]; then
-                  echo "✅ .app bundle found despite exit code: $APP_BUNDLE"
-                  echo "Continuing with IPA creation..."
-                else
-                  echo "❌ Build failed and no .app bundle found"
-                  echo ""
-                  echo "=== Last 300 lines of build log ==="
-                  tail -300 "$BUILD_LOG" || true
-                  echo ""
-                  echo "=== Critical errors (excluding warnings) ==="
-                  grep -i "error:" "$BUILD_LOG" | grep -v "warning:" | grep -v "note:" | tail -50 || true
-                  echo ""
-                  echo "=== Checking for codegen files ==="
-                  find ./build -name "*generated*" -type f 2>/dev/null | head -20 || true
-                  echo ""
-                  echo "=== Build directory structure ==="
-                  find build -type d -maxdepth 3 2>/dev/null | head -30 || true
-                  exit 1
-                fi
-              }
+              ONLY_ACTIVE_ARCH=NO
           else
-            echo "Building with project and target..."
-            set -o pipefail
+            echo "Building with project..."
             xcodebuild build \
               -project "$PROJECT" \
-              -target "$TARGET" \
+              -scheme "$SCHEME" \
               -configuration Release \
               -sdk iphoneos \
               -arch arm64 \
@@ -292,50 +152,26 @@ jobs:
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
-              CODE_SIGNING_ENTITLEMENTS="" \
-              GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              ONLY_ACTIVE_ARCH=NO \
-              CLANG_ENABLE_MODULES=YES \
               ENABLE_BITCODE=NO \
               -allowProvisioningUpdates \
               -skipPackagePluginValidation \
               -skipMacroValidation \
-              GENERATE_INFOPLIST_FILE=YES \
               COMPILER_INDEX_STORE_ENABLE=NO \
               SWIFT_COMPILATION_MODE=wholemodule \
               SWIFT_OPTIMIZATION_LEVEL=-O \
-              2>&1 | tee "$BUILD_LOG" || {
-                BUILD_EXIT_CODE=$?
-                echo "⚠️ Build exited with code $BUILD_EXIT_CODE"
-                APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | grep -v "\.framework" | grep -v "Pods" | head -1)
-                if [ -n "$APP_BUNDLE" ] && [ -d "$APP_BUNDLE" ]; then
-                  echo "✅ .app bundle found: $APP_BUNDLE"
-                else
-                  echo "❌ Build failed and no .app bundle found"
-                  echo "Last 300 lines of build log:"
-                  tail -300 "$BUILD_LOG" || true
-                  echo ""
-                  echo "Critical errors:"
-                  grep -i "error:" "$BUILD_LOG" | grep -v "warning:" | grep -v "note:" | tail -50 || true
-                  exit 1
-                fi
-              }
+              ONLY_ACTIVE_ARCH=NO
           fi
           
-          echo "✅ Build completed successfully"
-          
-          # Find .app bundle
-          APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | \
+          # Find .app bundle in build output
+          APP_BUNDLE=$(find ./build -name "*.app" -type d 2>/dev/null | \
             grep -v "\.framework" | \
             grep -v "Pods" | \
             head -1)
           
           if [ -z "$APP_BUNDLE" ] || [ ! -d "$APP_BUNDLE" ]; then
-            echo "❌ ERROR: No .app bundle found!"
-            echo "Build directory structure:"
-            find build -type d -maxdepth 5 2>/dev/null | head -30
-            echo "All .app files:"
-            find build -name "*.app" -type d 2>/dev/null
+            echo "❌ ERROR: No .app bundle found in build output!"
+            echo "Searching in build directory:"
+            find ./build -type d -maxdepth 5 | head -30
             exit 1
           fi
           
@@ -345,8 +181,9 @@ jobs:
           mkdir -p Payload
           cp -R "$APP_BUNDLE" Payload/
           zip -r -q app.ipa Payload
+          rm -rf Payload
           
-          # Verify IPA file was created and has content
+          # Verify IPA
           if [ ! -f "app.ipa" ]; then
             echo "❌ ERROR: app.ipa file was not created!"
             exit 1
@@ -356,19 +193,14 @@ jobs:
           echo "📦 IPA file size: $IPA_SIZE bytes"
           
           if [ "$IPA_SIZE" -lt 1000 ]; then
-            echo "❌ ERROR: IPA file is too small ($IPA_SIZE bytes). Build may have failed."
-            echo "Checking Payload directory:"
-            ls -la Payload/ || true
-            echo "Checking app bundle:"
-            ls -la "$APP_BUNDLE" || true
+            echo "❌ ERROR: IPA file is too small ($IPA_SIZE bytes)"
             exit 1
           fi
           
           echo "✅ IPA created successfully: app.ipa ($IPA_SIZE bytes)"
           echo "ipa_path=app.ipa" >> $GITHUB_OUTPUT
-          echo "ipa_size=$IPA_SIZE" >> $GITHUB_OUTPUT
 
-      - name: Upload IPA artifact
+      - name: 📤 Upload IPA artifact
         working-directory: ./mobile-expo/ios
         uses: actions/upload-artifact@v4
         with:
@@ -377,7 +209,7 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      - name: Summary
+      - name: 📋 Summary
         run: |
           echo "## ✅ Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -385,4 +217,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "📦 Download the IPA from the **Artifacts** section above." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "⚠️ **Note:** This IPA is unsigned. You will need to sign it manually with eSign or another tool before installing." >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Note:** This IPA is unsigned. You can sign it manually with eSign or another tool before installing." >> $GITHUB_STEP_SUMMARY
