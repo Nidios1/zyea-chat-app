@@ -126,6 +126,9 @@ jobs:
           echo "Scheme: $SCHEME"
           echo "Target: $TARGET"
           
+          # Clean derived data first
+          rm -rf ./build
+          
           # Build: use -scheme for workspace, -target for project
           if [ -n "$WORKSPACE" ]; then
             echo "Building with workspace and scheme..."
@@ -140,7 +143,11 @@ jobs:
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              ONLY_ACTIVE_ARCH=NO
+              ONLY_ACTIVE_ARCH=NO \
+              SWIFT_VERSION=5.0 \
+              CLANG_ENABLE_MODULES=YES \
+              ENABLE_BITCODE=NO \
+              SWIFT_COMPILATION_MODE=wholemodule
           else
             echo "Building with project and target..."
             xcodebuild build \
@@ -154,7 +161,11 @@ jobs:
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-              ONLY_ACTIVE_ARCH=NO
+              ONLY_ACTIVE_ARCH=NO \
+              SWIFT_VERSION=5.0 \
+              CLANG_ENABLE_MODULES=YES \
+              ENABLE_BITCODE=NO \
+              SWIFT_COMPILATION_MODE=wholemodule
           fi
           
           # Find .app bundle
