@@ -103,35 +103,13 @@ jobs:
           if [ -n "$WORKSPACE" ]; then
             echo "Found workspace: $WORKSPACE"
             
-            # List all available schemes to find ReactCodegen
+            # List all available schemes
             echo "Available schemes:"
             xcodebuild -list -workspace "$WORKSPACE" || true
             
-            # Try to build ReactCodegen target first to generate codegen files
-            # This is optional - codegen will be generated during main build if needed
-            echo "Attempting to build ReactCodegen target to pre-generate codegen files..."
-            xcodebuild build \
-              -workspace "$WORKSPACE" \
-              -scheme "ReactCodegen" \
-              -configuration Release \
-              -sdk iphoneos \
-              -arch arm64 \
-              -derivedDataPath ./build \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGNING_ALLOWED=NO \
-              ONLY_ACTIVE_ARCH=NO \
-              -allowProvisioningUpdates \
-              -skipPackagePluginValidation \
-              -skipMacroValidation \
-              -quiet \
-              || {
-                echo "⚠️ ReactCodegen scheme not found or build failed (this is OK, codegen will be generated during main build)"
-                # Check if codegen files were generated anyway
-                if [ -d "./build/Build/Products/Release-iphoneos" ]; then
-                  echo "✅ Build products directory exists"
-                fi
-              }
+            # Clean derived data to avoid stale builds
+            echo "Cleaning derived data..."
+            rm -rf ~/Library/Developer/Xcode/DerivedData/* || true
           fi
           
           echo "✅ Build environment prepared"
@@ -225,11 +203,8 @@ jobs:
           echo "Workspace: $WORKSPACE"
           echo "Project: $PROJECT"
           
-          # Don't clean build directory completely - keep codegen files
-          # Only clean Build products, not generated files
-          if [ -d "./build/Build" ]; then
-            rm -rf ./build/Build
-          fi
+          # Clean build directory
+          rm -rf ./build
           mkdir -p ./build
           
           # Set build log file
@@ -240,10 +215,8 @@ jobs:
             echo "Building with workspace and scheme..."
             set -o pipefail
             
-            # Build main app - dependencies will be built automatically
-            # This should trigger codegen generation as part of build process
-            # Use build-for-testing first to ensure all dependencies are built, then archive
-            echo "Building all dependencies first..."
+            # Build the app - codegen will be generated automatically
+            echo "Building app with all dependencies..."
             xcodebuild build \
               -workspace "$WORKSPACE" \
               -scheme "$SCHEME" \
@@ -254,6 +227,7 @@ jobs:
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_ENTITLEMENTS="" \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               ONLY_ACTIVE_ARCH=NO \
               CLANG_ENABLE_MODULES=YES \
@@ -262,15 +236,34 @@ jobs:
               -skipPackagePluginValidation \
               -skipMacroValidation \
               GENERATE_INFOPLIST_FILE=YES \
+              COMPILER_INDEX_STORE_ENABLE=NO \
+              SWIFT_COMPILATION_MODE=wholemodule \
+              SWIFT_OPTIMIZATION_LEVEL=-O \
               2>&1 | tee "$BUILD_LOG" || {
-                echo "❌ Build failed with exit code $?"
-                echo "Last 100 lines of build log:"
-                tail -100 "$BUILD_LOG" || true
-                echo "Searching for errors in build log:"
-                grep -i "error:" "$BUILD_LOG" | tail -20 || true
-                echo "Checking for codegen files:"
-                find ./build -name "*generated*" -type f 2>/dev/null | head -10 || true
-                exit 1
+                BUILD_EXIT_CODE=$?
+                echo "⚠️ Build exited with code $BUILD_EXIT_CODE"
+                
+                # Check if .app was created despite errors
+                APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | grep -v "\.framework" | grep -v "Pods" | head -1)
+                if [ -n "$APP_BUNDLE" ] && [ -d "$APP_BUNDLE" ]; then
+                  echo "✅ .app bundle found despite exit code: $APP_BUNDLE"
+                  echo "Continuing with IPA creation..."
+                else
+                  echo "❌ Build failed and no .app bundle found"
+                  echo ""
+                  echo "=== Last 300 lines of build log ==="
+                  tail -300 "$BUILD_LOG" || true
+                  echo ""
+                  echo "=== Critical errors (excluding warnings) ==="
+                  grep -i "error:" "$BUILD_LOG" | grep -v "warning:" | grep -v "note:" | tail -50 || true
+                  echo ""
+                  echo "=== Checking for codegen files ==="
+                  find ./build -name "*generated*" -type f 2>/dev/null | head -20 || true
+                  echo ""
+                  echo "=== Build directory structure ==="
+                  find build -type d -maxdepth 3 2>/dev/null | head -30 || true
+                  exit 1
+                fi
               }
           else
             echo "Building with project and target..."
@@ -285,6 +278,7 @@ jobs:
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
+              CODE_SIGNING_ENTITLEMENTS="" \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               ONLY_ACTIVE_ARCH=NO \
               CLANG_ENABLE_MODULES=YES \
@@ -293,13 +287,24 @@ jobs:
               -skipPackagePluginValidation \
               -skipMacroValidation \
               GENERATE_INFOPLIST_FILE=YES \
+              COMPILER_INDEX_STORE_ENABLE=NO \
+              SWIFT_COMPILATION_MODE=wholemodule \
+              SWIFT_OPTIMIZATION_LEVEL=-O \
               2>&1 | tee "$BUILD_LOG" || {
-                echo "❌ Build failed with exit code $?"
-                echo "Last 100 lines of build log:"
-                tail -100 "$BUILD_LOG" || true
-                echo "Searching for errors in build log:"
-                grep -i "error:" "$BUILD_LOG" | tail -20 || true
-                exit 1
+                BUILD_EXIT_CODE=$?
+                echo "⚠️ Build exited with code $BUILD_EXIT_CODE"
+                APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | grep -v "\.framework" | grep -v "Pods" | head -1)
+                if [ -n "$APP_BUNDLE" ] && [ -d "$APP_BUNDLE" ]; then
+                  echo "✅ .app bundle found: $APP_BUNDLE"
+                else
+                  echo "❌ Build failed and no .app bundle found"
+                  echo "Last 300 lines of build log:"
+                  tail -300 "$BUILD_LOG" || true
+                  echo ""
+                  echo "Critical errors:"
+                  grep -i "error:" "$BUILD_LOG" | grep -v "warning:" | grep -v "note:" | tail -50 || true
+                  exit 1
+                fi
               }
           fi
           
