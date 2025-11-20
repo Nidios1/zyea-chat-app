@@ -63,18 +63,28 @@ jobs:
           # Update repo
           pod repo update || true
           # Install pods
-          pod install --repo-update
+          pod install --repo-update || pod install
+          
+          # Verify pods were installed
+          if [ ! -d "Pods" ]; then
+            echo "❌ ERROR: Pods directory not found after installation"
+            exit 1
+          fi
+          echo "✅ CocoaPods dependencies installed"
 
       - name: Find app target and scheme
         working-directory: ./mobile-expo/ios
         id: find_targets
         run: |
+          echo "🔍 Searching for Xcode project files..."
+          ls -la
+          
           # Find .xcworkspace or .xcodeproj
           WORKSPACE=$(find . -name "*.xcworkspace" -maxdepth 1 | head -1)
           PROJECT=$(find . -name "*.xcodeproj" -maxdepth 1 | head -1)
           
           if [ -n "$WORKSPACE" ]; then
-            echo "Found workspace: $WORKSPACE"
+            echo "✅ Found workspace: $WORKSPACE"
             echo "workspace_path=$WORKSPACE" >> $GITHUB_OUTPUT
             
             # Get scheme (usually same as workspace name without extension)
@@ -89,9 +99,19 @@ jobs:
               grep -v "^Expo$" | \
               grep -v "Test" | \
               head -1 | xargs)
+            
+            if [ -z "$TARGET" ]; then
+              echo "⚠️ Could not find target from workspace, trying schemes..."
+              SCHEMES=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 100 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+              if [ -n "$SCHEMES" ]; then
+                TARGET="$SCHEMES"
+                echo "Using scheme as target: $TARGET"
+              fi
+            fi
+            
             echo "target_name=$TARGET" >> $GITHUB_OUTPUT
           elif [ -n "$PROJECT" ]; then
-            echo "Found project: $PROJECT"
+            echo "✅ Found project: $PROJECT"
             echo "project_path=$PROJECT" >> $GITHUB_OUTPUT
             
             SCHEME=$(basename "$PROJECT" .xcodeproj)
@@ -104,14 +124,27 @@ jobs:
               grep -v "^Expo$" | \
               grep -v "Test" | \
               head -1 | xargs)
+            
+            if [ -z "$TARGET" ]; then
+              TARGET="$SCHEME"
+              echo "Using project name as target: $TARGET"
+            fi
+            
             echo "target_name=$TARGET" >> $GITHUB_OUTPUT
           else
             echo "❌ ERROR: No .xcworkspace or .xcodeproj found!"
+            echo "Current directory contents:"
+            ls -la
             exit 1
           fi
           
           echo "📱 Scheme: $SCHEME"
           echo "📱 Target: $TARGET"
+          
+          if [ -z "$SCHEME" ] || [ -z "$TARGET" ]; then
+            echo "❌ ERROR: Could not determine scheme or target"
+            exit 1
+          fi
 
       - name: Build IPA (unsigned)
         working-directory: ./mobile-expo/ios
@@ -125,13 +158,20 @@ jobs:
           echo "🔨 Building unsigned IPA..."
           echo "Scheme: $SCHEME"
           echo "Target: $TARGET"
+          echo "Workspace: $WORKSPACE"
+          echo "Project: $PROJECT"
           
           # Clean derived data first
           rm -rf ./build
+          mkdir -p ./build
+          
+          # Set build log file
+          BUILD_LOG="./build/xcodebuild.log"
           
           # Build: use -scheme for workspace, -target for project
           if [ -n "$WORKSPACE" ]; then
             echo "Building with workspace and scheme..."
+            set -o pipefail
             xcodebuild build \
               -workspace "$WORKSPACE" \
               -scheme "$SCHEME" \
@@ -144,17 +184,22 @@ jobs:
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               ONLY_ACTIVE_ARCH=NO \
-              SWIFT_VERSION=5.9 \
-              SWIFT_OPTIMIZATION_LEVEL=O \
               CLANG_ENABLE_MODULES=YES \
               ENABLE_BITCODE=NO \
-              SWIFT_COMPILATION_MODE=wholemodule \
-              SWIFT_ACTIVE_COMPILATION_CONDITIONS="\$(inherited)" \
               -allowProvisioningUpdates \
               -skipPackagePluginValidation \
-              -skipMacroValidation
+              -skipMacroValidation \
+              2>&1 | tee "$BUILD_LOG" || {
+                echo "❌ Build failed with exit code $?"
+                echo "Last 100 lines of build log:"
+                tail -100 "$BUILD_LOG" || true
+                echo "Searching for errors in build log:"
+                grep -i "error:" "$BUILD_LOG" | tail -20 || true
+                exit 1
+              }
           else
             echo "Building with project and target..."
+            set -o pipefail
             xcodebuild build \
               -project "$PROJECT" \
               -target "$TARGET" \
@@ -167,16 +212,22 @@ jobs:
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               ONLY_ACTIVE_ARCH=NO \
-              SWIFT_VERSION=5.9 \
-              SWIFT_OPTIMIZATION_LEVEL=O \
               CLANG_ENABLE_MODULES=YES \
               ENABLE_BITCODE=NO \
-              SWIFT_COMPILATION_MODE=wholemodule \
-              SWIFT_ACTIVE_COMPILATION_CONDITIONS="\$(inherited)" \
               -allowProvisioningUpdates \
               -skipPackagePluginValidation \
-              -skipMacroValidation
+              -skipMacroValidation \
+              2>&1 | tee "$BUILD_LOG" || {
+                echo "❌ Build failed with exit code $?"
+                echo "Last 100 lines of build log:"
+                tail -100 "$BUILD_LOG" || true
+                echo "Searching for errors in build log:"
+                grep -i "error:" "$BUILD_LOG" | tail -20 || true
+                exit 1
+              }
           fi
+          
+          echo "✅ Build completed successfully"
           
           # Find .app bundle
           APP_BUNDLE=$(find build -name "*.app" -type d 2>/dev/null | \
@@ -187,7 +238,9 @@ jobs:
           if [ -z "$APP_BUNDLE" ] || [ ! -d "$APP_BUNDLE" ]; then
             echo "❌ ERROR: No .app bundle found!"
             echo "Build directory structure:"
-            find build -type d -maxdepth 3 2>/dev/null | head -20
+            find build -type d -maxdepth 5 2>/dev/null | head -30
+            echo "All .app files:"
+            find build -name "*.app" -type d 2>/dev/null
             exit 1
           fi
           
