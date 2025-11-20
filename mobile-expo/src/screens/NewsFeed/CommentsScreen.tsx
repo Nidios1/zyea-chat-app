@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   Platform,
   Keyboard,
+  Pressable,
+  Text as RNText,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, TextInput, Avatar } from 'react-native-paper';
@@ -19,14 +21,263 @@ import { PWATheme } from '../../config/PWATheme';
 import { useTabBar } from '../../contexts/TabBarContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getInitials, getImageURL, getAvatarURL } from '../../utils/imageUtils';
-import ExpandableText from '../../components/Common/ExpandableText';
 import PostImagesCarousel from '../../components/NewsFeed/PostImagesCarousel';
 import CommentItem from '../../components/NewsFeed/CommentItem';
 import CommentComposePrompt from '../../components/NewsFeed/CommentComposePrompt';
+import { parseTextWithUrls } from '../../utils/textUtils';
+import { Linking } from 'react-native';
+import { ShowMoreTextButton, MAX_POST_LINES } from '../../components/NewsFeed/ShowMoreTextButton';
+import { LayoutAnimation } from 'react-native';
 
 type CommentsScreenRouteParams = {
   postId: string | number;
   postData?: any;
+};
+
+// PostContent component - Giống PostsListScreen
+const PostContent = React.memo(({ 
+  content, 
+  styles, 
+  colors,
+  countLines,
+}: { 
+  content: string;
+  styles: ReturnType<typeof createStyles>;
+  colors: any;
+  countLines: (text: string | undefined) => number;
+}) => {
+  const shouldLimitInitially = React.useMemo(() => {
+    if (!content || content.trim().length === 0) return false;
+    const newlineCount = countLines(content);
+    const isLongText = content.length > 100;
+    return newlineCount >= 1 || isLongText;
+  }, [content, countLines]);
+  
+  const [isExpanded, setIsExpanded] = React.useState(false);
+  const [actualLineCount, setActualLineCount] = React.useState<number | null>(null);
+  const [fullLineCount, setFullLineCount] = React.useState<number | null>(null);
+  const [hasMeasured, setHasMeasured] = React.useState(false);
+  
+  React.useEffect(() => {
+    setIsExpanded(false);
+    setActualLineCount(null);
+    setFullLineCount(null);
+    setHasMeasured(false);
+  }, [content]);
+  
+  const onTextLayout = React.useCallback((event: any) => {
+    const { lines } = event.nativeEvent;
+    if (lines && lines.length > 0) {
+      const lineCount = lines.length;
+      if (!isExpanded) {
+        if (!hasMeasured) {
+          setActualLineCount(lineCount);
+          setHasMeasured(true);
+          if (!shouldLimitInitially) {
+            setIsExpanded(true);
+          }
+        }
+      } else {
+        setFullLineCount(lineCount);
+      }
+    }
+  }, [isExpanded, shouldLimitInitially, hasMeasured]);
+  
+  const onPressToggle = React.useCallback(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsExpanded(prev => !prev);
+  }, []);
+  
+  const shouldLimitLines = !isExpanded && shouldLimitInitially;
+  const isTextLong = fullLineCount !== null 
+    ? fullLineCount > MAX_POST_LINES 
+    : (actualLineCount !== null ? actualLineCount >= MAX_POST_LINES : shouldLimitInitially);
+  const shouldShowMore = shouldLimitLines && isTextLong;
+  const shouldShowLess = isExpanded && shouldLimitInitially && (
+    (isExpanded ? (fullLineCount || actualLineCount) : actualLineCount) === null || 
+    (isExpanded ? (fullLineCount || actualLineCount) : actualLineCount)! > MAX_POST_LINES
+  );
+  const canToggle = shouldShowMore || shouldShowLess;
+  
+  const renderTextWithLinks = React.useCallback(() => {
+    const parts = parseTextWithUrls(content);
+    const handleLinkPress = async (url: string) => {
+      try {
+        let formattedUrl = url.trim();
+        if (!formattedUrl.match(/^https?:\/\//i)) {
+          formattedUrl = 'https://' + formattedUrl;
+        }
+        await Linking.openURL(formattedUrl);
+      } catch (error) {}
+    };
+
+    const parseHashtagsAndMentions = (text: string): Array<{text: string, type: 'text' | 'hashtag' | 'mention', start: number, end: number}> => {
+      const result: Array<{text: string, type: 'text' | 'hashtag' | 'mention', start: number, end: number}> = [];
+      let lastIndex = 0;
+      const hashtagRegex = /#[\w\u00C0-\u1EF9]+/g;
+      const mentionRegex = /@[\w\u00C0-\u1EF9]+/g;
+      const allMatches: Array<{match: RegExpMatchArray, type: 'hashtag' | 'mention'}> = [];
+      
+      let match;
+      while ((match = hashtagRegex.exec(text)) !== null) {
+        allMatches.push({ match, type: 'hashtag' });
+      }
+      while ((match = mentionRegex.exec(text)) !== null) {
+        allMatches.push({ match, type: 'mention' });
+      }
+      allMatches.sort((a, b) => a.match.index! - b.match.index!);
+      
+      allMatches.forEach(({ match, type }) => {
+        const start = match.index!;
+        const end = start + match[0].length;
+        if (start > lastIndex) {
+          result.push({ text: text.substring(lastIndex, start), type: 'text', start: lastIndex, end: start });
+        }
+        result.push({ text: match[0], type, start, end });
+        lastIndex = end;
+      });
+      
+      if (lastIndex < text.length) {
+        result.push({ text: text.substring(lastIndex), type: 'text', start: lastIndex, end: text.length });
+      }
+      return result.length > 0 ? result : [{ text, type: 'text', start: 0, end: text.length }];
+    };
+
+    const renderRichText = () => {
+      if (parts.length === 1 && parts[0].type === 'text') {
+        const richParts = parseHashtagsAndMentions(content);
+        if (richParts.length === 1 && richParts[0].type === 'text') {
+          return (
+            <Text
+              style={[styles.postContent, { color: colors.text }]}
+              numberOfLines={shouldLimitLines ? MAX_POST_LINES : undefined}
+              ellipsizeMode="tail"
+              onTextLayout={onTextLayout}
+            >
+              {content}
+            </Text>
+          );
+        }
+        return (
+          <Text
+            style={[styles.postContent, { color: colors.text }]}
+            numberOfLines={shouldLimitLines ? MAX_POST_LINES : undefined}
+            ellipsizeMode="tail"
+            onTextLayout={onTextLayout}
+          >
+            {richParts.map((part, index) => {
+              if (part.type === 'hashtag' || part.type === 'mention') {
+                return (
+                  <Text
+                    key={index}
+                    style={[styles.postContent, { color: '#1877F2', fontWeight: '600' }]}
+                    suppressHighlighting={true}
+                  >
+                    {part.text}
+                  </Text>
+                );
+              }
+              return <Text key={index}>{part.text}</Text>;
+            })}
+          </Text>
+        );
+      }
+
+      const mergedParts: Array<{text: string, type: 'text' | 'url' | 'hashtag' | 'mention', url?: string}> = [];
+      parts.forEach(part => {
+        if (part.type === 'url') {
+          mergedParts.push(part);
+        } else {
+          const richParts = parseHashtagsAndMentions(part.text);
+          richParts.forEach(rp => {
+            if (rp.type === 'text') {
+              mergedParts.push({ text: rp.text, type: 'text' });
+            } else {
+              mergedParts.push({ text: rp.text, type: rp.type });
+            }
+          });
+        }
+      });
+
+      return (
+        <Text
+          style={[styles.postContent, { color: colors.text }]}
+          numberOfLines={shouldLimitLines ? MAX_POST_LINES : undefined}
+          ellipsizeMode="tail"
+          onTextLayout={onTextLayout}
+        >
+          {mergedParts.map((part, index) => {
+            if (part.type === 'url' && part.url) {
+              return (
+                <Text
+                  key={index}
+                  style={[styles.postContent, { color: '#1877F2', fontWeight: '600', textDecorationLine: 'none' }]}
+                  onPress={() => handleLinkPress(part.url!)}
+                  suppressHighlighting={true}
+                >
+                  {part.text}
+                </Text>
+              );
+            }
+            if (part.type === 'hashtag' || part.type === 'mention') {
+              return (
+                <Text
+                  key={index}
+                  style={[styles.postContent, { color: '#1877F2', fontWeight: '600' }]}
+                  suppressHighlighting={true}
+                >
+                  {part.text}
+                </Text>
+              );
+            }
+            return <Text key={index}>{part.text}</Text>;
+          })}
+        </Text>
+      );
+    };
+
+    return renderRichText();
+  }, [content, colors.text, shouldLimitLines, onTextLayout, styles.postContent]);
+
+  return (
+    <View style={styles.postContentWrapper}>
+      <Pressable
+        onPress={canToggle ? onPressToggle : undefined}
+        disabled={!canToggle}
+        style={{ flex: 1 }}
+        hitSlop={{ top: 5, bottom: 5, left: 0, right: 0 }}
+      >
+        {renderTextWithLinks()}
+      </Pressable>
+      {shouldShowMore && (
+        <View style={{ marginTop: 4 }}>
+          <ShowMoreTextButton
+            onPress={onPressToggle}
+            style={styles.postContent}
+            isExpanded={false}
+          />
+        </View>
+      )}
+      {shouldShowLess && (
+        <View style={{ marginTop: 4 }}>
+          <ShowMoreTextButton
+            onPress={onPressToggle}
+            style={styles.postContent}
+            isExpanded={true}
+          />
+        </View>
+      )}
+    </View>
+  );
+});
+
+PostContent.displayName = 'PostContent';
+
+// Helper function to count lines
+const countLines = (text: string | undefined): number => {
+  if (!text) return 0;
+  const matches = text.match(/\n/g);
+  return matches ? matches.length : 0;
 };
 
 // Format time ago helper
@@ -113,17 +364,24 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
   },
   postContainer: {
     backgroundColor: colors.surface,
-  },
-  postContent: {
-    fontSize: 15,
-    color: colors.text,
-    lineHeight: 20,
     paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 12,
+    paddingBottom: 8,
+  },
+  postContentWrapper: {
+    marginTop: 0,
+    marginBottom: 4,
+  },
+  postContent: {
+    fontSize: 16, // Giống PostsListScreen
+    lineHeight: 24, // Giống PostsListScreen
+    letterSpacing: -0.1,
+    fontWeight: '400',
   },
   postImages: {
     width: '100%',
+    marginTop: 8,
+    marginBottom: 4,
   },
   commentsList: {
     flexGrow: 1,
@@ -477,19 +735,22 @@ const CommentsScreen: React.FC = () => {
     return (
       <View style={styles.postContainer}>
         {currentPost.content && (
-          <ExpandableText
-            text={currentPost.content}
-            numberOfLines={3}
-            color={colors.text}
-            backgroundColor={colors.surface}
-            linkColor={colors.primary}
-            charLimitFallback={200}
-            gradient={false}
+          <PostContent
+            content={currentPost.content}
+            styles={styles}
+            colors={colors}
+            countLines={countLines}
           />
         )}
         {postImages.length > 0 && (
           <View style={styles.postImages}>
-            <PostImagesCarousel images={postImages} />
+            <PostImagesCarousel 
+              images={postImages}
+              onPressImage={(idx) => {
+                // TODO: Open full screen image viewer
+                console.log('Open image:', idx);
+              }}
+            />
           </View>
         )}
       </View>
