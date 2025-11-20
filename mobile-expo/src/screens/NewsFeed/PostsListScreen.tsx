@@ -528,26 +528,29 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     paddingTop: 0,
     paddingBottom: 20,
   },
-  // Social-app-main style: Simple border top, no card
+  // Facebook style: Nội dung bắt đầu từ bên trái
   postContainer: {
-    paddingTop: 10,
-    paddingRight: 15,
-    paddingBottom: 5,
-    paddingLeft: 15, // Căn đều với paddingRight để post không bị đẩy sang phải
-    backgroundColor: 'transparent', // Xóa nền trong bài post
+    paddingTop: 12,
+    paddingRight: 16,
+    paddingBottom: 8,
+    paddingLeft: 0, // Bắt đầu từ bên trái giống Facebook
+    backgroundColor: 'transparent',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border || (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)'),
   },
-  // Layout: row with avatar left, content right (like social-app-main)
+  // Layout: row with avatar left, content right (Facebook style)
   postLayout: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12, // Tăng gap giữa avatar và content
+    paddingLeft: 16, // Padding chỉ cho layout, không cho container
+    paddingRight: 0,
   },
   layoutAvi: {
-    // Xóa paddingLeft để padding đều nhau
+    // Avatar container - không có padding
   },
   layoutContent: {
     flex: 1,
+    paddingRight: 0, // Nội dung bắt đầu từ bên trái
   },
   postHeader: {
     flexDirection: 'row',
