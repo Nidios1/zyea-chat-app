@@ -9,17 +9,12 @@ on:
       - 'mobile-expo/**'
       - '.github/workflows/build-ipa-unsigned.yml'
   workflow_dispatch:
-    inputs:
-      profile:
-        description: 'Build profile (unsigned, preview, production)'
-        required: false
-        default: 'unsigned'
 
 jobs:
   build-ipa:
     name: Build Unsigned IPA
     runs-on: macos-14
-    timeout-minutes: 120
+    timeout-minutes: 90
     
     steps:
       - name: ⬇️ Checkout repository
@@ -41,172 +36,22 @@ jobs:
       - name: ⚙️ Install dependencies
         working-directory: ./mobile-expo
         run: |
-          echo "📦 Installing dependencies..."
           npm install --legacy-peer-deps || npm install
-          echo "✅ Dependencies installed"
 
-      - name: ☕️ Setup CocoaPods
-        run: |
-          echo "☕️ Setting up CocoaPods..."
-          sudo gem install cocoapods
-          pod --version
-
-      - name: 🔨 Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
-
-      - name: 🏗️ Generate iOS project
+      - name: 🏗️ Build IPA with EAS (unsigned)
         working-directory: ./mobile-expo
         run: |
-          echo "🔨 Generating iOS project with Expo..."
-          npx expo prebuild --platform ios --clean
-          
-          if [ ! -d "ios" ]; then
-            echo "❌ ERROR: iOS directory not found after prebuild"
-            exit 1
-          fi
-          echo "✅ iOS project generated successfully"
-
-      - name: 📦 Install CocoaPods dependencies
-        working-directory: ./mobile-expo/ios
-        run: |
-          echo "📦 Installing CocoaPods dependencies..."
-          pod install --repo-update || pod install
-          
-          if [ ! -d "Pods" ]; then
-            echo "❌ ERROR: Pods directory not found after installation"
-            exit 1
-          fi
-          echo "✅ CocoaPods dependencies installed"
-
-      - name: 🔍 Find Xcode project files
-        working-directory: ./mobile-expo/ios
-        id: find_project
-        run: |
-          WORKSPACE=$(find . -name "*.xcworkspace" -maxdepth 1 | head -1)
-          PROJECT=$(find . -name "*.xcodeproj" -maxdepth 1 | head -1)
-          
-          if [ -n "$WORKSPACE" ]; then
-            echo "✅ Found workspace: $WORKSPACE"
-            echo "workspace_path=$WORKSPACE" >> $GITHUB_OUTPUT
-            SCHEME=$(basename "$WORKSPACE" .xcworkspace)
-            echo "scheme_name=$SCHEME" >> $GITHUB_OUTPUT
-          elif [ -n "$PROJECT" ]; then
-            echo "✅ Found project: $PROJECT"
-            echo "project_path=$PROJECT" >> $GITHUB_OUTPUT
-            SCHEME=$(basename "$PROJECT" .xcodeproj)
-            echo "scheme_name=$SCHEME" >> $GITHUB_OUTPUT
-          else
-            echo "❌ ERROR: No .xcworkspace or .xcodeproj found!"
-            ls -la
-            exit 1
-          fi
-          
-          echo "📱 Scheme: $SCHEME"
-
-      - name: 🏗️ Build IPA (unsigned)
-        working-directory: ./mobile-expo/ios
-        id: build
-        run: |
-          WORKSPACE="${{ steps.find_project.outputs.workspace_path }}"
-          PROJECT="${{ steps.find_project.outputs.project_path }}"
-          SCHEME="${{ steps.find_project.outputs.scheme_name }}"
-          
-          echo "🔨 Building unsigned IPA..."
-          echo "Scheme: $SCHEME"
-          
-          # Clean build directory
-          rm -rf ./build
-          mkdir -p ./build
-          
-          # Build the app (using build instead of archive for unsigned)
-          if [ -n "$WORKSPACE" ]; then
-            echo "Building with workspace..."
-            xcodebuild build \
-              -workspace "$WORKSPACE" \
-              -scheme "$SCHEME" \
-              -configuration Release \
-              -sdk iphoneos \
-              -arch arm64 \
-              -derivedDataPath ./build \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGNING_ALLOWED=NO \
-              ENABLE_BITCODE=NO \
-              -allowProvisioningUpdates \
-              -skipPackagePluginValidation \
-              -skipMacroValidation \
-              COMPILER_INDEX_STORE_ENABLE=NO \
-              SWIFT_COMPILATION_MODE=wholemodule \
-              SWIFT_OPTIMIZATION_LEVEL=-O \
-              ONLY_ACTIVE_ARCH=NO
-          else
-            echo "Building with project..."
-            xcodebuild build \
-              -project "$PROJECT" \
-              -scheme "$SCHEME" \
-              -configuration Release \
-              -sdk iphoneos \
-              -arch arm64 \
-              -derivedDataPath ./build \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGNING_ALLOWED=NO \
-              ENABLE_BITCODE=NO \
-              -allowProvisioningUpdates \
-              -skipPackagePluginValidation \
-              -skipMacroValidation \
-              COMPILER_INDEX_STORE_ENABLE=NO \
-              SWIFT_COMPILATION_MODE=wholemodule \
-              SWIFT_OPTIMIZATION_LEVEL=-O \
-              ONLY_ACTIVE_ARCH=NO
-          fi
-          
-          # Find .app bundle in build output
-          APP_BUNDLE=$(find ./build -name "*.app" -type d 2>/dev/null | \
-            grep -v "\.framework" | \
-            grep -v "Pods" | \
-            head -1)
-          
-          if [ -z "$APP_BUNDLE" ] || [ ! -d "$APP_BUNDLE" ]; then
-            echo "❌ ERROR: No .app bundle found in build output!"
-            echo "Searching in build directory:"
-            find ./build -type d -maxdepth 5 | head -30
-            exit 1
-          fi
-          
-          echo "✅ Found .app bundle: $APP_BUNDLE"
-          
-          # Create IPA
-          mkdir -p Payload
-          cp -R "$APP_BUNDLE" Payload/
-          zip -r -q app.ipa Payload
-          rm -rf Payload
-          
-          # Verify IPA
-          if [ ! -f "app.ipa" ]; then
-            echo "❌ ERROR: app.ipa file was not created!"
-            exit 1
-          fi
-          
-          IPA_SIZE=$(stat -f%z app.ipa 2>/dev/null || stat -c%s app.ipa 2>/dev/null || echo "0")
-          echo "📦 IPA file size: $IPA_SIZE bytes"
-          
-          if [ "$IPA_SIZE" -lt 1000 ]; then
-            echo "❌ ERROR: IPA file is too small ($IPA_SIZE bytes)"
-            exit 1
-          fi
-          
-          echo "✅ IPA created successfully: app.ipa ($IPA_SIZE bytes)"
-          echo "ipa_path=app.ipa" >> $GITHUB_OUTPUT
+          eas build --platform ios \
+            --profile unsigned \
+            --local \
+            --non-interactive \
+            --output build.ipa
 
       - name: 📤 Upload IPA artifact
-        working-directory: ./mobile-expo/ios
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa-unsigned
-          path: app.ipa
+          path: mobile-expo/build.ipa
           retention-days: 30
           if-no-files-found: error
 
@@ -218,4 +63,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "📦 Download the IPA from the **Artifacts** section above." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "⚠️ **Note:** This IPA is unsigned. You can sign it manually with eSign or another tool before installing." >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Note:** This IPA is unsigned. You can sign it manually with eSign before installing." >> $GITHUB_STEP_SUMMARY
