@@ -209,7 +209,7 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
     borderRadius: 20,
     paddingLeft: 12,
-    paddingRight: 8,
+    paddingRight: 4,
     paddingVertical: 8,
     minHeight: 36,
     maxHeight: 100,
@@ -221,15 +221,18 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     color: colors.text,
     padding: 0,
     margin: 0,
-    paddingRight: 4,
+    paddingRight: 8,
+    minHeight: 20,
   },
   inputIcons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 0,
+    paddingLeft: 4,
   },
   inputIcon: {
     padding: 6,
+    marginHorizontal: 2,
   },
   sendButton: {
     paddingHorizontal: 12,
@@ -651,7 +654,43 @@ const CommentsScreen: React.FC = () => {
                 underlineColorAndroid="transparent"
                 activeUnderlineColor="transparent"
               />
+              {/* Icons bên phải khi chưa có text - giống Facebook */}
+              {!text.trim() && (
+                <View style={styles.inputIcons}>
+                  <TouchableOpacity 
+                    style={styles.inputIcon}
+                    onPress={() => {
+                      // TODO: Open emoji picker
+                      console.log('Emoji picker');
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialCommunityIcons name="emoticon-outline" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.inputIcon}
+                    onPress={() => {
+                      // TODO: Open GIF picker
+                      console.log('GIF picker');
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialCommunityIcons name="gif" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.inputIcon}
+                    onPress={() => {
+                      // TODO: Open sticker picker
+                      console.log('Sticker picker');
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialCommunityIcons name="sticker-emoji" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
+            {/* Nút Gửi khi có text */}
             {text.trim() && (
               <TouchableOpacity
                 style={styles.sendButton}
