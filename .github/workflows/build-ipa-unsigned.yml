@@ -72,6 +72,47 @@ jobs:
           fi
           echo "✅ CocoaPods dependencies installed"
 
+      - name: Prepare build environment
+        working-directory: ./mobile-expo/ios
+        run: |
+          echo "🔨 Preparing build environment..."
+          # Create build directory
+          mkdir -p ./build
+          
+          # Find workspace
+          WORKSPACE=$(find . -name "*.xcworkspace" -maxdepth 1 | head -1)
+          
+          if [ -n "$WORKSPACE" ]; then
+            echo "Found workspace: $WORKSPACE"
+            
+            # Try to build ReactCodegen target first to generate codegen files
+            echo "Building ReactCodegen target to generate codegen files..."
+            xcodebuild build \
+              -workspace "$WORKSPACE" \
+              -scheme "ReactCodegen" \
+              -configuration Release \
+              -sdk iphoneos \
+              -arch arm64 \
+              -derivedDataPath ./build \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              ONLY_ACTIVE_ARCH=NO \
+              -allowProvisioningUpdates \
+              -skipPackagePluginValidation \
+              -skipMacroValidation \
+              || {
+                echo "⚠️ ReactCodegen build had issues, but continuing..."
+                # Check if codegen files were generated anyway
+                if [ -d "./build/generated/ios" ]; then
+                  echo "✅ Codegen files directory exists"
+                  ls -la ./build/generated/ios/ || true
+                fi
+              }
+          fi
+          
+          echo "✅ Build environment prepared"
+
       - name: Find app target and scheme
         working-directory: ./mobile-expo/ios
         id: find_targets
@@ -161,8 +202,11 @@ jobs:
           echo "Workspace: $WORKSPACE"
           echo "Project: $PROJECT"
           
-          # Clean derived data first
-          rm -rf ./build
+          # Don't clean build directory completely - keep codegen files
+          # Only clean Build products, not generated files
+          if [ -d "./build/Build" ]; then
+            rm -rf ./build/Build
+          fi
           mkdir -p ./build
           
           # Set build log file
@@ -172,6 +216,9 @@ jobs:
           if [ -n "$WORKSPACE" ]; then
             echo "Building with workspace and scheme..."
             set -o pipefail
+            
+            # Build main app - dependencies will be built automatically
+            # This should trigger codegen generation as part of build process
             xcodebuild build \
               -workspace "$WORKSPACE" \
               -scheme "$SCHEME" \
@@ -195,6 +242,8 @@ jobs:
                 tail -100 "$BUILD_LOG" || true
                 echo "Searching for errors in build log:"
                 grep -i "error:" "$BUILD_LOG" | tail -20 || true
+                echo "Checking for codegen files:"
+                find ./build -name "*generated*" -type f 2>/dev/null | head -10 || true
                 exit 1
               }
           else
