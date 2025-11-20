@@ -21,56 +21,113 @@ const isFormData = (data: any): boolean => {
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000, // 30 seconds timeout (increased from 15s for better network reliability)
+  timeout: 15000, // 15 seconds timeout (optimized for faster response)
   // Don't set default Content-Type here - set it conditionally in interceptor
+  // Enable HTTP keep-alive for better connection reuse
+  httpAgent: undefined, // Let axios use default agent
+  httpsAgent: undefined,
 });
 
 apiClient.interceptors.request.use(
   async (config) => {
-    // NOTE: This interceptor may show "property is not configurable" error in Expo Go
-    // but works fine in production builds (IPA). This is a known Expo Go limitation.
+    // Fix for Expo Go: Create a new config object to avoid "property is not configurable" errors
+    // This is the safest approach for Expo Go compatibility
     
-    // Initialize headers as plain object to avoid non-configurable property issues
-    const headers: Record<string, string> = {};
-    
-    // Copy existing headers if they exist (safe copy)
-    if (config.headers) {
-      try {
-        // Try to get headers as object
+    try {
+      // Get auth token
+      const token = await getStoredToken();
+      
+      // Create a completely new headers object (plain object, not Headers instance)
+      const headers: Record<string, string> = {};
+      
+      // Safely copy existing headers if they exist
+      if (config.headers) {
         const existingHeaders = config.headers as any;
-        if (typeof existingHeaders === 'object') {
-          Object.keys(existingHeaders).forEach(key => {
-            const value = existingHeaders[key];
-            if (value !== undefined && value !== null) {
-              headers[key] = String(value);
+        if (existingHeaders && typeof existingHeaders === 'object') {
+          // Check if it's a Headers instance (has get method)
+          if (typeof existingHeaders.get === 'function') {
+            // It's a Headers instance, use get method
+            try {
+              const keys = Array.from(existingHeaders.keys?.() || []);
+              for (const key of keys) {
+                const value = existingHeaders.get(key);
+                if (value !== undefined && value !== null) {
+                  headers[key] = String(value);
+                }
+              }
+            } catch (e) {
+              // If iterating fails, try to get common headers
+              try {
+                const commonHeaders = ['Content-Type', 'Accept', 'User-Agent'];
+                for (const key of commonHeaders) {
+                  const value = existingHeaders.get?.(key);
+                  if (value) headers[key] = String(value);
+                }
+              } catch (e2) {
+                // Ignore
+              }
             }
-          });
+          } else {
+            // It's a plain object, copy safely
+            const keys = Object.keys(existingHeaders);
+            for (const key of keys) {
+              try {
+                const value = existingHeaders[key];
+                if (value !== undefined && value !== null) {
+                  headers[key] = String(value);
+                }
+              } catch (e) {
+                // Skip non-configurable properties
+                continue;
+              }
+            }
+          }
+        }
+      }
+      
+      // Add auth token if available
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+      
+      // For FormData (React Native), don't set Content-Type - let axios set it automatically
+      // For other requests, set Content-Type to application/json
+      if (!isFormData(config.data)) {
+        // Only set Content-Type if it's not already set
+        if (!headers['Content-Type'] && !headers['content-type']) {
+          headers['Content-Type'] = 'application/json';
+        }
+      }
+      // For FormData, don't set Content-Type - axios will handle it automatically with boundary
+      
+      // Create a new config object with the new headers (this is the key fix for Expo Go)
+      return {
+        ...config,
+        headers,
+      };
+      
+    } catch (error) {
+      // If header modification fails completely, return original config
+      // At least try to add auth token if possible
+      try {
+        const token = await getStoredToken();
+        if (token) {
+          // Create new config with just the auth header added
+          return {
+            ...config,
+            headers: {
+              ...(config.headers as any || {}),
+              Authorization: `Bearer ${token}`,
+            },
+          };
         }
       } catch (e) {
-        // If copying fails, continue with empty headers
+        // If all else fails, return original config
+        console.warn('Failed to set headers in request interceptor:', e);
       }
+      
+      return config;
     }
-
-    // Add auth token
-    const token = await getStoredToken();
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-    
-    // For FormData (React Native), don't set Content-Type - let axios set it automatically
-    // For other requests, set Content-Type to application/json
-    if (!isFormData(config.data)) {
-      // Only set Content-Type if it's not already set
-      if (!headers['Content-Type'] && !headers['content-type']) {
-        headers['Content-Type'] = 'application/json';
-      }
-    }
-    // For FormData, don't set Content-Type - axios will handle it automatically with boundary
-    
-    // Assign the new headers object (this avoids modifying non-configurable properties)
-    config.headers = headers as any;
-    
-    return config;
   },
   (error) => {
     return Promise.reject(error);
@@ -79,9 +136,28 @@ apiClient.interceptors.request.use(
 
 apiClient.interceptors.response.use(
   (response) => {
+    // Log response for debugging active-sessions endpoint
+    if (response.config?.url?.includes('active-sessions')) {
+      console.log('🌐 API Response for active-sessions:', {
+        status: response.status,
+        dataType: typeof response.data,
+        isArray: Array.isArray(response.data),
+        data: response.data
+      });
+    }
     return response;
   },
   async (error) => {
+    // Log error for debugging active-sessions endpoint
+    if (error.config?.url?.includes('active-sessions')) {
+      console.error('🌐 API Error for active-sessions:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        dataType: typeof error.response?.data,
+        data: error.response?.data,
+        message: error.message
+      });
+    }
     if (error.response?.status === 401) {
       // Handle logout if needed
     }
@@ -121,6 +197,20 @@ export const authAPI = {
 
   qrLoginStatus: (qrToken: string) =>
     apiClient.post('/auth/qr-login-status', { qrToken }),
+
+  // Get active sessions/devices
+  getActiveSessions: () => {
+    console.log('🌐 API Call: GET /auth/active-sessions');
+    return apiClient.get('/auth/active-sessions');
+  },
+
+  // Logout from a specific session
+  logoutSession: (sessionId: string) =>
+    apiClient.post('/auth/logout-session', { sessionId }),
+
+  // Logout from all other sessions
+  logoutAllOtherSessions: () =>
+    apiClient.post('/auth/logout-all-other-sessions'),
 };
 
 export const usersAPI = {
@@ -153,6 +243,9 @@ export const chatAPI = {
   createConversation: (userId: string) =>
     apiClient.post('/chat/conversations', { userId }),
 
+  createGroupConversation: (name: string, participantIds: string[]) =>
+    apiClient.post('/chat/conversations/group', { name, participantIds }),
+
   markAsRead: (messageId: string) =>
     apiClient.put(`/chat/messages/${messageId}/read`),
 
@@ -170,6 +263,30 @@ export const chatAPI = {
 
   deleteMessage: (messageId: string, deleteForEveryone = false) =>
     apiClient.delete(`/chat/messages/${messageId}${deleteForEveryone ? '?deleteForEveryone=true' : ''}`),
+
+  // Mark conversation as unread
+  markAsUnread: (conversationId: string) =>
+    apiClient.put(`/chat/conversations/${conversationId}/unread`, { unread: true }),
+
+  // Pin/unpin conversation
+  pinConversation: (conversationId: string, pinned: boolean) =>
+    apiClient.post(`/chat/conversations/${conversationId}/pin`, { pinned }),
+
+  // Delete conversation (soft delete - hide for user)
+  deleteConversation: (conversationId: string) =>
+    apiClient.delete(`/chat/conversations/${conversationId}`),
+
+  // Mute conversation notifications
+  muteConversation: (conversationId: string, muted: boolean) =>
+    apiClient.post(`/chat/conversations/${conversationId}/mute`, { muted }),
+
+  // Get participants of a conversation
+  getParticipants: (conversationId: string) =>
+    apiClient.get(`/chat/conversations/${conversationId}/participants`),
+
+  // Add participants to a group conversation
+  addParticipants: (conversationId: string, participantIds: string[]) =>
+    apiClient.post(`/chat/conversations/${conversationId}/participants`, { participantIds }),
 };
 
 export const friendsAPI = {
@@ -225,7 +342,28 @@ export const friendsAPI = {
 };
 
 export const notificationsAPI = {
+  // System notifications
+  getSystemNotifications: (category = '', page = 1, limit = 50) => {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    return apiClient.get(`/notifications/system?${params.toString()}`);
+  },
+  
+  getSystemNotificationsUnreadCount: () =>
+    apiClient.get('/notifications/system/unread-count'),
+  
+  markSystemNotificationAsRead: (notificationId: string) =>
+    apiClient.post(`/notifications/system/${notificationId}/read`),
+  
+  markAllSystemNotificationsAsRead: () =>
+    apiClient.post('/notifications/system/read-all'),
+  
+  // Regular notifications
   getNotifications: () => apiClient.get('/notifications'),
+
+  getUnreadCount: () => apiClient.get('/notifications/unread-count'),
 
   markAsRead: (notificationId: string) =>
     apiClient.put(`/notifications/${notificationId}/read`),
@@ -248,14 +386,17 @@ export const newsfeedAPI = {
   createPost: (content: string, images?: string[], videoUrl?: string) =>
     apiClient.post('/newsfeed/posts', { content, images, videoUrl }),
 
-  likePost: (postId: string) =>
-    apiClient.post(`/newsfeed/posts/${postId}/like`),
+  likePost: (postId: string, reactionType?: string) =>
+    apiClient.post(`/newsfeed/posts/${postId}/like`, { reactionType: reactionType || 'like' }),
 
   unlikePost: (postId: string) =>
     apiClient.delete(`/newsfeed/posts/${postId}/like`),
 
-  commentPost: (postId: string, content: string) =>
-    apiClient.post(`/newsfeed/posts/${postId}/comments`, { content }),
+  trackPostView: (postId: string) =>
+    apiClient.post(`/newsfeed/posts/${postId}/view`),
+
+  commentPost: (postId: string, content: string, parentId?: string | number) =>
+    apiClient.post(`/newsfeed/posts/${postId}/comments`, { content, parent_id: parentId }),
 
   getPostComments: (postId: string) =>
     apiClient.get(`/newsfeed/posts/${postId}/comments`),
@@ -264,17 +405,111 @@ export const newsfeedAPI = {
     apiClient.delete(`/newsfeed/posts/${postId}`),
 };
 
+export const stickerAPI = {
+  getStickerPacks: () => apiClient.get('/app/sticker-packs'),
+  
+  // Admin: Add sticker to pack
+  addSticker: async (packId: string, formData: FormData) => {
+    // Use fetch API for better Expo Go compatibility with FormData
+    try {
+      const token = await getStoredToken();
+      const baseURL = API_BASE_URL;
+      const url = `${baseURL}/app/sticker-packs/${packId}/stickers`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          // Don't set Content-Type - let browser/RN set it with boundary
+        },
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw {
+          response: {
+            status: response.status,
+            data: errorData,
+          },
+          message: errorData.message || `Upload failed with status ${response.status}`,
+        };
+      }
+      
+      const data = await response.json();
+      return { data, status: response.status };
+    } catch (error: any) {
+      if (error.response) {
+        throw error;
+      }
+      throw {
+        response: {
+          status: 500,
+          data: { message: error.message || 'Upload failed' },
+        },
+        message: error.message || 'Upload failed',
+      };
+    }
+  },
+  
+  // Admin: Create new sticker pack
+  createStickerPack: (name: string, description?: string) =>
+    apiClient.post('/app/sticker-packs', { name, description }),
+  
+  // Admin: Delete sticker from pack
+  deleteSticker: (packId: string, stickerIndex: number) =>
+    apiClient.delete(`/app/sticker-packs/${packId}/stickers/${stickerIndex}`),
+  
+  // Admin: Delete sticker pack
+  deleteStickerPack: (packId: string) =>
+    apiClient.delete(`/app/sticker-packs/${packId}`),
+};
+
 export const uploadAPI = {
-  uploadImage: (formData: FormData) => {
-    // Don't manually set Content-Type - let axios set it automatically with boundary
-    // React Native requires this to work correctly
-    // Don't pass headers at all - let interceptor handle it
-    return apiClient.post('/upload/image', formData, {
-      transformRequest: (data) => {
-        // Return FormData as-is for React Native
-        return data;
-      },
-    });
+  uploadImage: async (formData: FormData) => {
+    // Use fetch API for better Expo Go compatibility
+    // Expo Go has limitations with axios FormData uploads
+    try {
+      const token = await getStoredToken();
+      const baseURL = API_BASE_URL;
+      const url = `${baseURL}/upload/image`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          // Don't set Content-Type - let browser/RN set it with boundary
+        },
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw {
+          response: {
+            status: response.status,
+            data: errorData,
+          },
+          message: errorData.message || `Upload failed with status ${response.status}`,
+        };
+      }
+      
+      const data = await response.json();
+      return { data, status: response.status };
+    } catch (error: any) {
+      // If it's already formatted, throw as is
+      if (error.response) {
+        throw error;
+      }
+      // Otherwise wrap it
+      throw {
+        response: {
+          status: 500,
+          data: { message: error.message || 'Upload failed' },
+        },
+        message: error.message || 'Upload failed',
+      };
+    }
   },
 
   uploadAvatar: (formData: FormData) => {
@@ -295,16 +530,67 @@ export const uploadAPI = {
     });
   },
 
-  uploadVideo: (formData: FormData) => {
-    // Don't set Content-Type header - let axios set it automatically with boundary
-    const config: AxiosRequestConfig = {
-      timeout: 120000, // 2 minutes timeout for video upload
-      transformRequest: (data) => {
-        // Return FormData as-is for React Native
-        return data;
-      },
-    };
-    return apiClient.post('/upload/video', formData, config);
+  uploadVideo: async (formData: FormData) => {
+    // Use fetch API for better Expo Go compatibility
+    // Expo Go has limitations with axios FormData uploads
+    try {
+      const token = await getStoredToken();
+      const baseURL = API_BASE_URL;
+      const url = `${baseURL}/upload/video`;
+      
+      // Create AbortController for timeout (2 minutes)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          // Don't set Content-Type - let browser/RN set it with boundary
+        },
+        body: formData,
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw {
+          response: {
+            status: response.status,
+            data: errorData,
+          },
+          message: errorData.message || `Upload failed with status ${response.status}`,
+        };
+      }
+      
+      const data = await response.json();
+      return { data, status: response.status };
+    } catch (error: any) {
+      // If it's already formatted, throw as is
+      if (error.response) {
+        throw error;
+      }
+      // Handle abort (timeout)
+      if (error.name === 'AbortError') {
+        throw {
+          response: {
+            status: 408,
+            data: { message: 'Upload timeout' },
+          },
+          message: 'Upload timeout - file may be too large',
+        };
+      }
+      // Otherwise wrap it
+      throw {
+        response: {
+          status: 500,
+          data: { message: error.message || 'Upload failed' },
+        },
+        message: error.message || 'Upload failed',
+      };
+    }
   },
 };
 
@@ -313,4 +599,5 @@ export const feedbackAPI = {
     apiClient.post('/feedback', { content, type: type || 'feedback', mediaUrl }),
 };
 
+export { apiClient };
 export default apiClient;
