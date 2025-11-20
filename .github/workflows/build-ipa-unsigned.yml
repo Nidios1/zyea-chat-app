@@ -49,6 +49,12 @@ jobs:
         with:
           expo-version: latest
 
+      - name: Setup CocoaPods
+        run: |
+          echo "☕️ Setting up CocoaPods..."
+          sudo gem install cocoapods
+          pod --version
+
       - name: Generate iOS project
         run: |
           echo "🔨 Generating iOS project with Expo..."
@@ -72,6 +78,18 @@ jobs:
           fi
           echo "✅ CocoaPods dependencies installed"
 
+      - name: Prepare codegen (if needed)
+        working-directory: ./mobile-expo
+        run: |
+          echo "🔨 Preparing for codegen generation..."
+          # Codegen will be generated automatically during Xcode build
+          # Just ensure node_modules are properly set up
+          if [ ! -d "node_modules/@react-native/codegen" ]; then
+            echo "⚠️ @react-native/codegen not found, reinstalling..."
+            npm install --legacy-peer-deps
+          fi
+          echo "✅ Codegen preparation completed"
+
       - name: Prepare build environment
         working-directory: ./mobile-expo/ios
         run: |
@@ -85,8 +103,13 @@ jobs:
           if [ -n "$WORKSPACE" ]; then
             echo "Found workspace: $WORKSPACE"
             
+            # List all available schemes to find ReactCodegen
+            echo "Available schemes:"
+            xcodebuild -list -workspace "$WORKSPACE" || true
+            
             # Try to build ReactCodegen target first to generate codegen files
-            echo "Building ReactCodegen target to generate codegen files..."
+            # This is optional - codegen will be generated during main build if needed
+            echo "Attempting to build ReactCodegen target to pre-generate codegen files..."
             xcodebuild build \
               -workspace "$WORKSPACE" \
               -scheme "ReactCodegen" \
@@ -101,12 +124,12 @@ jobs:
               -allowProvisioningUpdates \
               -skipPackagePluginValidation \
               -skipMacroValidation \
+              -quiet \
               || {
-                echo "⚠️ ReactCodegen build had issues, but continuing..."
+                echo "⚠️ ReactCodegen scheme not found or build failed (this is OK, codegen will be generated during main build)"
                 # Check if codegen files were generated anyway
-                if [ -d "./build/generated/ios" ]; then
-                  echo "✅ Codegen files directory exists"
-                  ls -la ./build/generated/ios/ || true
+                if [ -d "./build/Build/Products/Release-iphoneos" ]; then
+                  echo "✅ Build products directory exists"
                 fi
               }
           fi
@@ -219,6 +242,8 @@ jobs:
             
             # Build main app - dependencies will be built automatically
             # This should trigger codegen generation as part of build process
+            # Use build-for-testing first to ensure all dependencies are built, then archive
+            echo "Building all dependencies first..."
             xcodebuild build \
               -workspace "$WORKSPACE" \
               -scheme "$SCHEME" \
@@ -236,6 +261,7 @@ jobs:
               -allowProvisioningUpdates \
               -skipPackagePluginValidation \
               -skipMacroValidation \
+              GENERATE_INFOPLIST_FILE=YES \
               2>&1 | tee "$BUILD_LOG" || {
                 echo "❌ Build failed with exit code $?"
                 echo "Last 100 lines of build log:"
@@ -266,6 +292,7 @@ jobs:
               -allowProvisioningUpdates \
               -skipPackagePluginValidation \
               -skipMacroValidation \
+              GENERATE_INFOPLIST_FILE=YES \
               2>&1 | tee "$BUILD_LOG" || {
                 echo "❌ Build failed with exit code $?"
                 echo "Last 100 lines of build log:"
