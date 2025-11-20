@@ -611,7 +611,7 @@ const CommentsScreen: React.FC = () => {
           </View>
         )}
 
-        {/* Comment Compose Prompt - Position absolute để luôn ở trên keyboard */}
+        {/* Input Field - Luôn hiển thị */}
         <View 
           style={[
             { 
@@ -627,53 +627,41 @@ const CommentsScreen: React.FC = () => {
             if (h && Math.abs(h - inputBarHeight) > 1) setInputBarHeight(h);
           }}
         >
-          {!replyingTo && (
-            <CommentComposePrompt
-              onPressCompose={() => {
-                inputRef.current?.focus();
-              }}
-              placeholder="Viết bình luận..."
-            />
-          )}
-          
-          {/* Input Field khi đang reply */}
-          {replyingTo && (
-            <View style={styles.inputContainer}>
-              {user && (
-                <View style={styles.inputAvatar}>
-                  {user.avatar_url ? (
-                    <Avatar.Image size={32} source={{ uri: getAvatarURL(user.avatar_url) }} />
-                  ) : (
-                    <Avatar.Text size={32} label={getInitials(user.full_name || user.username || 'U')} />
-                  )}
-                </View>
-              )}
-              <View style={styles.inputWrapper}>
-                <TextInput
-                  ref={inputRef}
-                  mode="flat"
-                  placeholder={replyingTo ? `Trả lời ${replyingTo?.author?.full_name || replyingTo?.author?.username || ''}...` : 'Viết bình luận...'}
-                  placeholderTextColor={colors.textSecondary}
-                  value={text}
-                  onChangeText={setText}
-                  style={styles.input}
-                  multiline
-                  dense
-                  underlineColorAndroid="transparent"
-                  activeUnderlineColor="transparent"
-                />
+          <View style={styles.inputContainer}>
+            {user && (
+              <View style={styles.inputAvatar}>
+                {user.avatar_url ? (
+                  <Avatar.Image size={32} source={{ uri: getAvatarURL(user.avatar_url) }} />
+                ) : (
+                  <Avatar.Text size={32} label={getInitials(user.full_name || user.username || 'U')} />
+                )}
               </View>
-              {text.trim() && (
-                <TouchableOpacity
-                  style={styles.sendButton}
-                  onPress={handleAddComment}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.sendButtonText}>Gửi</Text>
-                </TouchableOpacity>
-              )}
+            )}
+            <View style={styles.inputWrapper}>
+              <TextInput
+                ref={inputRef}
+                mode="flat"
+                placeholder={replyingTo ? `Trả lời ${replyingTo?.author?.full_name || replyingTo?.author?.username || ''}...` : 'Viết bình luận...'}
+                placeholderTextColor={colors.textSecondary}
+                value={text}
+                onChangeText={setText}
+                style={styles.input}
+                multiline
+                dense
+                underlineColorAndroid="transparent"
+                activeUnderlineColor="transparent"
+              />
             </View>
-          )}
+            {text.trim() && (
+              <TouchableOpacity
+                style={styles.sendButton}
+                onPress={handleAddComment}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.sendButtonText}>Gửi</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     </SafeAreaView>
