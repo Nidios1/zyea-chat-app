@@ -145,10 +145,11 @@ jobs:
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               ONLY_ACTIVE_ARCH=NO \
               SWIFT_VERSION=5.9 \
-              SWIFT_OPTIMIZATION_LEVEL=-O \
+              SWIFT_OPTIMIZATION_LEVEL=O \
               CLANG_ENABLE_MODULES=YES \
               ENABLE_BITCODE=NO \
               SWIFT_COMPILATION_MODE=wholemodule \
+              SWIFT_ACTIVE_COMPILATION_CONDITIONS="\$(inherited)" \
               -allowProvisioningUpdates \
               -skipPackagePluginValidation \
               -skipMacroValidation
@@ -167,10 +168,11 @@ jobs:
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               ONLY_ACTIVE_ARCH=NO \
               SWIFT_VERSION=5.9 \
-              SWIFT_OPTIMIZATION_LEVEL=-O \
+              SWIFT_OPTIMIZATION_LEVEL=O \
               CLANG_ENABLE_MODULES=YES \
               ENABLE_BITCODE=NO \
               SWIFT_COMPILATION_MODE=wholemodule \
+              SWIFT_ACTIVE_COMPILATION_CONDITIONS="\$(inherited)" \
               -allowProvisioningUpdates \
               -skipPackagePluginValidation \
               -skipMacroValidation
