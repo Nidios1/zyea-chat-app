@@ -144,11 +144,14 @@ jobs:
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               ONLY_ACTIVE_ARCH=NO \
-              SWIFT_VERSION=5.0 \
+              SWIFT_VERSION=5.9 \
               SWIFT_OPTIMIZATION_LEVEL=-O \
               CLANG_ENABLE_MODULES=YES \
               ENABLE_BITCODE=NO \
-              SWIFT_COMPILATION_MODE=wholemodule
+              SWIFT_COMPILATION_MODE=wholemodule \
+              SWIFT_ACTIVE_COMPILATION_CONDITIONS="\$(inherited)" \
+              SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
+              BUILD_LIBRARY_FOR_DISTRIBUTION=YES
           else
             echo "Building with project and target..."
             xcodebuild build \
@@ -163,11 +166,14 @@ jobs:
               CODE_SIGNING_ALLOWED=NO \
               GCC_TREAT_WARNINGS_AS_ERRORS=NO \
               ONLY_ACTIVE_ARCH=NO \
-              SWIFT_VERSION=5.0 \
+              SWIFT_VERSION=5.9 \
               SWIFT_OPTIMIZATION_LEVEL=-O \
               CLANG_ENABLE_MODULES=YES \
               ENABLE_BITCODE=NO \
-              SWIFT_COMPILATION_MODE=wholemodule
+              SWIFT_COMPILATION_MODE=wholemodule \
+              SWIFT_ACTIVE_COMPILATION_CONDITIONS="\$(inherited)" \
+              SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
+              BUILD_LIBRARY_FOR_DISTRIBUTION=YES
           fi
           
           # Find .app bundle
