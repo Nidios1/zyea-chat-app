@@ -19,7 +19,7 @@ import {
   ViewToken,
   LayoutAnimation,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Avatar, Searchbar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
@@ -415,19 +415,21 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
       ? (colors.background || '#000000')
       : (colors.background || '#F2F2F7'), // iOS system background color
   },
-  // iOS-style minimal header with better spacing
+  // iOS-style minimal header - giống social-app-main
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14, // More vertical padding for iOS
-    backgroundColor: 'transparent', // Xóa nền header
-    // Xóa border bottom
+    paddingVertical: 12, // Giống social-app-main
+    paddingTop: Platform.OS === 'ios' ? 12 : 12,
+    paddingBottom: Platform.OS === 'ios' ? 8 : 12, // iOS: 8, Android: 12
+    minHeight: Platform.OS === 'ios' ? 48 : 56, // Giống social-app-main
+    // Không có border bottom - giống social-app-main noBottomBorder
   },
   headerLeft: {
-    width: 40,
-    height: 40,
+    width: 34, // Giống social-app-main HEADER_SLOT_SIZE
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
@@ -452,13 +454,11 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
   logoSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    position: 'absolute',
-    left: 0,
-    right: 0,
+    flex: 1,
     justifyContent: 'center',
     zIndex: 1,
     pointerEvents: 'box-none',
+    minHeight: 34, // Giống social-app-main HEADER_SLOT_SIZE
   },
   headerTitle: {
     fontSize: 18, // iOS standard large title size
@@ -467,9 +467,9 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     letterSpacing: -0.3, // Tighter spacing for iOS
   },
   logoImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 10, // Slightly more rounded for iOS
+    width: 30, // Giống social-app-main Logo width={30}
+    height: 30,
+    borderRadius: 8,
   },
   logoText: {
     fontSize: 20,
@@ -479,15 +479,16 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 0, // Không có gap giữa các buttons
     zIndex: 10,
+    justifyContent: 'flex-end',
   },
   headerIconButton: {
-    width: 44, // iOS minimum touch target
-    height: 44,
+    width: 34, // Giống social-app-main HEADER_SLOT_SIZE
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 22, // Circular for iOS
+    borderRadius: 17,
   },
   messageIconContainer: {
     position: 'relative',
@@ -527,6 +528,18 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
   listContent: {
     paddingTop: 0,
     paddingBottom: 20,
+  },
+  refreshIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  refreshIndicatorText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   // Facebook style: Nội dung bắt đầu từ bên trái
   postContainer: {
@@ -966,6 +979,7 @@ const PostsListScreen = () => {
   const route = useRoute();
   const { setIsVisible } = useTabBar();
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   const lastRefreshParam = useRef<number | null>(null);
   const [imageAspectRatios, setImageAspectRatios] = useState<Record<string, number>>({});
@@ -1014,10 +1028,8 @@ const PostsListScreen = () => {
   const [imageViewerPostData, setImageViewerPostData] = useState<any>(null);
   const scrollY = useRef(0);
   const lastScrollY = useRef(0);
-  const headerOpacity = useRef(new Animated.Value(1)).current;
-  const headerTranslateY = useRef(new Animated.Value(0)).current;
-  const isHeaderVisible = useRef(true); // Track header visibility state
   const flatListRef = useRef<FlatList>(null);
+  const [headerHeight, setHeaderHeight] = useState(72); // Default header height
   const [isChangingTab, setIsChangingTab] = useState(false); // Prevent multiple tab changes
   
   // Track visible items để tự động pause video khi scroll ra khỏi view
@@ -1610,83 +1622,26 @@ const PostsListScreen = () => {
     return date.toLocaleDateString('vi-VN');
   };
 
+  // Xử lý scroll - chỉ xử lý tab bar, header luôn cố định
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const currentScrollY = event.nativeEvent.contentOffset.y;
+    const currentScrollY = Math.max(0, event.nativeEvent.contentOffset.y);
     const scrollDifference = currentScrollY - lastScrollY.current;
     
-    // Xử lý trường hợp scroll về đầu trang - luôn hiện header
-    if (currentScrollY <= 50) {
-      if (!isHeaderVisible.current) {
+    // Chỉ xử lý ẩn/hiện tab bar khi cuộn
+    if (Math.abs(scrollDifference) > 10) {
+      if (scrollDifference > 0 && currentScrollY > 100) {
+        // Cuộn xuống - ẩn tab bar
+        setIsVisible(false);
+      } else if (scrollDifference < 0) {
+        // Cuộn lên - hiện tab bar
         setIsVisible(true);
-        isHeaderVisible.current = true;
-        // Hiện header với spring animation mượt hơn
-        Animated.parallel([
-          Animated.spring(headerOpacity, {
-            toValue: 1,
-            tension: 100,
-            friction: 8,
-            useNativeDriver: true,
-          }),
-          Animated.spring(headerTranslateY, {
-            toValue: 0,
-            tension: 100,
-            friction: 8,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      }
-    } else {
-      // Chỉ ẩn/hiện khi scroll đủ lớn để tránh flicker
-      if (Math.abs(scrollDifference) > 5) {
-        if (scrollDifference > 0 && currentScrollY > 100) {
-          // Cuộn xuống - ẩn tab bar và header
-          if (isHeaderVisible.current) {
-            setIsVisible(false);
-            isHeaderVisible.current = false;
-            // Ẩn header với spring animation mượt hơn
-            Animated.parallel([
-              Animated.spring(headerOpacity, {
-                toValue: 0,
-                tension: 100,
-                friction: 8,
-                useNativeDriver: true,
-              }),
-              Animated.spring(headerTranslateY, {
-                toValue: -80,
-                tension: 100,
-                friction: 8,
-                useNativeDriver: true,
-              }),
-            ]).start();
-          }
-        } else if (scrollDifference < 0) {
-          // Cuộn lên - hiện tab bar và header
-          if (!isHeaderVisible.current) {
-            setIsVisible(true);
-            isHeaderVisible.current = true;
-            // Hiện header với spring animation mượt hơn
-            Animated.parallel([
-              Animated.spring(headerOpacity, {
-                toValue: 1,
-                tension: 100,
-                friction: 8,
-                useNativeDriver: true,
-              }),
-              Animated.spring(headerTranslateY, {
-                toValue: 0,
-                tension: 100,
-                friction: 8,
-                useNativeDriver: true,
-              }),
-            ]).start();
-          }
-        }
       }
     }
     
     lastScrollY.current = currentScrollY;
     scrollY.current = currentScrollY;
   };
+
 
   const dynamicStyles = createStyles(colors, isDarkMode);
 
@@ -2237,91 +2192,85 @@ const PostsListScreen = () => {
     );
   };
 
-  return (
-    <SafeAreaView style={dynamicStyles.container} edges={['top']}>
-      <Animated.View
-        style={[
-          { flex: 1 },
-          {
-            opacity: fadeAnim,
-          }
-        ]}
-      >
-        {/* Threads-style Minimal Header - Ẩn/hiện khi cuộn */}
-        <Animated.View 
-        style={[
-          dynamicStyles.headerBar,
-          {
-            opacity: headerOpacity,
-            transform: [{ translateY: headerTranslateY }],
-          },
-        ]}
-      >
-        {activeTab === 'following' ? (
-          <>
+  // Render header component - Fixed position, không cuộn theo nội dung
+  const renderHeader = () => (
+    <View style={dynamicStyles.headerBar}>
+      {activeTab === 'following' ? (
+        <>
+          <TouchableOpacity 
+            style={dynamicStyles.headerLeftWithText}
+            onPress={() => setActiveTab('all')}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
+            <Text style={[dynamicStyles.backButtonText, { color: colors.text }]}>Quay lại</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={[dynamicStyles.headerTitle, { color: colors.text }]}>Đang theo dõi</Text>
+          </View>
+          <View style={dynamicStyles.headerRight} />
+        </>
+      ) : (
+        <>
+          <TouchableOpacity 
+            style={dynamicStyles.headerLeft}
+            onPress={() => {
+              setShowMenu(true);
+            }}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialCommunityIcons name="menu" size={28} color={colors.text} />
+          </TouchableOpacity>
+          <View style={dynamicStyles.logoSection}>
+            <Image
+              source={require('../../../assets/icon.png')}
+              style={dynamicStyles.logoImage}
+            />
+          </View>
+          <View style={dynamicStyles.headerRight}>
             <TouchableOpacity 
-              style={dynamicStyles.headerLeftWithText}
-              onPress={() => setActiveTab('all')}
+              style={dynamicStyles.headerIconButton} 
               activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              onPress={() => setShowSearchModal(true)}
             >
-              <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
-              <Text style={[dynamicStyles.backButtonText, { color: colors.text }]}>Quay lại</Text>
+              <MaterialCommunityIcons name="magnify" size={26} color={colors.text} />
             </TouchableOpacity>
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={[dynamicStyles.headerTitle, { color: colors.text }]}>Đang theo dõi</Text>
-            </View>
-            <View style={dynamicStyles.headerRight} />
-          </>
-        ) : (
-          <>
             <TouchableOpacity 
-              style={dynamicStyles.headerLeft}
-              onPress={() => {
-                setShowMenu(true);
-              }}
+              style={dynamicStyles.headerIconButton}
+              onPress={handleNavigateToChat}
               activeOpacity={0.7}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <MaterialCommunityIcons name="menu" size={28} color={colors.text} />
+              <View style={dynamicStyles.messageIconContainer}>
+                <MaterialCommunityIcons name="facebook-messenger" size={26} color={colors.text} />
+                {unreadCount > 0 && (
+                  <View style={dynamicStyles.messageBadge}>
+                    <Text style={dynamicStyles.messageBadgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </TouchableOpacity>
-            <View style={dynamicStyles.logoSection}>
-              <Image
-                source={require('../../../assets/icon.png')}
-                style={dynamicStyles.logoImage}
-              />
-            </View>
-            <View style={dynamicStyles.headerRight}>
-              <TouchableOpacity 
-                style={dynamicStyles.headerIconButton} 
-                activeOpacity={0.7}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                onPress={() => setShowSearchModal(true)}
-              >
-                <MaterialCommunityIcons name="magnify" size={26} color={colors.text} />
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={dynamicStyles.headerIconButton}
-                onPress={handleNavigateToChat}
-                activeOpacity={0.7}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <View style={dynamicStyles.messageIconContainer}>
-                  <MaterialCommunityIcons name="facebook-messenger" size={26} color={colors.text} />
-                  {unreadCount > 0 && (
-                    <View style={dynamicStyles.messageBadge}>
-                      <Text style={dynamicStyles.messageBadgeText}>
-                        {unreadCount > 99 ? '99+' : unreadCount}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-      </Animated.View>
+          </View>
+        </>
+      )}
+    </View>
+  );
 
-      {/* Posts List */}
+  return (
+    <SafeAreaView style={dynamicStyles.container} edges={['top']}>
+        <Animated.View
+          style={[
+            { flex: 1 },
+            {
+              opacity: fadeAnim,
+            }
+          ]}
+        >
+          {/* Posts List */}
       {isLoading && !refreshing ? (
         <View style={[dynamicStyles.emptyContainer, { paddingTop: 100 }]}>
           <ActivityIndicator size="large" color={colors.primary || '#0084ff'} />
@@ -2359,6 +2308,9 @@ const PostsListScreen = () => {
           renderItem={renderPost}
           ItemSeparatorComponent={() => null}
           showsVerticalScrollIndicator={false}
+          {...(Platform.OS === 'ios' && {
+            contentInsetAdjustmentBehavior: 'automatic',
+          })}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -2366,9 +2318,7 @@ const PostsListScreen = () => {
               tintColor={colors.primary || '#0084ff'}
               colors={[colors.primary || '#0084ff']}
               progressBackgroundColor={colors.surface || '#FFFFFF'}
-              title={refreshing ? "Đang làm mới..." : "Kéo để làm mới"}
-              titleColor={colors.textSecondary || '#666666'}
-              progressViewOffset={Platform.OS === 'android' ? 20 : 0}
+              progressViewOffset={0} // Header giờ cuộn theo nội dung, không cần offset
             />
           }
           onScroll={handleScroll}
@@ -2388,8 +2338,20 @@ const PostsListScreen = () => {
           }}
           contentContainerStyle={dynamicStyles.listContent}
           ListHeaderComponent={
-            activeTab === 'all' ? (
-              <View>
+            <View>
+              {/* Header - Cuộn theo nội dung */}
+              <View 
+                onLayout={(event) => {
+                  const { height } = event.nativeEvent.layout;
+                  if (height > 0) {
+                    setHeaderHeight(height);
+                  }
+                }}
+              >
+                {renderHeader()}
+              </View>
+              {activeTab === 'all' ? (
+                <>
                 <TouchableOpacity
                   style={dynamicStyles.newPostSection}
                   onPress={() => navigation.navigate('CreatePost' as never)}
@@ -2443,8 +2405,9 @@ const PostsListScreen = () => {
                     }
                   }}
                 />
-              </View>
-            ) : null
+                </>
+              ) : null}
+            </View>
           }
           ListEmptyComponent={
             <View style={dynamicStyles.emptyContainer}>
@@ -2459,7 +2422,6 @@ const PostsListScreen = () => {
           }
         />
       )}
-
 
       {/* Menu Modal */}
       <Modal
