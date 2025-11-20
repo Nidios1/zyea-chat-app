@@ -10,8 +10,8 @@ import {
   Text as RNText,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, TextInput, Avatar } from 'react-native-paper';
-import { TextInput as RNTextInput } from 'react-native';
+import { Text as PaperText, TextInput, Avatar } from 'react-native-paper';
+import { TextInput as RNTextInput, Text } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
@@ -783,8 +783,8 @@ const CommentsScreen: React.FC = () => {
                     )}
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.headerPostName}>{authorName}</Text>
-                    {postTime && <Text style={styles.headerPostTime}>{postTime}</Text>}
+                    <PaperText style={styles.headerPostName}>{authorName}</PaperText>
+                    {postTime && <PaperText style={styles.headerPostTime}>{postTime}</PaperText>}
                   </View>
                 </View>
               );
@@ -811,9 +811,9 @@ const CommentsScreen: React.FC = () => {
               style={styles.sortDropdown}
               onPress={() => setSortBy(sortBy === 'most_relevant' ? 'newest' : 'most_relevant')}
             >
-              <Text style={styles.sortText}>
+              <PaperText style={styles.sortText}>
                 {sortBy === 'most_relevant' ? 'Phù hợp nhất' : 'Mới nhất'}
-              </Text>
+              </PaperText>
               <MaterialCommunityIcons 
                 name="chevron-down" 
                 size={18} 
@@ -842,11 +842,11 @@ const CommentsScreen: React.FC = () => {
             ListEmptyComponent={
               isLoading ? (
                 <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>Đang tải...</Text>
+                  <PaperText style={styles.emptyText}>Đang tải...</PaperText>
                 </View>
               ) : (
                 <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>Chưa có bình luận</Text>
+                  <PaperText style={styles.emptyText}>Chưa có bình luận</PaperText>
                 </View>
               )
             }
@@ -865,10 +865,10 @@ const CommentsScreen: React.FC = () => {
               zIndex: 5,
             }
           ]}>
-            <Text style={styles.replyingToText}>Đang trả lời</Text>
-            <Text style={styles.replyingToName}>
+            <PaperText style={styles.replyingToText}>Đang trả lời</PaperText>
+            <PaperText style={styles.replyingToName}>
               {replyingTo?.author?.full_name || replyingTo?.author?.username || 'Người dùng'}
-            </Text>
+            </PaperText>
             <TouchableOpacity onPress={() => setReplyingTo(null)}>
               <MaterialCommunityIcons name="close" size={16} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -958,7 +958,7 @@ const CommentsScreen: React.FC = () => {
                 onPress={handleAddComment}
                 activeOpacity={0.7}
               >
-                <Text style={styles.sendButtonText}>Gửi</Text>
+                <PaperText style={styles.sendButtonText}>Gửi</PaperText>
               </TouchableOpacity>
             )}
           </View>
