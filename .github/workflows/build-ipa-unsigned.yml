@@ -20,11 +20,20 @@ jobs:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🔐 Check for EXPO_TOKEN (optional)
+      - name: 🔐 Check for EXPO_TOKEN
         run: |
           if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
-            echo "⚠️  Warning: EXPO_TOKEN not set. Some features may not work."
-            echo "💡 For full functionality, add EXPO_TOKEN to repository secrets."
+            echo "❌ Error: EXPO_TOKEN is not set!"
+            echo ""
+            echo "💡 To fix this:"
+            echo "   1. Go to your GitHub repository"
+            echo "   2. Navigate to: Settings > Secrets and variables > Actions"
+            echo "   3. Click 'New repository secret'"
+            echo "   4. Name: EXPO_TOKEN"
+            echo "   5. Value: Your Expo access token"
+            echo ""
+            echo "📖 Get your token from: https://expo.dev/accounts/[your-account]/settings/access-tokens"
+            exit 1
           else
             echo "✅ EXPO_TOKEN is set"
           fi
@@ -62,6 +71,8 @@ jobs:
 
       - name: 🏗️ Build IPA with EAS (unsigned)
         working-directory: ./mobile-expo
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           eas build --platform ios \
             --profile unsigned \
