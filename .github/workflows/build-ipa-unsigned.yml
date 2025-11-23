@@ -50,6 +50,7 @@ jobs:
         with:
           expo-version: latest
           eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
 
       - name: ⛏️ Setup EAS local builds plugin
         run: npm install -g eas-cli-local-build-plugin
@@ -68,15 +69,6 @@ jobs:
         working-directory: ./mobile-expo
         run: |
           npm install --legacy-peer-deps || npm install
-
-      - name: 🔑 Login to EAS
-        working-directory: ./mobile-expo
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: |
-          echo "🔑 Logging in to EAS..."
-          eas login --non-interactive
-          echo "✅ EAS login successful"
 
       - name: 🏗️ Build IPA with EAS (unsigned)
         working-directory: ./mobile-expo
