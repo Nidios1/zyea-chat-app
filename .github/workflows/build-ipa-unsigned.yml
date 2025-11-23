@@ -111,61 +111,67 @@ jobs:
           echo "🧹 Cleaning build..."
           xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release || true
           
-          echo "🏗️ Building app with archive (unsigned)..."
-          # Use archive to ensure app target is built and .app is created
-          xcodebuild archive \
+          echo "🏗️ Building app target first (unsigned)..."
+          # Build app target first to ensure .app is created
+          xcodebuild build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
-            -archivePath build/app.xcarchive \
             -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
-            SKIP_INSTALL=NO || {
-            echo "❌ Archive failed! Trying build instead..."
-            # Fallback: try build
-            xcodebuild build \
+            ONLY_ACTIVE_ARCH=NO || {
+            echo "❌ Build failed!"
+            exit 1
+          }
+          
+          echo "✅ Build completed, checking for .app..."
+          # Check if .app was created in DerivedData
+          APP_IN_DERIVED=$(find build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
+          if [ -z "$APP_IN_DERIVED" ]; then
+            echo "⚠️ .app not found in DerivedData, trying archive..."
+            # Try archive as fallback
+            xcodebuild archive \
               -workspace "$WORKSPACE" \
               -scheme "$SCHEME" \
               -configuration Release \
+              -archivePath build/app.xcarchive \
               -sdk iphoneos \
-              -derivedDataPath build/DerivedData \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               DEVELOPMENT_TEAM="" \
-              ONLY_ACTIVE_ARCH=NO || {
-              echo "❌ Build also failed!"
+              SKIP_INSTALL=NO || {
+              echo "❌ Archive also failed!"
               exit 1
             }
-          }
+          fi
           
-          echo "✅ Build completed successfully"
+          echo "✅ Build process completed"
           cd ..
           
           echo "🔍 Finding .app file..."
           APP_PATH=""
           
-          # Method 1: Check archive Products/Applications (standard location)
-          if [ -d "ios/build/app.xcarchive/Products/Applications" ]; then
+          # Method 1: Check DerivedData/Build/Products first (where build puts it)
+          APP_PATH=$(find ios/build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
+          
+          # Method 2: Check entire DerivedData
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find ios/build/DerivedData -name "*.app" -type d 2>/dev/null | head -1)
+          fi
+          
+          # Method 3: Check archive Products/Applications (if archive was created)
+          if [ -z "$APP_PATH" ] && [ -d "ios/build/app.xcarchive/Products/Applications" ]; then
             APP_PATH=$(find ios/build/app.xcarchive/Products/Applications -maxdepth 1 -name "*.app" -type d 2>/dev/null | head -1)
           fi
           
-          # Method 2: Check archive Products
+          # Method 4: Check archive Products
           if [ -z "$APP_PATH" ] && [ -d "ios/build/app.xcarchive" ]; then
             APP_PATH=$(find ios/build/app.xcarchive/Products -name "*.app" -type d 2>/dev/null | head -1)
-          fi
-          
-          # Method 3: Check DerivedData/Build/Products/Release-iphoneos
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find ios/build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
-          fi
-          
-          # Method 4: Check entire DerivedData
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find ios/build/DerivedData -name "*.app" -type d 2>/dev/null | head -1)
           fi
           
           # Method 5: Check ios/build directory
