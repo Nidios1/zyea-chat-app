@@ -103,28 +103,60 @@ jobs:
           echo "🧹 Cleaning build..."
           xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release
           
-          echo "🏗️ Building archive (unsigned)..."
-          xcodebuild archive \
+          echo "🏗️ Building app (unsigned)..."
+          # Build directly to get .app file
+          xcodebuild build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
-            -archivePath build/app.xcarchive \
+            -sdk iphoneos \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" || {
-            echo "❌ Archive build failed!"
+            DEVELOPMENT_TEAM="" \
+            -derivedDataPath build/DerivedData || {
+            echo "❌ Build failed!"
             exit 1
           }
           
           echo "🔍 Finding .app file..."
-          APP_PATH=$(find build/app.xcarchive -name "*.app" -type d | head -1)
+          # Look for .app in common build locations
+          APP_PATH=""
+          
+          # Try DerivedData first
+          APP_PATH=$(find build/DerivedData -name "*.app" -type d | grep -i "$SCHEME" | head -1)
+          
+          # Try build directory
           if [ -z "$APP_PATH" ]; then
-            echo "❌ Could not find .app file in archive"
-            find build -type d -name "*.app" || true
+            APP_PATH=$(find build -name "*.app" -type d | grep -v DerivedData | head -1)
+          fi
+          
+          # Try archive if it exists
+          if [ -z "$APP_PATH" ] && [ -d "build/app.xcarchive" ]; then
+            echo "📂 Checking archive..."
+            APP_PATH=$(find build/app.xcarchive/Products/Applications -name "*.app" -type d 2>/dev/null | head -1)
+          fi
+          
+          # Last resort: search everywhere
+          if [ -z "$APP_PATH" ]; then
+            echo "🔍 Searching all build directories..."
+            APP_PATH=$(find . -name "*.app" -type d | grep -v node_modules | grep -v ".expo" | head -1)
+          fi
+          
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "❌ Could not find .app file"
+            echo "📂 Build directory contents:"
+            ls -la build/ 2>/dev/null || true
+            echo ""
+            echo "📂 DerivedData contents:"
+            find build/DerivedData -type d -maxdepth 3 2>/dev/null | head -20 || true
+            echo ""
+            echo "🔍 All .app files found:"
+            find . -name "*.app" -type d 2>/dev/null | head -10 || true
             exit 1
           fi
           
+          echo "✅ Found .app at: $APP_PATH"
           echo "📦 Creating IPA from $APP_PATH..."
           mkdir -p Payload
           APP_NAME=$(basename "$APP_PATH")
