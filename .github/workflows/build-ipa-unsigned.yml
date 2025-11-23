@@ -20,6 +20,15 @@ jobs:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
 
+      - name: 🔐 Check for EXPO_TOKEN (optional)
+        run: |
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "⚠️  Warning: EXPO_TOKEN not set. Some features may not work."
+            echo "💡 For full functionality, add EXPO_TOKEN to repository secrets."
+          else
+            echo "✅ EXPO_TOKEN is set"
+          fi
+
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -27,99 +36,105 @@ jobs:
           cache: 'npm'
           cache-dependency-path: mobile-expo/package-lock.json
 
-      - name: ⚙️ Install dependencies
-        working-directory: ./mobile-expo
-        run: |
-          npm install --legacy-peer-deps || npm install
-
       - name: 🔨 Setup Expo CLI
         uses: expo/expo-github-action@v8
         with:
           expo-version: latest
           eas-version: latest
 
-      - name: ☕️ Setup CocoaPods
-        run: |
-          sudo gem install cocoapods
-          pod --version
+      - name: ⛏️ Setup EAS local builds plugin
+        run: npm install -g eas-cli-local-build-plugin
 
-      - name: 🔨 Setup Xcode
+      - name: ☕️ Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: latest-stable
 
-      - name: 🏗️ Generate iOS project
+      - name: 📦 Setup CocoaPods
+        uses: maxim-lobanov/setup-cocoapods@v1
+        with:
+          version: latest
+
+      - name: ⚙️ Install dependencies
         working-directory: ./mobile-expo
         run: |
-          npx expo prebuild --platform ios --clean
-          if [ ! -d "ios" ]; then
-            echo "❌ ERROR: iOS directory not found"
-            exit 1
-          fi
+          npm install --legacy-peer-deps || npm install
 
-      - name: 📦 Install CocoaPods
-        working-directory: ./mobile-expo/ios
+      - name: 🏗️ Build IPA with EAS (unsigned)
+        working-directory: ./mobile-expo
         run: |
-          pod install
+          eas build --platform ios \
+            --profile unsigned \
+            --local \
+            --non-interactive \
+            --output build.ipa
 
-      - name: 🏗️ Build IPA
-        working-directory: ./mobile-expo/ios
+      - name: 🔍 Find IPA file
+        working-directory: ./mobile-expo
         run: |
-          # Find workspace
-          WORKSPACE=$(find . -name "*.xcworkspace" -maxdepth 1 | head -1)
-          if [ -z "$WORKSPACE" ]; then
-            echo "❌ No workspace found"
+          echo "🔍 Searching for IPA file..."
+          find . -name "*.ipa" -type f 2>/dev/null | head -5 || echo "No IPA files found yet"
+          
+      - name: ✅ Verify IPA file
+        working-directory: ./mobile-expo
+        run: |
+          # Try to find IPA file in common locations
+          IPA_FILE=""
+          if [ -f "build.ipa" ]; then
+            IPA_FILE="build.ipa"
+          elif [ -f "ios/build/*.ipa" ]; then
+            IPA_FILE=$(find ios/build -name "*.ipa" -type f | head -1)
+          elif [ -f "*.ipa" ]; then
+            IPA_FILE=$(find . -maxdepth 1 -name "*.ipa" -type f | head -1)
+          else
+            IPA_FILE=$(find . -name "*.ipa" -type f | head -1)
+          fi
+          
+          if [ -z "$IPA_FILE" ] || [ ! -f "$IPA_FILE" ]; then
+            echo "❌ Error: IPA file not found!"
+            echo "📂 Current directory contents:"
+            ls -la
+            echo "📂 Searching in subdirectories:"
+            find . -type f -name "*.ipa" 2>/dev/null || echo "No IPA files found"
             exit 1
           fi
           
-          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
-          echo "Building scheme: $SCHEME"
+          # If found file is not build.ipa, copy it
+          if [ "$IPA_FILE" != "build.ipa" ]; then
+            echo "📋 Found IPA at: $IPA_FILE"
+            cp "$IPA_FILE" build.ipa
+            echo "✅ Copied to build.ipa"
+          fi
           
-          # Build
-          xcodebuild build \
-            -workspace "$WORKSPACE" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -sdk iphoneos \
-            -arch arm64 \
-            -derivedDataPath ./build \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ENABLE_BITCODE=NO \
-            ONLY_ACTIVE_ARCH=NO
+          FILE_SIZE=$(stat -f%z build.ipa 2>/dev/null || stat -c%s build.ipa 2>/dev/null || echo "0")
+          FILE_SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $FILE_SIZE/1024/1024}")
+          echo "📦 IPA file size: $FILE_SIZE bytes ($FILE_SIZE_MB MB)"
           
-          # Find .app bundle
-          APP_BUNDLE=$(find ./build -name "*.app" -type d 2>/dev/null | grep -v "\.framework" | grep -v "Pods" | head -1)
-          
-          if [ -z "$APP_BUNDLE" ]; then
-            echo "❌ No .app bundle found"
-            find ./build -type d -maxdepth 5 | head -20
+          if [ "$FILE_SIZE" -lt 1000000 ]; then
+            echo "❌ Error: IPA file is too small ($FILE_SIZE bytes). Expected at least 1MB."
+            echo "📄 File type:"
+            file build.ipa || echo "Could not determine file type"
+            echo "📄 First 500 bytes (hex dump):"
+            head -c 500 build.ipa | xxd | head -20 || head -c 500 build.ipa
             exit 1
           fi
           
-          # Create IPA
-          mkdir -p Payload
-          cp -R "$APP_BUNDLE" Payload/
-          zip -r app.ipa Payload
-          rm -rf Payload
-          
-          if [ ! -f "app.ipa" ]; then
-            echo "❌ IPA not created"
-            exit 1
-          fi
-          
-          echo "✅ IPA created: app.ipa"
+          echo "✅ IPA file verified successfully!"
 
-      - name: 📤 Upload IPA
+      - name: 📤 Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa-unsigned
-          path: mobile-expo/ios/app.ipa
+          path: mobile-expo/build.ipa
           retention-days: 30
+          if-no-files-found: error
 
       - name: 📋 Summary
         run: |
           echo "## ✅ Build Complete" >> $GITHUB_STEP_SUMMARY
-          echo "📱 Unsigned IPA ready for download from Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "⚠️ Sign manually with eSign before installing" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📱 **Unsigned IPA** has been built successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Download the IPA from the **Artifacts** section above." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Note:** This IPA is unsigned. You can sign it manually with eSign before installing." >> $GITHUB_STEP_SUMMARY
