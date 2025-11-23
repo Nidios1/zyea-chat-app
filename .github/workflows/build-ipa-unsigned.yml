@@ -80,52 +80,36 @@ jobs:
         run: |
           pod install
 
-      - name: 🏗️ Build IPA (unsigned) with xcodebuild
-        working-directory: ./mobile-expo/ios
+      - name: 🏗️ Build IPA (unsigned) with expo run:ios
+        working-directory: ./mobile-expo
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          echo "🔍 Detecting workspace and scheme..."
-          WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
-          if [ -z "$WORKSPACE" ]; then
-            echo "❌ No .xcworkspace found!"
-            exit 1
-          fi
-          
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
-          if [ -z "$SCHEME" ]; then
-            SCHEME="zyea-mobile"
-            echo "⚠️ Using default scheme: $SCHEME"
-          fi
-          
-          echo "✅ Using workspace: $WORKSPACE"
-          echo "✅ Using scheme: $SCHEME"
-          
-          # Get the app target name (usually same as scheme or workspace name)
-          APP_TARGET=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 20 "Targets:" | grep -v "Targets:" | head -1 | xargs)
-          if [ -z "$APP_TARGET" ]; then
-            APP_TARGET="$SCHEME"
-          fi
-          echo "✅ App target: $APP_TARGET"
-          
-          echo "🧹 Cleaning build..."
-          xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release || true
-          
-          echo "🏗️ Building app target (unsigned)..."
-          # Build directly - this is more reliable for unsigned builds
-          xcodebuild build \
-            -workspace "$WORKSPACE" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath build/DerivedData \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" \
-            ONLY_ACTIVE_ARCH=NO \
-            -destination "generic/platform=iOS" || {
-            echo "❌ Build failed! Checking for errors..."
-            # Try without destination
-            echo "⚠️ Retrying without destination..."
+          echo "🏗️ Building iOS app with expo run:ios..."
+          # Build with expo run:ios - this handles all the build configuration
+          # Use --no-install to skip device installation, just build
+          # Use --configuration Release for release build
+          npx expo run:ios --configuration Release --no-install --no-build-cache 2>&1 | tee build.log || {
+            echo "⚠️ expo run:ios failed, checking logs..."
+            tail -100 build.log || true
+            echo ""
+            echo "⚠️ Trying alternative: build with xcodebuild directly..."
+            cd ios
+            
+            WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
+            if [ -z "$WORKSPACE" ]; then
+              echo "❌ No .xcworkspace found!"
+              exit 1
+            fi
+            
+            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+            if [ -z "$SCHEME" ]; then
+              SCHEME="zyea-mobile"
+            fi
+            
+            echo "✅ Using workspace: $WORKSPACE, scheme: $SCHEME"
+            
+            # Build with verbose output to see errors
             xcodebuild build \
               -workspace "$WORKSPACE" \
               -scheme "$SCHEME" \
@@ -136,52 +120,54 @@ jobs:
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               DEVELOPMENT_TEAM="" \
-              ONLY_ACTIVE_ARCH=NO || {
-              echo "❌ Build failed again!"
+              ONLY_ACTIVE_ARCH=NO 2>&1 | tail -50 || {
+              echo "❌ xcodebuild also failed!"
               exit 1
             }
+            
+            cd ..
           }
           
           echo "✅ Build completed"
-          echo "🔍 Finding .app file in build output..."
+          echo "🔍 Finding .app file..."
           
           APP_PATH=""
           
-          # Method 1: Look in DerivedData/Build/Products/Release-iphoneos
-          APP_PATH=$(find build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
-          
-          # Method 2: Search entire DerivedData
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find build/DerivedData -name "*.app" -type d 2>/dev/null | head -1)
+          # Method 1: Check ios/build directory (expo run:ios output)
+          if [ -d "ios/build" ]; then
+            APP_PATH=$(find ios/build -name "*.app" -type d | head -1)
           fi
           
-          # Method 3: Try archive if it was created
-          if [ -z "$APP_PATH" ] && [ -d "build/app.xcarchive" ]; then
-            echo "📂 Checking archive for .app..."
-            APP_PATH=$(find build/app.xcarchive/Products/Applications -name "*.app" -type d 2>/dev/null | head -1)
+          # Method 2: Check DerivedData from expo
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find ios/build/DerivedData -name "*.app" -type d 2>/dev/null | head -1)
           fi
           
-          # Method 4: Search in build directory
+          # Method 3: Check standard DerivedData location
+          if [ -z "$APP_PATH" ] && [ -d "ios/build/DerivedData" ]; then
+            APP_PATH=$(find ios/build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
+          fi
+          
+          # Method 4: Search in ios directory
           if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find build -name "*.app" -type d 2>/dev/null | grep -v DerivedData | head -1)
+            APP_PATH=$(find ios -name "*.app" -type d | grep -v node_modules | grep -v ".expo" | head -1)
+          fi
+          
+          # Method 5: Search in home directory DerivedData (expo default)
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d 2>/dev/null | grep -i "zyea\|mobile" | head -1)
           fi
           
           if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
             echo "❌ Could not find .app file"
-            echo "📂 DerivedData structure:"
-            find build/DerivedData -type d -maxdepth 4 2>/dev/null | head -50 || true
+            echo "📂 ios/build directory:"
+            ls -la ios/build/ 2>/dev/null || true
             echo ""
-            echo "📂 Build/Products directory:"
-            ls -la build/DerivedData/Build/Products/ 2>/dev/null || true
+            echo "📂 ios directory structure:"
+            find ios -type d -maxdepth 3 2>/dev/null | head -30 || true
             echo ""
-            echo "📂 Release-iphoneos directory:"
-            ls -la build/DerivedData/Build/Products/Release-iphoneos/ 2>/dev/null || true
-            echo ""
-            echo "🔍 All .app files found:"
-            find build -name "*.app" -type d 2>/dev/null || true
-            echo ""
-            echo "📂 All directories in Products:"
-            find build/DerivedData/Build/Products -type d 2>/dev/null | head -30 || true
+            echo "🔍 All .app files:"
+            find . -name "*.app" -type d 2>/dev/null | head -10 || true
             exit 1
           fi
           
@@ -190,12 +176,12 @@ jobs:
           mkdir -p Payload
           APP_NAME=$(basename "$APP_PATH")
           cp -r "$APP_PATH" "Payload/$APP_NAME"
-          zip -r ../build.ipa Payload
+          zip -r build.ipa Payload
           rm -rf Payload
           
-          if [ -f "../build.ipa" ]; then
-            echo "✅ IPA created successfully at ../build.ipa"
-            ls -lh ../build.ipa
+          if [ -f "build.ipa" ]; then
+            echo "✅ IPA created successfully!"
+            ls -lh build.ipa
           else
             echo "❌ Failed to create IPA"
             exit 1
