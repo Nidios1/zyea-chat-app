@@ -52,9 +52,6 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: ⛏️ Setup EAS local builds plugin
-        run: npm install -g eas-cli-local-build-plugin
-
       - name: ☕️ Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
@@ -70,28 +67,78 @@ jobs:
         run: |
           npm install --legacy-peer-deps || npm install
 
-      - name: 🏗️ Build IPA with EAS (unsigned)
+      - name: 🔨 Prebuild iOS project
         working-directory: ./mobile-expo
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          echo "🔍 Debug info:"
-          echo "  - EXPO_TOKEN is set: $([ -n "$EXPO_TOKEN" ] && echo 'yes' || echo 'no')"
-          echo "  - Current directory: $(pwd)"
-          echo "  - EAS version: $(eas --version || echo 'not found')"
-          echo "  - Node version: $(node --version)"
-          echo "  - npm version: $(npm --version)"
-          echo ""
-          echo "🏗️ Starting EAS build..."
-          eas build --platform ios \
-            --profile unsigned \
-            --local \
-            --non-interactive \
-            --output build.ipa || {
-            echo "❌ Build failed!"
-            echo "📋 Checking for error logs..."
+          echo "🔨 Running prebuild..."
+          npx expo prebuild --platform ios --clean
+
+      - name: 📦 Install CocoaPods dependencies
+        working-directory: ./mobile-expo/ios
+        run: |
+          pod install
+
+      - name: 🏗️ Build IPA (unsigned) with xcodebuild
+        working-directory: ./mobile-expo/ios
+        run: |
+          echo "🔍 Detecting workspace and scheme..."
+          WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
+          if [ -z "$WORKSPACE" ]; then
+            echo "❌ No .xcworkspace found!"
+            exit 1
+          fi
+          
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+          if [ -z "$SCHEME" ]; then
+            # Try common scheme names
+            SCHEME="zyea-mobile"
+            echo "⚠️ Could not detect scheme, using: $SCHEME"
+          fi
+          
+          echo "✅ Using workspace: $WORKSPACE"
+          echo "✅ Using scheme: $SCHEME"
+          
+          echo "🧹 Cleaning build..."
+          xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release
+          
+          echo "🏗️ Building archive (unsigned)..."
+          xcodebuild archive \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -archivePath build/app.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" || {
+            echo "❌ Archive build failed!"
             exit 1
           }
+          
+          echo "🔍 Finding .app file..."
+          APP_PATH=$(find build/app.xcarchive -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ Could not find .app file in archive"
+            find build -type d -name "*.app" || true
+            exit 1
+          fi
+          
+          echo "📦 Creating IPA from $APP_PATH..."
+          mkdir -p Payload
+          APP_NAME=$(basename "$APP_PATH")
+          cp -r "$APP_PATH" "Payload/$APP_NAME"
+          zip -r ../build.ipa Payload
+          rm -rf Payload
+          
+          if [ -f "../build.ipa" ]; then
+            echo "✅ IPA created successfully at ../build.ipa"
+            ls -lh ../build.ipa
+          else
+            echo "❌ Failed to create IPA"
+            exit 1
+          fi
 
       - name: 🔍 Find IPA file
         working-directory: ./mobile-expo
