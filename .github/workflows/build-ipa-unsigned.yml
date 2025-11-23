@@ -102,62 +102,58 @@ jobs:
           echo "🧹 Cleaning build..."
           xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release
           
-          echo "🏗️ Building archive (unsigned)..."
-          xcodebuild archive \
+          echo "🏗️ Building app target first (unsigned)..."
+          # Build the app target first to generate .app file
+          xcodebuild build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
-            -archivePath build/app.xcarchive \
+            -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
-            SKIP_INSTALL=NO || {
-            echo "❌ Archive build failed!"
+            ONLY_ACTIVE_ARCH=NO || {
+            echo "❌ Build failed!"
             exit 1
           }
           
-          echo "✅ Archive created successfully"
-          echo "📂 Checking archive structure..."
-          if [ ! -d "build/app.xcarchive" ]; then
-            echo "❌ Archive directory not found!"
-            exit 1
-          fi
+          echo "✅ Build completed"
+          echo "🔍 Finding .app file in build output..."
           
-          echo "📂 Archive contents:"
-          ls -la build/app.xcarchive/ || true
-          
-          echo "📂 Products directory:"
-          ls -la build/app.xcarchive/Products/ 2>/dev/null || true
-          
-          echo "📂 Applications directory:"
-          ls -la build/app.xcarchive/Products/Applications/ 2>/dev/null || true
-          
-          echo "🔍 Finding .app file in archive..."
+          # Find .app file in DerivedData
           APP_PATH=""
           
-          # The .app should be in Products/Applications/
-          if [ -d "build/app.xcarchive/Products/Applications" ]; then
-            APP_PATH=$(find build/app.xcarchive/Products/Applications -maxdepth 1 -name "*.app" -type d | head -1)
+          # Method 1: Look in DerivedData/Build/Products/Release-iphoneos
+          APP_PATH=$(find build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
+          
+          # Method 2: Search entire DerivedData
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find build/DerivedData -name "*.app" -type d 2>/dev/null | head -1)
           fi
           
-          # If not found, search deeper
-          if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find build/app.xcarchive/Products -name "*.app" -type d | head -1)
+          # Method 3: Check if archive was created and has .app
+          if [ -z "$APP_PATH" ] && [ -d "build/app.xcarchive" ]; then
+            echo "📂 Checking archive for .app..."
+            APP_PATH=$(find build/app.xcarchive/Products/Applications -name "*.app" -type d 2>/dev/null | head -1)
           fi
           
-          # Last resort: search entire archive
+          # Method 4: Search in build directory
           if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find build/app.xcarchive -name "*.app" -type d | head -1)
+            APP_PATH=$(find build -name "*.app" -type d 2>/dev/null | head -1)
           fi
           
           if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
-            echo "❌ Could not find .app file in archive"
-            echo "📂 Full archive tree (first 50 lines):"
-            find build/app.xcarchive -type d 2>/dev/null | head -50 || true
+            echo "❌ Could not find .app file"
+            echo "📂 DerivedData structure:"
+            find build/DerivedData -type d -maxdepth 4 2>/dev/null | head -30 || true
             echo ""
-            echo "📂 All files in Products:"
-            find build/app.xcarchive/Products -type f 2>/dev/null | head -20 || true
+            echo "📂 Build/Products directory:"
+            ls -la build/DerivedData/Build/Products/ 2>/dev/null || true
+            echo ""
+            echo "🔍 All .app files found:"
+            find build -name "*.app" -type d 2>/dev/null || true
             exit 1
           fi
           
