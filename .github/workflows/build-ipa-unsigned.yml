@@ -121,7 +121,7 @@ jobs:
             -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
+
             DEVELOPMENT_TEAM="" \
             ONLY_ACTIVE_ARCH=NO || {
             echo "❌ Build failed!"
@@ -142,7 +142,7 @@ jobs:
               -sdk iphoneos \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGNING_ALLOWED=NO \
+
               DEVELOPMENT_TEAM="" \
               SKIP_INSTALL=NO || {
               echo "❌ Archive also failed!"
@@ -203,6 +203,9 @@ jobs:
             echo ""
             echo "📂 Build/Products directory:"
             ls -la ios/build/DerivedData/Build/Products/ 2>/dev/null || true
+            echo ""
+            echo "📂 Release-iphoneos directory:"
+            ls -la ios/build/DerivedData/Build/Products/Release-iphoneos/ 2>/dev/null || true
             echo ""
             echo "🔍 All .app files found:"
             find . -name "*.app" -type d 2>/dev/null || true
