@@ -27,8 +27,20 @@ export const getApiBaseUrl = () => {
     return process.env.REACT_APP_API_URL;
   }
 
-  // Default API URL
-  const defaultApiUrl = 'http://192.168.0.103:5000/api';
+  // Default API URL - luôn dùng IP WiFi để có thể truy cập từ các thiết bị khác
+  // Tự động detect IP từ window.location nếu đang chạy trên IP WiFi
+  // IP sẽ được sync từ network-config.js qua .env.local
+  let defaultApiUrl = 'http://192.168.0.103:5000/api'; // Fallback - sẽ được sync-ip.js cập nhật
+  
+  // Nếu đang chạy trên IP WiFi (không phải localhost), dùng IP đó
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    // Nếu hostname là IP (192.168.x.x hoặc 10.x.x.x), dùng IP đó
+    if (hostname.match(/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/)) {
+      defaultApiUrl = `http://${hostname}:5000/api`;
+      console.log('🌐 Detected WiFi IP from hostname:', hostname);
+    }
+  }
   
   console.log('🌐 Running on web browser');
   console.log('📡 Using API URL:', defaultApiUrl);
@@ -46,14 +58,20 @@ export const getSocketUrl = () => {
     return process.env.REACT_APP_SOCKET_URL;
   }
 
-  // Development mode - use localhost
-  if (process.env.NODE_ENV === 'development') {
-    console.log('🔌 Using Socket URL: http://localhost:5000');
-    return 'http://localhost:5000';
+  // Luôn dùng IP WiFi để có thể truy cập từ các thiết bị khác
+  // Tự động detect IP từ window.location nếu đang chạy trên IP WiFi
+  // IP sẽ được sync từ network-config.js qua .env.local
+  let defaultSocketUrl = 'http://192.168.0.103:5000'; // Fallback - sẽ được sync-ip.js cập nhật
+  
+  // Nếu đang chạy trên IP WiFi (không phải localhost), dùng IP đó
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    // Nếu hostname là IP (192.168.x.x hoặc 10.x.x.x), dùng IP đó
+    if (hostname.match(/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/)) {
+      defaultSocketUrl = `http://${hostname}:5000`;
+      console.log('🔌 Detected WiFi IP for Socket:', hostname);
+    }
   }
-
-  // Production
-  const defaultSocketUrl = 'http://192.168.0.103:5000';
   
   console.log('🌐 Web - Socket URL:', defaultSocketUrl);
   

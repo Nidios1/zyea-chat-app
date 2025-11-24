@@ -11,9 +11,12 @@ import {
   Dimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  Image,
 } from 'react-native';
-import { Text, TextInput, Button, Checkbox, useTheme } from 'react-native-paper';
+import { Text, TextInput, Button, Checkbox, useTheme as usePaperTheme } from 'react-native-paper';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../navigation/types';
@@ -21,6 +24,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { authAPI } from '../../utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAlert } from '../../hooks/useAlert';
+import { spacing, typography, borderRadius } from '../../config/designTokens';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -33,51 +37,67 @@ interface Slide {
   icon: string;
 }
 
-const slides: Slide[] = [
+// Slides data
+const getSlides = (t: (key: any) => string) => [
   {
     key: 'group',
-    title: 'Chat nhóm tiện lợi',
-    desc: 'Cùng trao đổi, giữ liên lạc với gia đình, bạn bè và đồng nghiệp mọi lúc mọi nơi',
+    title: t('slides.group.title'),
+    desc: t('slides.group.desc'),
     icon: 'account-group',
   },
   {
     key: 'photo',
-    title: 'Gửi ảnh nhanh chóng',
-    desc: 'Chia sẻ hình ảnh chất lượng cao với bạn bè và người thân nhanh chóng và dễ dàng',
+    title: t('slides.photo.title'),
+    desc: t('slides.photo.desc'),
     icon: 'image',
   },
   {
     key: 'diary',
-    title: 'Nhật ký bạn bè',
-    desc: 'Nơi cập nhật hoạt động mới nhất của những người bạn quan tâm',
+    title: t('slides.diary.title'),
+    desc: t('slides.diary.desc'),
     icon: 'heart',
   },
   {
     key: 'video',
-    title: 'Gọi video ổn định',
-    desc: 'Trò chuyện thật đã với hình ảnh sắc nét, tiếng chất, âm chuẩn dưới mọi điều kiện mạng',
+    title: t('slides.video.title'),
+    desc: t('slides.video.desc'),
     icon: 'video',
   },
 ];
 
+// Logo component - defined outside to prevent re-creation on re-render
+const LogoIcon = React.memo(() => (
+  <View style={{ marginBottom: 32 }}>
+    <Image 
+      source={require('../../../assets/Zyea.png')} 
+      style={{ width: 64, height: 64 }}
+      resizeMode="contain"
+    />
+  </View>
+));
+
 const LoginScreen = () => {
-  const theme = useTheme();
+  const paperTheme = usePaperTheme();
+  const { isDarkMode, colors } = useTheme();
   const navigation = useNavigation<LoginScreenNavigationProp>();
   const { login } = useAuth();
   const { showAlert, AlertComponent } = useAlert();
+  const { language, setLanguage, t } = useLanguage();
 
   // Custom theme for checkboxes to ensure border is visible
   const checkboxTheme = {
-    ...theme,
+    ...paperTheme,
     colors: {
-      ...theme.colors,
-      primary: '#0a66ff',
-      onSurface: '#666',
+      ...paperTheme.colors,
+      primary: colors.primary,
+      onSurface: colors.textSecondary,
     },
   };
   const [step, setStep] = useState(1); // 1: intro, 2: email, 3: password
   const [slideIndex, setSlideIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
+  
+  const slides = getSlides(t);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -126,20 +146,25 @@ const LoginScreen = () => {
   };
 
 
+  const toggleLanguage = () => {
+    const newLang = language === 'vi' ? 'en' : 'vi';
+    setLanguage(newLang);
+  };
+
   const handleContinue = () => {
     // Validate email
     if (!email || email.trim() === '') {
-      showAlert('Vui lòng nhập email', 'Email không được để trống.');
+      showAlert(t('auth.emailRequired'), t('auth.emailEmpty'));
       return;
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      showAlert('Email không hợp lệ', 'Vui lòng kiểm tra lại địa chỉ email.');
+      showAlert(t('auth.emailInvalid'), t('auth.emailInvalidDesc'));
       return;
     }
     // Validate terms
     if (!agree1 || !agree2) {
-      showAlert('Điều khoản', 'Vui lòng đồng ý các điều khoản để tiếp tục.');
+      showAlert(t('auth.terms'), t('auth.mustAgreeTermsDesc'));
       setShowTermsError(true);
       setTermsTouched(true);
       return;
@@ -152,7 +177,7 @@ const LoginScreen = () => {
   const handleSubmit = async () => {
     // Validate password
     if (!password || password.trim() === '') {
-      showAlert('Vui lòng nhập mật khẩu', 'Mật khẩu không được để trống.');
+      showAlert(t('auth.passwordRequired'), t('auth.passwordEmpty'));
       return;
     }
 
@@ -179,36 +204,28 @@ const LoginScreen = () => {
       const errorMessage = err.response?.data?.message || '';
       
       if (errorMessage.includes('password') || errorMessage.includes('mật khẩu')) {
-        showAlert('Mật khẩu không đúng', 'Mật khẩu bạn nhập không đúng. Vui lòng thử lại.');
+        showAlert(t('auth.passwordIncorrect'), t('auth.passwordIncorrectDesc'));
       } else if (errorMessage.includes('email') || errorMessage.includes('Email') || errorMessage.includes('user')) {
-        showAlert('Email không tồn tại', 'Email này chưa được đăng ký. Vui lòng kiểm tra lại.');
+        showAlert(t('auth.emailNotExist'), t('auth.emailNotExistDesc'));
       } else if (errorMessage) {
-        showAlert('Đăng nhập thất bại', errorMessage);
+        showAlert(t('auth.loginFailed'), errorMessage);
       } else {
-        showAlert('Đăng nhập thất bại', 'Đã xảy ra lỗi. Vui lòng thử lại sau.');
+        showAlert(t('auth.loginFailed'), t('auth.loginError'));
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // Logo component
-  const LogoIcon = () => (
-    <View style={styles.logoContainer}>
-      <View style={styles.logoShape}>
-        <Text style={styles.logoText}>Z</Text>
-      </View>
-    </View>
-  );
 
   // Illustration component for each slide
   const SlideIllustration = ({ icon }: { icon: string }) => (
     <View style={styles.illustrationContainer}>
-      <View style={styles.dashedCircle} />
-      <View style={styles.smallCircleLeft} />
-      <View style={styles.smallCircleRight} />
-      <View style={styles.centralIcon}>
-        <MaterialCommunityIcons name={icon as any} size={48} color="#2196F3" />
+      <View style={[styles.dashedCircle, { borderColor: colors.border }]} />
+      <View style={[styles.smallCircleLeft, { borderColor: colors.border, backgroundColor: colors.surface }]} />
+      <View style={[styles.smallCircleRight, { borderColor: colors.border, backgroundColor: colors.surface }]} />
+      <View style={[styles.centralIcon, { backgroundColor: colors.surface }]}>
+        <MaterialCommunityIcons name={icon as any} size={48} color={colors.primary} />
       </View>
     </View>
   );
@@ -216,20 +233,19 @@ const LoginScreen = () => {
   // Step 1: Intro slides
   if (step === 1) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#F7F8FA' }]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#F7F8FA" />
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
         
         {/* Language button */}
         <View style={styles.header}>
-          <TouchableOpacity style={styles.languageButton}>
-            <Text style={styles.languageText}>Tiếng Việt</Text>
+          <TouchableOpacity style={[styles.languageButton, { backgroundColor: colors.surface }]} onPress={toggleLanguage}>
+            <Text style={[styles.languageText, { color: colors.text }]}>{language === 'vi' ? 'Tiếng Việt' : 'English'}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Main content */}
         <View style={styles.content}>
           <LogoIcon />
-          <Text style={styles.appName}>Zyea+</Text>
 
           {/* Slides */}
           <ScrollView
@@ -245,8 +261,8 @@ const LoginScreen = () => {
             {slides.map((slide) => (
               <View key={slide.key} style={styles.slide}>
                 <SlideIllustration icon={slide.icon} />
-                <Text style={styles.headline}>{slide.title}</Text>
-                <Text style={styles.description}>{slide.desc}</Text>
+                <Text style={[styles.headline, { color: colors.text }]}>{slide.title}</Text>
+                <Text style={[styles.description, { color: colors.textSecondary }]}>{slide.desc}</Text>
               </View>
             ))}
           </ScrollView>
@@ -258,7 +274,9 @@ const LoginScreen = () => {
                 key={i}
                 style={[
                   styles.dot,
+                  { backgroundColor: colors.border },
                   i === slideIndex && styles.dotActive,
+                  i === slideIndex && { backgroundColor: colors.primary },
                 ]}
               />
             ))}
@@ -270,11 +288,11 @@ const LoginScreen = () => {
           <Button
             mode="contained"
             onPress={() => setStep(2)}
-            style={styles.loginButton}
+            style={[styles.loginButton, { backgroundColor: colors.primary }]}
             contentStyle={styles.buttonContent}
-            labelStyle={styles.loginButtonText}
+            labelStyle={[styles.loginButtonText, { color: isDarkMode ? '#000000' : '#FFFFFF' }]}
           >
-            Đăng nhập
+            {t('auth.login')}
           </Button>
 
           <View style={styles.buttonSpacer} />
@@ -282,11 +300,11 @@ const LoginScreen = () => {
           <Button
             mode="outlined"
             onPress={() => navigation.navigate('Register')}
-            style={styles.registerButton}
+            style={[styles.registerButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
             contentStyle={styles.buttonContent}
-            labelStyle={styles.registerButtonText}
+            labelStyle={[styles.registerButtonText, { color: colors.text }]}
           >
-            Tạo tài khoản mới
+            {t('auth.createAccount')}
           </Button>
         </View>
       </SafeAreaView>
@@ -296,8 +314,8 @@ const LoginScreen = () => {
   // Step 2: Email + Terms
   if (step === 2) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
+        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
         
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -305,9 +323,9 @@ const LoginScreen = () => {
         >
           <View style={styles.stepHeader}>
             <TouchableOpacity onPress={() => setStep(1)} style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
+              <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={styles.stepHeaderText}>Nhập email</Text>
+            <Text style={[styles.stepHeaderText, { color: colors.text }]}>{t('auth.enterEmail')}</Text>
           </View>
 
           <ScrollView
@@ -315,7 +333,7 @@ const LoginScreen = () => {
             keyboardShouldPersistTaps="handled"
           >
             <TextInput
-              label="Nhập email của bạn"
+              label={t('auth.enterYourEmail')}
               value={email}
               onChangeText={setEmail}
               mode="outlined"
@@ -329,7 +347,9 @@ const LoginScreen = () => {
               <TouchableOpacity
                 style={[
                   styles.checkboxBorder,
-                  agree1 && styles.checkboxBorderChecked
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  agree1 && styles.checkboxBorderChecked,
+                  agree1 && { borderColor: colors.primary, backgroundColor: colors.primary }
                 ]}
                 activeOpacity={0.7}
                 onPress={() => {
@@ -341,16 +361,16 @@ const LoginScreen = () => {
                   <MaterialCommunityIcons name="check" size={14} color="#ffffff" />
                 )}
               </TouchableOpacity>
-              <Text style={styles.checkboxLabel}>
-                Tôi đồng ý với các{' '}
+              <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+                {t('auth.agreeTerms1')}{' '}
                 <Text
-                  style={styles.termsLink}
+                  style={[styles.termsLink, { color: colors.primary }]}
                   onPress={(e) => {
                     e.stopPropagation();
                     navigation.navigate('Terms' as never);
                   }}
                 >
-                  điều khoản sử dụng Zyea+
+                  {t('auth.agreeTerms2')}
                 </Text>
               </Text>
             </View>
@@ -359,7 +379,9 @@ const LoginScreen = () => {
               <TouchableOpacity
                 style={[
                   styles.checkboxBorder,
-                  agree2 && styles.checkboxBorderChecked
+                  { borderColor: colors.border, backgroundColor: colors.surface },
+                  agree2 && styles.checkboxBorderChecked,
+                  agree2 && { borderColor: colors.primary, backgroundColor: colors.primary }
                 ]}
                 activeOpacity={0.7}
                 onPress={() => {
@@ -371,43 +393,44 @@ const LoginScreen = () => {
                   <MaterialCommunityIcons name="check" size={14} color="#ffffff" />
                 )}
               </TouchableOpacity>
-              <Text style={styles.checkboxLabel}>
-                Tôi đồng ý với{' '}
+              <Text style={[styles.checkboxLabel, { color: colors.text }]}>
+                {t('auth.agreeTerms3')}{' '}
                 <Text
-                  style={styles.termsLink}
+                  style={[styles.termsLink, { color: colors.primary }]}
                   onPress={(e) => {
                     e.stopPropagation();
                     navigation.navigate('SocialTerms' as never);
                   }}
                 >
-                  điều khoản Mạng xã hội của Zyea+
+                  {t('auth.agreeTerms4')}
                 </Text>
               </Text>
             </View>
 
             {(showTermsError || (termsTouched && (!agree1 || !agree2))) && (
-              <Text style={styles.errorText}>
-                Bạn cần đồng ý đầy đủ các điều khoản để tiếp tục
+              <Text style={[styles.errorText, { color: colors.error }]}>
+                {t('auth.mustAgreeTerms')}
               </Text>
             )}
 
             <Button
               mode="contained"
               onPress={handleContinue}
-              style={styles.continueButton}
+              style={[styles.continueButton, { backgroundColor: colors.primary }]}
               contentStyle={styles.buttonContent}
+              labelStyle={{ color: isDarkMode ? '#000000' : '#FFFFFF' }}
               disabled={loading}
             >
-              Tiếp tục
+              {t('auth.continue')}
             </Button>
 
-            <Text style={styles.footerNote}>
-              Chưa có tài khoản?{' '}
+            <Text style={[styles.footerNote, { color: colors.textSecondary }]}>
+              {t('auth.noAccount')}{' '}
               <Text
-                style={styles.footerLink}
+                style={[styles.footerLink, { color: colors.primary }]}
                 onPress={() => navigation.navigate('Register')}
               >
-                Tạo tài khoản
+                {t('auth.createAccountLink')}
               </Text>
             </Text>
           </ScrollView>
@@ -419,8 +442,8 @@ const LoginScreen = () => {
 
   // Step 3: Password
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
       
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -428,19 +451,19 @@ const LoginScreen = () => {
       >
         <View style={styles.stepHeader}>
           <TouchableOpacity onPress={() => setStep(2)} style={styles.backButton}>
-            <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
+            <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.stepHeaderText}>Nhập mật khẩu</Text>
+          <Text style={[styles.stepHeaderText, { color: colors.text }]}>{t('auth.enterPassword')}</Text>
         </View>
 
         <ScrollView
           contentContainerStyle={styles.formContent}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.emailDisplay}>{email || 'Email'}</Text>
+          <Text style={[styles.emailDisplay, { color: colors.textSecondary }]}>{email || 'Email'}</Text>
 
           <TextInput
-            label="Nhập mật khẩu"
+            label={t('auth.enterPassword')}
             value={password}
             onChangeText={setPassword}
             mode="outlined"
@@ -458,7 +481,9 @@ const LoginScreen = () => {
             <TouchableOpacity
               style={[
                 styles.checkboxBorder,
-                rememberPassword && styles.checkboxBorderChecked
+                { borderColor: colors.border, backgroundColor: colors.surface },
+                rememberPassword && styles.checkboxBorderChecked,
+                rememberPassword && { borderColor: colors.primary, backgroundColor: colors.primary }
               ]}
               activeOpacity={0.7}
               onPress={() => setRememberPassword(!rememberPassword)}
@@ -467,26 +492,27 @@ const LoginScreen = () => {
                 <MaterialCommunityIcons name="check" size={16} color="#ffffff" />
               )}
             </TouchableOpacity>
-            <Text style={styles.checkboxLabel}>Lưu mật khẩu</Text>
+            <Text style={[styles.checkboxLabel, { color: colors.text }]}>{t('auth.rememberPassword')}</Text>
           </View>
 
           <Button
             mode="contained"
             onPress={handleSubmit}
-            style={styles.continueButton}
+            style={[styles.continueButton, { backgroundColor: colors.primary }]}
             contentStyle={styles.buttonContent}
+            labelStyle={{ color: isDarkMode ? '#000000' : '#FFFFFF' }}
             loading={loading}
             disabled={loading}
           >
-            {loading ? 'Đang đăng nhập...' : 'Tiếp tục'}
+            {loading ? t('auth.loggingIn') : t('auth.continue')}
           </Button>
 
-          <Text style={styles.footerNote}>
+          <Text style={[styles.footerNote, { color: colors.textSecondary }]}>
             <Text
-              style={styles.footerLink}
+              style={[styles.footerLink, { color: colors.primary }]}
               onPress={() => navigation.navigate('ForgotPassword')}
             >
-              Quên mật khẩu?
+              {t('auth.forgotPassword')}
             </Text>
           </Text>
         </ScrollView>
@@ -501,54 +527,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.base + 2,
     alignItems: 'flex-end',
   },
   languageButton: {
-    backgroundColor: '#F5F5F5',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.xl,
   },
   languageText: {
-    color: '#000000',
-    fontSize: 14,
-    fontWeight: '400',
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.regular,
   },
   content: {
     flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 32,
-    paddingTop: 40,
-  },
-  logoContainer: {
-    marginBottom: 16,
-  },
-  logoShape: {
-    width: 64,
-    height: 64,
-    backgroundColor: '#000000',
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: 40,
-    fontWeight: 'bold',
-    fontStyle: 'italic',
-  },
-  appName: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#0a66ff',
-    marginTop: 6,
-    marginBottom: 24,
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xxxl,
   },
   slideViewport: {
     width: SCREEN_WIDTH - 64,
-    marginBottom: 10,
+    marginBottom: spacing.base + 2,
   },
   slidesRow: {
     flexDirection: 'row',
@@ -556,14 +556,14 @@ const styles = StyleSheet.create({
   slide: {
     width: SCREEN_WIDTH - 64,
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.lg,
   },
   illustrationContainer: {
     width: 220,
     height: 220,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.base,
     position: 'relative',
   },
   dashedCircle: {
@@ -571,15 +571,13 @@ const styles = StyleSheet.create({
     height: 220,
     borderRadius: 110,
     borderWidth: 2,
-    borderColor: '#dfe6ef',
     borderStyle: 'dashed',
     position: 'absolute',
   },
   centralIcon: {
     width: 80,
     height: 80,
-    backgroundColor: '#eaf3ff',
-    borderRadius: 16,
+    borderRadius: borderRadius.base,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1,
@@ -590,10 +588,8 @@ const styles = StyleSheet.create({
     top: 18,
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: borderRadius.full / 2,
     borderWidth: 2,
-    borderColor: '#d7e6ff',
-    backgroundColor: '#eaf3ff',
   },
   smallCircleRight: {
     position: 'absolute',
@@ -601,78 +597,67 @@ const styles = StyleSheet.create({
     top: 18,
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: borderRadius.full / 2,
     borderWidth: 2,
-    borderColor: '#d7e6ff',
-    backgroundColor: '#eaf3ff',
   },
   headline: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 6,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    marginBottom: spacing.xs + 2,
     textAlign: 'center',
   },
   description: {
-    fontSize: 13,
-    color: '#586174',
+    fontSize: typography.fontSize.sm + 1,
     textAlign: 'center',
-    paddingHorizontal: 24,
-    lineHeight: 18,
+    paddingHorizontal: spacing.xl,
+    lineHeight: typography.fontSize.sm * typography.lineHeight.normal,
   },
   paginationDots: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.base,
   },
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#d6dbe3',
     marginHorizontal: 3,
   },
   dotActive: {
     width: 8,
     height: 8,
-    borderRadius: 4,
-    backgroundColor: '#0a66ff',
+    borderRadius: borderRadius.xs,
   },
   buttonContainer: {
-    paddingHorizontal: 24,
-    paddingBottom: 20,
-    paddingTop: 12,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg,
+    paddingTop: spacing.md,
   },
   buttonSpacer: {
-    height: 6,
+    height: spacing.xs + 2,
   },
   loginButton: {
-    backgroundColor: '#0a66ff',
-    borderRadius: 6,
+    borderRadius: borderRadius.xs + 2,
     minHeight: 36,
   },
   loginButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
     paddingVertical: 0,
   },
   registerButton: {
-    backgroundColor: '#f2f4f7',
-    borderColor: '#e6e6e6',
     borderWidth: 1,
-    borderRadius: 6,
+    borderRadius: borderRadius.xs + 2,
     minHeight: 36,
   },
   registerButtonText: {
-    color: '#222',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.semibold,
     paddingVertical: 0,
   },
   buttonContent: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.base,
   },
   stepHeader: {
     flexDirection: 'row',
@@ -686,7 +671,6 @@ const styles = StyleSheet.create({
   stepHeaderText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#2b2b2b',
     marginLeft: 8,
   },
   formContent: {
@@ -694,7 +678,6 @@ const styles = StyleSheet.create({
   },
   input: {
     marginBottom: 16,
-    backgroundColor: '#fff',
   },
   checkboxContainer: {
     flexDirection: 'row',
@@ -707,48 +690,37 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#ccc',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 6,
-    backgroundColor: '#fff',
   },
   checkboxBorderChecked: {
-    borderColor: '#0a66ff',
-    backgroundColor: '#0a66ff',
   },
   checkboxLabel: {
     fontSize: 14,
-    color: '#444',
     flex: 1,
     marginLeft: 0,
     lineHeight: 20,
   },
   termsLink: {
-    color: '#0a66ff',
   },
   errorText: {
-    color: '#e53935',
     fontSize: 12,
     marginTop: 4,
     marginBottom: 8,
   },
   continueButton: {
-    backgroundColor: '#0a66ff',
     borderRadius: 12,
     marginTop: 8,
   },
   footerNote: {
     textAlign: 'center',
-    color: '#666',
     fontSize: 13,
     marginTop: 16,
   },
   footerLink: {
-    color: '#0a66ff',
   },
   emailDisplay: {
-    color: '#666',
     fontSize: 14,
     marginBottom: 8,
     paddingHorizontal: 4,

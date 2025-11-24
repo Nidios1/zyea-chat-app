@@ -75,6 +75,7 @@ async function setupDatabase() {
         avatar_url VARCHAR(500) DEFAULT NULL,
         cover_url VARCHAR(500) DEFAULT NULL,
         phone VARCHAR(20),
+        role ENUM('user', 'admin') DEFAULT 'user',
         status ENUM('online', 'offline', 'away', 'recently_active') DEFAULT 'offline',
         last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -116,7 +117,7 @@ async function setupDatabase() {
         conversation_id INT,
         sender_id INT,
         content TEXT NOT NULL,
-        message_type ENUM('text', 'image', 'file') DEFAULT 'text',
+        message_type ENUM('text', 'image', 'file', 'sticker', 'video', 'system', 'call') DEFAULT 'text',
         file_url VARCHAR(255) DEFAULT NULL,
         deleted_for_user INT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -284,10 +285,11 @@ async function setupDatabase() {
     ];
 
     for (const user of sampleUsers) {
+      const isAdmin = user.username === 'admin@zalo.com';
       await connection.execute(`
-        INSERT INTO users (username, email, password, full_name, phone, status)
-        VALUES (?, ?, ?, ?, ?, 'online')
-      `, [user.username, user.email, user.password, user.full_name, user.phone]);
+        INSERT INTO users (username, email, password, full_name, phone, role, status)
+        VALUES (?, ?, ?, ?, ?, ?, 'online')
+      `, [user.username, user.email, user.password, user.full_name, user.phone, isAdmin ? 'admin' : 'user']);
     }
 
     console.log('✅ Sample users created');

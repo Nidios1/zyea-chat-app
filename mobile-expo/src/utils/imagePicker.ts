@@ -43,33 +43,85 @@ export const launchImageLibrary = async (options?: {
       ? parseFloat(options.quality) || 1
       : 1;
 
+    // Use MediaTypeOptions (compatible with expo-image-picker 17.x)
+    let mediaTypes: ImagePicker.MediaTypeOptions;
+    if (options?.mediaType === 'photo') {
+      mediaTypes = ImagePicker.MediaTypeOptions.Images;
+    } else if (options?.mediaType === 'video') {
+      mediaTypes = ImagePicker.MediaTypeOptions.Videos;
+    } else {
+      // For 'mixed', use All
+      mediaTypes = ImagePicker.MediaTypeOptions.All;
+    }
+
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: options?.mediaType === 'photo' 
-        ? ImagePicker.MediaTypeOptions.Images 
-        : options?.mediaType === 'video'
-        ? ImagePicker.MediaTypeOptions.Videos
-        : ImagePicker.MediaTypeOptions.All,
-      allowsEditing: false as boolean,
+      mediaTypes: mediaTypes as any, // Type cast to avoid type errors during migration
+      allowsEditing: false,
       quality: Math.max(0, Math.min(1, quality)),
-      allowsMultipleSelection: (selectionLimit > 1) as boolean,
+      allowsMultipleSelection: selectionLimit > 1,
       selectionLimit: selectionLimit,
     });
+
+    // Kiểm tra result có tồn tại không
+    if (!result) {
+      return {
+        didCancel: false,
+        error: 'Image picker returned no result'
+      };
+    }
 
     if (result.canceled) {
       return { didCancel: true };
     }
 
+    // Xử lý an toàn - kiểm tra assets trước khi map
+    // Một số version của expo-image-picker có thể trả về 'images' thay vì 'assets'
+    let assets: any[] | undefined = undefined;
+    try {
+      if (result && typeof result === 'object') {
+        assets = result.assets;
+        if (!assets) {
+          assets = (result as any).images;
+        }
+      }
+    } catch (e) {
+      console.error('Error accessing assets/images:', e);
+    }
+    
+    if (!assets || !Array.isArray(assets) || assets.length === 0) {
+      return {
+        didCancel: false,
+        error: 'No assets selected'
+      };
+    }
+
     return {
-      assets: result.assets.map((asset) => ({
+      assets: assets.map((asset: any) => ({
         uri: asset.uri,
         type: asset.type || 'image',
         fileName: asset.fileName,
         fileSize: asset.fileSize,
       }))
     };
-  } catch (error) {
+  } catch (error: any) {
+    // Xử lý lỗi an toàn - không truy cập bất kỳ property nào có thể undefined
+    let errorMessage = 'Unknown error';
+    try {
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (error && typeof error === 'object' && error.message) {
+        errorMessage = String(error.message);
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+    } catch (e) {
+      // Nếu không thể extract error message, dùng default
+      errorMessage = 'Unknown error';
+    }
+    
+    console.error('Image picker error:', errorMessage);
     return {
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: errorMessage
     };
   }
 };
@@ -99,29 +151,77 @@ export const launchCamera = async (options?: {
       ? parseFloat(options.quality) || 1
       : 1;
 
+    // Use MediaTypeOptions (compatible with expo-image-picker 17.x)
+    const mediaTypes = options?.mediaType === 'photo' 
+      ? ImagePicker.MediaTypeOptions.Images 
+      : ImagePicker.MediaTypeOptions.Videos;
+
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: options?.mediaType === 'photo' 
-        ? ImagePicker.MediaTypeOptions.Images 
-        : ImagePicker.MediaTypeOptions.Videos,
-      allowsEditing: false as boolean,
+      mediaTypes: mediaTypes as any, // Type cast to avoid type errors during migration
+      allowsEditing: false,
       quality: Math.max(0, Math.min(1, quality)),
     });
+
+    // Kiểm tra result có tồn tại không
+    if (!result) {
+      return {
+        didCancel: false,
+        error: 'Camera returned no result'
+      };
+    }
 
     if (result.canceled) {
       return { didCancel: true };
     }
 
+    // Xử lý an toàn - kiểm tra assets trước khi map
+    // Một số version của expo-image-picker có thể trả về 'images' thay vì 'assets'
+    let assets: any[] | undefined = undefined;
+    try {
+      if (result && typeof result === 'object') {
+        assets = result.assets;
+        if (!assets) {
+          assets = (result as any).images;
+        }
+      }
+    } catch (e) {
+      console.error('Error accessing assets/images:', e);
+    }
+    
+    if (!assets || !Array.isArray(assets) || assets.length === 0) {
+      return {
+        didCancel: false,
+        error: 'No assets selected'
+      };
+    }
+
     return {
-      assets: result.assets.map((asset) => ({
+      assets: assets.map((asset: any) => ({
         uri: asset.uri,
         type: asset.type || 'image',
         fileName: asset.fileName,
         fileSize: asset.fileSize,
       }))
     };
-  } catch (error) {
+  } catch (error: any) {
+    // Xử lý lỗi an toàn - không truy cập bất kỳ property nào có thể undefined
+    let errorMessage = 'Unknown error';
+    try {
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (error && typeof error === 'object' && error.message) {
+        errorMessage = String(error.message);
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+    } catch (e) {
+      // Nếu không thể extract error message, dùng default
+      errorMessage = 'Unknown error';
+    }
+    
+    console.error('Camera error:', errorMessage);
     return {
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: errorMessage
     };
   }
 };

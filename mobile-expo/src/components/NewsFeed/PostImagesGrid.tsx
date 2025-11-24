@@ -3,6 +3,7 @@ import { View, Image, TouchableOpacity, Dimensions, StyleSheet } from 'react-nat
 import { Text } from 'react-native-paper';
 import { getImageURL } from '../../utils/imageUtils';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
+import { AutoSizedImage } from './AutoSizedImage';
 
 interface PostImagesGridProps {
 	images: string[];
@@ -25,11 +26,11 @@ const PostImagesGrid: React.FC<PostImagesGridProps> = ({ images, onPressImage, g
 	const count = safeImages.length;
 
 	const renderOne = () => (
-		<TouchableOpacity activeOpacity={0.9} onPress={() => onPressImage?.(0)}>
-			<View style={[styles.item, { width: containerWidth, height: Math.min(Math.max(containerWidth * 0.75, 200), 600) }] }>
-				<Image source={{ uri: getImageURL(safeImages[0]) }} style={styles.image} resizeMode="cover" />
-			</View>
-		</TouchableOpacity>
+		<AutoSizedImage
+			imageUrl={safeImages[0]}
+			crop="constrained"
+			onPress={() => onPressImage?.(0)}
+		/>
 	);
 
 	const renderTwo = () => {

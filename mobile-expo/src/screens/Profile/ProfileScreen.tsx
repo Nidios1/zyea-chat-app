@@ -5,15 +5,14 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
-  SafeAreaView,
   Animated,
   Modal,
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Text, Avatar } from 'react-native-paper';
+import { Text, Avatar, Searchbar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -25,6 +24,9 @@ import { PWATheme } from '../../config/PWATheme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import appJson from '../../../app.json';
 import { TextInput } from 'react-native-paper';
+import { usersAPI } from '../../utils/api';
+import { getStoredToken } from '../../utils/auth';
+import { spacing, typography, borderRadius, borderWidth, touchTargets } from '../../config/designTokens';
 
 type ProfileScreenNavigationProp = StackNavigationProp<ProfileStackParamList>;
 
@@ -52,6 +54,11 @@ const ProfileScreen = () => {
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [userNote, setUserNote] = useState('');
   const [isSavingNote, setIsSavingNote] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showVerificationBanner, setShowVerificationBanner] = useState(true);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [userStatusText, setUserStatusText] = useState('');
+  const [isSavingStatus, setIsSavingStatus] = useState(false);
   const lastScrollY = useRef(0);
   const avatarOpacity = useRef(new Animated.Value(1)).current;
   const avatarScale = useRef(new Animated.Value(1)).current;
@@ -108,34 +115,18 @@ const ProfileScreen = () => {
   const handleScroll = useCallback((event: any) => {
     try {
       const offsetY = event.nativeEvent?.contentOffset?.y || 0;
-      const shouldBeScrolled = offsetY > 30; // Tăng threshold để tránh toggle quá nhiều
+      const shouldBeScrolled = offsetY > 10; // Threshold để toggle header
       
       // Chỉ update nếu thay đổi đáng kể (tránh nháy)
-      if (Math.abs(offsetY - lastScrollY.current) > 5) {
-        if (shouldBeScrolled !== isScrolled) {
-          setIsScrolled(shouldBeScrolled);
-          
-          // Animate avatar với smooth transition
-          Animated.parallel([
-            Animated.timing(avatarOpacity, {
-              toValue: shouldBeScrolled ? 0 : 1,
-              duration: 200,
-              useNativeDriver: true,
-            }),
-            Animated.timing(avatarScale, {
-              toValue: shouldBeScrolled ? 0 : 1,
-              duration: 200,
-              useNativeDriver: true,
-            }),
-          ]).start();
-        }
-        lastScrollY.current = offsetY;
+      if (shouldBeScrolled !== isScrolled) {
+        setIsScrolled(shouldBeScrolled);
       }
+      lastScrollY.current = offsetY;
     } catch (error) {
       // Silently handle scroll errors
       console.warn('Scroll error:', error);
     }
-  }, [isScrolled, avatarOpacity, avatarScale]);
+  }, [isScrolled]);
 
   const handleAvatarPress = () => {
     navigation.navigate('SelfDestructPost');
@@ -185,6 +176,36 @@ const ProfileScreen = () => {
     );
   };
 
+  const handleOpenStatusModal = () => {
+    const currentStatus = (user as any)?.bio || 'Xin chào! Tôi đang sử dụng Zyea+';
+    setUserStatusText(currentStatus);
+    setShowStatusModal(true);
+  };
+
+  const handleSaveStatus = async () => {
+    setIsSavingStatus(true);
+    try {
+      await usersAPI.updateProfile({ bio: userStatusText });
+      // Fetch updated profile to refresh user context
+      const response = await usersAPI.getProfile();
+      if (response.data && user) {
+        const updatedUser = { ...user, ...response.data };
+        // Get token from storage
+        const token = await getStoredToken();
+        if (token) {
+          await login(updatedUser, token);
+        }
+      }
+      Alert.alert('Thành công', 'Đã cập nhật trạng thái thành công!');
+      setShowStatusModal(false);
+    } catch (error: any) {
+      console.error('Error saving status:', error);
+      Alert.alert('Lỗi', error.response?.data?.message || 'Không thể cập nhật trạng thái. Vui lòng thử lại.');
+    } finally {
+      setIsSavingStatus(false);
+    }
+  };
+
   const handleMenuPress = (menuId: string) => {
     switch (menuId) {
       case 'profile-info':
@@ -204,6 +225,9 @@ const ProfileScreen = () => {
         break;
       case 'device-management':
         navigation.navigate('DeviceManagement');
+        break;
+      case 'privacy':
+        navigation.navigate('Privacy');
         break;
       case 'security':
         navigation.navigate('Security');
@@ -229,6 +253,9 @@ const ProfileScreen = () => {
       case 'help':
         navigation.navigate('Help');
         break;
+      case 'avatar':
+        navigation.navigate('ProfileInformation');
+        break;
       case 'logout':
         logout();
         break;
@@ -237,17 +264,12 @@ const ProfileScreen = () => {
     }
   };
 
-  const menuGroups: MenuGroup[] = [
-    {
-      items: [
-        {
-          id: 'profile-info',
-          icon: 'account',
-          title: 'Hồ sơ thông tin',
-          onPress: () => handleMenuPress('profile-info'),
-        },
-      ],
-    },
+  const userName = user?.full_name || user?.username || 'Người dùng';
+  const userUsername = user?.username || '';
+  const userStatus = (user as any)?.bio || 'Xin chào! Tôi đang sử dụng Zyea+';
+
+  // Create menu groups with useMemo
+  const menuGroups: MenuGroup[] = React.useMemo(() => [
     {
       items: [
         {
@@ -272,6 +294,12 @@ const ProfileScreen = () => {
           icon: 'monitor',
           title: 'Quản lý thiết bị',
           onPress: () => handleMenuPress('device-management'),
+        },
+        {
+          id: 'privacy',
+          icon: 'lock-outline',
+          title: 'Quyền riêng tư',
+          onPress: () => handleMenuPress('privacy'),
         },
         {
           id: 'security',
@@ -309,7 +337,7 @@ const ProfileScreen = () => {
         {
           id: 'feedback',
           icon: 'message-outline',
-          title: 'Góp ý & phản hồi',
+          title: 'Trợ giúp và ý kiến đóng góp',
           onPress: () => handleMenuPress('feedback'),
         },
         {
@@ -333,141 +361,324 @@ const ProfileScreen = () => {
         },
       ],
     },
-  ];
+  ], [activityStatusEnabled, themeMode]);
 
-  const userName = user?.full_name || user?.username || 'Người dùng';
-  const userUsername = user?.username || '';
+  // Filter menu groups based on search query
+  const filteredMenuGroups = React.useMemo(() => {
+    if (!searchQuery.trim()) {
+      return menuGroups;
+    }
 
-  const dynamicStyles = createStyles(colors);
+    const query = searchQuery.toLowerCase().trim();
+    return menuGroups
+      .map(group => ({
+        ...group,
+        items: group.items.filter(item =>
+          item.title.toLowerCase().includes(query)
+        )
+      }))
+      .filter(group => group.items.length > 0);
+  }, [searchQuery, menuGroups]);
+
+  // Check if user needs verification
+  const needsVerification = !user?.email || !(user as any)?.phone;
+  const verificationMessage = !user?.email 
+    ? 'Xác minh bằng email' 
+    : 'Thêm số điện thoại';
+  const verificationDescription = !user?.email
+    ? 'Dùng email để đăng nhập hoặc khôi phục tài khoản nếu cần.'
+    : 'Thêm số điện thoại để bảo mật tài khoản tốt hơn.';
+  const verificationAction = !user?.email ? 'Thêm email' : 'Thêm số điện thoại';
+
+  useEffect(() => {
+    const loadBannerState = async () => {
+      try {
+        // Chỉ ẩn banner nếu user đã có cả email và phone
+        if (user?.email && (user as any)?.phone) {
+          setShowVerificationBanner(false);
+        } else {
+          // Nếu thiếu email hoặc phone, luôn hiển thị banner
+          setShowVerificationBanner(true);
+          // Reset dismissed state nếu user chưa đủ thông tin
+          await AsyncStorage.removeItem('verificationBannerDismissed');
+        }
+      } catch (error) {
+        console.error('Error loading banner state:', error);
+      }
+    };
+    loadBannerState();
+  }, [user?.email, (user as any)?.phone]);
+
+  // Reload banner state when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      const checkBannerState = async () => {
+        try {
+          // Nếu thiếu email hoặc phone, luôn hiển thị banner
+          if (!user?.email || !(user as any)?.phone) {
+            setShowVerificationBanner(true);
+          }
+        } catch (error) {
+          console.error('Error checking banner state:', error);
+        }
+      };
+      checkBannerState();
+    }, [user?.email, (user as any)?.phone])
+  );
+
+  const handleDismissBanner = async () => {
+    try {
+      // Chỉ lưu dismissed nếu user đã có cả email và phone
+      if (user?.email && (user as any)?.phone) {
+        await AsyncStorage.setItem('verificationBannerDismissed', 'true');
+        setShowVerificationBanner(false);
+      } else {
+        // Nếu chưa đủ thông tin, chỉ ẩn tạm thời, sẽ hiện lại khi reload
+        setShowVerificationBanner(false);
+      }
+    } catch (error) {
+      console.error('Error dismissing banner:', error);
+    }
+  };
+
+  const handleAddEmail = () => {
+    if (!user?.email) {
+      navigation.navigate('ProfileInformation');
+    } else {
+      // Navigate to AddPhone screen
+      navigation.navigate('AddPhone');
+    }
+  };
+
+  const dynamicStyles = createStyles(colors, isDarkMode);
+
+  const handleUserCardPress = () => {
+    navigation.navigate('MyProfile' as never);
+  };
 
   return (
     <SafeAreaView style={dynamicStyles.container} edges={['top']}>
-      {/* Header */}
-      <View style={dynamicStyles.header}>
-        <TouchableOpacity
-          style={dynamicStyles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
-        </TouchableOpacity>
-
-        <View style={dynamicStyles.headerProfile}>
-          <Animated.View 
-            style={[
-              dynamicStyles.avatarWrapper,
-              {
-                opacity: avatarOpacity,
-                transform: [{ scale: avatarScale }],
-              }
-            ]}
-          >
-            {user?.avatar_url ? (
-              <Image
-                source={{ uri: getAvatarURL(user.avatar_url) }}
-                style={dynamicStyles.headerAvatar}
-              />
-            ) : (
-              <Avatar.Text
-                size={64}
-                label={getInitials(userName)}
-                style={dynamicStyles.headerAvatar}
-              />
-            )}
-            {/* Note button */}
+      {/* Title Section - Fixed Header */}
+      <View style={[dynamicStyles.titleSection, { backgroundColor: colors.background }]}>
+        {!isScrolled ? (
+          <View style={dynamicStyles.titleSectionLeft}>
             <TouchableOpacity
-              style={[
-                dynamicStyles.noteButton, 
-                { 
-                  backgroundColor: '#fff',
-                  borderColor: '#000',
-                }
-              ]}
-              onPress={handleAvatarPress}
-              activeOpacity={0.7}
+              style={dynamicStyles.backButton}
+              onPress={() => navigation.goBack()}
             >
-              <MaterialCommunityIcons name="plus" size={14} color="#000" />
+              <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
             </TouchableOpacity>
-          </Animated.View>
-          <View style={dynamicStyles.headerInfo}>
-            <Text style={[dynamicStyles.headerName, { color: colors.text }]} numberOfLines={1}>
-              {userName}
-            </Text>
-            {userUsername && (
-              <Text style={[dynamicStyles.headerUsername, { color: colors.textSecondary }]} numberOfLines={1}>
-                {userUsername}
-            </Text>
-          )}
+            <Text style={[dynamicStyles.title, { color: colors.text }]}>Cài đặt</Text>
           </View>
-        </View>
-
-        <TouchableOpacity
-          style={dynamicStyles.qrButton}
-          onPress={() => navigation.navigate('QRScanner')}
-        >
-          <MaterialCommunityIcons name="qrcode-scan" size={24} color={colors.text} />
-        </TouchableOpacity>
+        ) : (
+          <>
+            <View style={{ width: 40 }} />
+            <Text style={[dynamicStyles.title, dynamicStyles.titleCentered, dynamicStyles.titleScrolled, { color: colors.text }]}>Cài đặt</Text>
+            <View style={{ width: 40 }} />
+          </>
+        )}
       </View>
 
-      {/* Menu Section */}
+      {/* Scrollable Content */}
       <ScrollView
         style={dynamicStyles.menuSection}
         contentContainerStyle={[
           dynamicStyles.menuContentContainer,
-          { paddingBottom: Math.max(insets.bottom, 20) + 80 } // Bottom tab bar height + safe area
+          { paddingBottom: Math.max(insets.bottom, 20) + 20 } // Safe area + small padding
         ]}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={true}
         bounces={true}
       >
-        {menuGroups.map((group, groupIndex) => (
+        {/* Search Bar */}
+        <View style={dynamicStyles.searchContainer}>
+          <Searchbar
+            placeholder="Tìm kiếm"
+            onChangeText={setSearchQuery}
+            value={searchQuery}
+            onClearIconPress={() => setSearchQuery('')}
+            style={[
+              dynamicStyles.searchbar,
+              { backgroundColor: isDarkMode ? '#2a2a2b' : colors.surface }
+            ]}
+            inputStyle={[dynamicStyles.searchInput, { color: colors.text }]}
+            iconColor={colors.textSecondary}
+            placeholderTextColor={colors.textSecondary}
+            elevation={0}
+            mode="bar"
+          />
+        </View>
+
+        {/* Verification Banner */}
+        {needsVerification && showVerificationBanner && (
+          <View style={[
+            dynamicStyles.verificationBanner,
+            { backgroundColor: isDarkMode ? '#2a2a2b' : colors.surface }
+          ]}>
+            <TouchableOpacity
+              style={dynamicStyles.bannerClose}
+              onPress={handleDismissBanner}
+            >
+              <MaterialCommunityIcons name="close" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+            <View style={dynamicStyles.bannerContent}>
+              <MaterialCommunityIcons name="shield-check" size={24} color="#4CAF50" />
+              <View style={dynamicStyles.bannerText}>
+                <Text style={[dynamicStyles.bannerTitle, { color: colors.text }]}>
+                  {verificationMessage}
+                </Text>
+                <Text style={[dynamicStyles.bannerDescription, { color: colors.textSecondary }]}>
+                  {verificationDescription}
+                </Text>
+                <TouchableOpacity onPress={handleAddEmail}>
+                  <Text style={[dynamicStyles.bannerLink, { color: '#4CAF50' }]}>
+                    {verificationAction}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* User Info Card */}
+        <View style={[
+          dynamicStyles.userCard,
+          { backgroundColor: isDarkMode ? '#2a2a2b' : colors.surface }
+        ]}>
+          <TouchableOpacity
+            style={dynamicStyles.userCardContent}
+            onPress={handleUserCardPress}
+            activeOpacity={0.7}
+          >
+            <View style={dynamicStyles.userCardLeft}>
+              {user?.avatar_url ? (
+                <Image
+                  source={{ uri: getAvatarURL(user.avatar_url) }}
+                  style={dynamicStyles.userCardAvatar}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={dynamicStyles.userCardAvatarPlaceholder}>
+                  <MaterialCommunityIcons 
+                    name="account" 
+                    size={32} 
+                    color="#FF8C42" 
+                  />
+                </View>
+              )}
+              <View style={dynamicStyles.userCardInfo}>
+                <Text style={[dynamicStyles.userCardName, { color: colors.text }]} numberOfLines={1}>
+                  {userName}
+                </Text>
+                <View style={dynamicStyles.statusBubbleContainer}>
+                  <TouchableOpacity
+                    style={[
+                      dynamicStyles.statusBubble,
+                      { 
+                        backgroundColor: isDarkMode ? '#1a1a1a' : '#f0f0f0',
+                        borderColor: isDarkMode ? '#333' : '#e0e0e0',
+                      }
+                    ]}
+                    onPress={handleOpenStatusModal}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[dynamicStyles.userCardStatus, { color: colors.textSecondary }]} numberOfLines={1}>
+                      {userStatus}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={dynamicStyles.userCardQR}
+              onPress={() => navigation.navigate('QRScanner')}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name="qrcode-scan" size={24} color={colors.text} />
+            </TouchableOpacity>
+          </TouchableOpacity>
+
+          {/* Avatar Menu Item - Inside user card */}
+          <View style={dynamicStyles.userCardDivider} />
+          <TouchableOpacity
+            style={dynamicStyles.userCardMenuItem}
+            onPress={() => handleMenuPress('avatar')}
+            activeOpacity={0.7}
+          >
+            <View style={dynamicStyles.menuIcon}>
+              <MaterialCommunityIcons
+                name="face-man-profile"
+                size={20}
+                color={colors.text}
+              />
+            </View>
+            <Text
+              style={[
+                dynamicStyles.menuTitle,
+                { color: colors.text }
+              ]}
+            >
+              Avatar
+            </Text>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={20}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Menu Section */}
+        {filteredMenuGroups.map((group, groupIndex) => (
           <View 
             key={groupIndex} 
             style={[
               dynamicStyles.menuGroup, 
               { 
-                backgroundColor: colors.surface,
+                backgroundColor: isDarkMode ? '#2a2a2b' : colors.surface,
                 borderWidth: isDarkMode ? 1 : 0,
                 borderColor: isDarkMode ? colors.border : 'transparent',
               }
             ]}
           >
             {group.items.map((item, itemIndex) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[
-                  dynamicStyles.menuItem,
-                  itemIndex === group.items.length - 1 && dynamicStyles.menuItemLast,
-                ]}
-                onPress={item.onPress}
-              >
-                <View style={dynamicStyles.menuIcon}>
-                  <MaterialCommunityIcons
-                    name={item.icon as any}
-                    size={20}
-                    color={item.isDanger ? colors.error : colors.text}
-                  />
-                </View>
-                <Text
-                  style={[
-                    dynamicStyles.menuTitle,
-                    { color: colors.text },
-                    item.isDanger && dynamicStyles.menuTitleDanger,
-                  ]}
+              <React.Fragment key={item.id}>
+                <TouchableOpacity
+                  style={dynamicStyles.menuItem}
+                  onPress={item.onPress}
                 >
-                  {item.title}
-                </Text>
-                {item.rightText && (
-                  <Text style={[dynamicStyles.menuRight, { color: colors.textSecondary }]}>{item.rightText}</Text>
+                  <View style={dynamicStyles.menuIcon}>
+                    <MaterialCommunityIcons
+                      name={item.icon as any}
+                      size={20}
+                      color={item.isDanger ? colors.error : colors.text}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      dynamicStyles.menuTitle,
+                      { color: colors.text },
+                      item.isDanger && dynamicStyles.menuTitleDanger,
+                    ]}
+                  >
+                    {item.title}
+                  </Text>
+                  {item.rightText && (
+                    <Text style={[dynamicStyles.menuRight, { color: colors.textSecondary }]}>{item.rightText}</Text>
+                  )}
+                  {!item.rightText && (
+                    <MaterialCommunityIcons
+                      name="chevron-right"
+                      size={20}
+                      color={colors.textSecondary}
+                    />
+                  )}
+                </TouchableOpacity>
+                {itemIndex < group.items.length - 1 && (
+                  <View style={dynamicStyles.menuDivider} />
                 )}
-                {!item.rightText && (
-                  <MaterialCommunityIcons
-                    name="chevron-right"
-                    size={20}
-                    color={colors.textSecondary}
-                  />
-                )}
-              </TouchableOpacity>
+              </React.Fragment>
             ))}
           </View>
         ))}
@@ -479,7 +690,7 @@ const ProfileScreen = () => {
             Phiên bản {appJson.expo.version}
           </Text>
         </View>
-    </ScrollView>
+      </ScrollView>
 
       {/* Theme Selection Modal */}
       <Modal
@@ -702,93 +913,251 @@ const ProfileScreen = () => {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Status Modal */}
+      <Modal
+        visible={showStatusModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowStatusModal(false)}
+      >
+        <TouchableOpacity
+          style={dynamicStyles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowStatusModal(false)}
+        >
+          <View
+            style={[dynamicStyles.noteModalContainer, { backgroundColor: colors.surface, paddingBottom: Math.max(insets.bottom, 20) }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={dynamicStyles.modalHeader}>
+              <Text style={[dynamicStyles.modalTitle, { color: colors.text }]}>
+                Chỉnh sửa trạng thái
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowStatusModal(false)}
+                style={dynamicStyles.modalCloseButton}
+              >
+                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={dynamicStyles.noteContent}>
+              <TextInput
+                mode="outlined"
+                placeholder="Nhập trạng thái của bạn..."
+                value={userStatusText}
+                onChangeText={setUserStatusText}
+                multiline
+                numberOfLines={4}
+                style={[dynamicStyles.noteInput, { backgroundColor: colors.background }]}
+                contentStyle={{ color: colors.text, minHeight: 100 }}
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                textColor={colors.text}
+                maxLength={200}
+              />
+            </View>
+
+            <View style={dynamicStyles.noteActions}>
+              <TouchableOpacity
+                style={[
+                  dynamicStyles.noteSaveButton,
+                  { backgroundColor: colors.primary },
+                  isSavingStatus && { opacity: 0.6 }
+                ]}
+                onPress={handleSaveStatus}
+                disabled={isSavingStatus}
+              >
+                {isSavingStatus ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons name="check" size={20} color="#fff" />
+                    <Text style={dynamicStyles.noteSaveText}>Lưu</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };
 
-const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
+const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
-    backgroundColor: 'transparent',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 16,
+  titleSection: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  titleSectionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   backButton: {
-    padding: 8,
+    padding: spacing.sm,
   },
-  headerProfile: {
+  title: {
+    fontSize: typography.fontSize.xxl,
+    fontWeight: typography.fontWeight.bold,
+  },
+  titleCentered: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+    textAlign: 'center',
   },
-  avatarWrapper: {
+  titleScrolled: {
+    fontSize: typography.fontSize.lg,
+  },
+  searchContainer: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  searchbar: {
+    elevation: 0,
+    borderRadius: borderRadius.xl + 2,
+    height: touchTargets.md + 4,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  searchInput: {
+    fontSize: typography.fontSize.md - 1,
+    paddingVertical: 0,
+    marginVertical: 0,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+  },
+  verificationBanner: {
+    borderRadius: borderRadius.base,
+    padding: spacing.base,
+    marginBottom: spacing.md,
+    marginHorizontal: spacing.base,
     position: 'relative',
-    width: 64,
-    height: 64,
   },
-  headerAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-  },
-  noteButton: {
+  bannerClose: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    top: spacing.md,
+    right: spacing.md,
+    padding: spacing.xs,
+    zIndex: 1,
+  },
+  bannerContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  bannerText: {
+    flex: 1,
+  },
+  bannerTitle: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
+    marginBottom: spacing.xs,
+  },
+  bannerDescription: {
+    fontSize: typography.fontSize.base,
+    marginBottom: spacing.sm,
+    lineHeight: typography.fontSize.base * typography.lineHeight.normal,
+  },
+  bannerLink: {
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.medium,
+  },
+  userCard: {
+    marginHorizontal: spacing.base,
+    marginBottom: spacing.md,
+    borderRadius: borderRadius.base,
+    padding: spacing.base,
+  },
+  userCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  userCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  userCardAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: 'hidden',
+  },
+  userCardAvatarPlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFE4CC',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#000',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    overflow: 'hidden',
   },
-  headerInfo: {
-    alignItems: 'center',
+  userCardInfo: {
+    flex: 1,
   },
-  headerName: {
+  userCardName: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#000',
-    maxWidth: 200,
+    marginBottom: 4,
   },
-  headerUsername: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-    maxWidth: 200,
+  userCardStatus: {
+    fontSize: 14,
   },
-  qrButton: {
+  statusBubbleContainer: {
+    marginTop: 6,
+    position: 'relative',
+  },
+  statusBubble: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+    maxWidth: '90%',
+  },
+  userCardQR: {
     padding: 8,
+  },
+  userCardDivider: {
+    height: 1,
+    backgroundColor: isDarkMode ? '#1f1f20' : colors.border,
+    marginLeft: 16,
+    marginRight: 16,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  userCardMenuItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   menuSection: {
     flex: 1,
     backgroundColor: colors.background,
   },
   menuContentContainer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 0,
     paddingTop: 8,
     flexGrow: 1, // Cho phép nội dung mở rộng khi cần
   },
   menuGroup: {
     borderRadius: 12,
+    marginHorizontal: 16,
     marginBottom: 12,
     overflow: 'hidden',
   },
@@ -798,11 +1167,12 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    backgroundColor: isDarkMode ? '#2a2a2b' : colors.surface,
   },
-  menuItemLast: {
-    borderBottomWidth: 0,
+  menuDivider: {
+    height: 1,
+    backgroundColor: isDarkMode ? '#1f1f20' : colors.border,
+    marginLeft: 52, // Icon width (24) + gap (12) + padding (16) = 52
   },
   menuIcon: {
     width: 24,
@@ -821,7 +1191,7 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
     marginRight: 4,
   },
   footer: {
-    paddingVertical: 20,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   footerText: {

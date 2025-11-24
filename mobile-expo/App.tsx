@@ -7,10 +7,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NavigationContainer } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
 
+import { ErrorBoundary } from './src/components/Common/ErrorBoundary';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { FontSizeProvider } from './src/contexts/FontSizeContext';
 import { TabBarProvider } from './src/contexts/TabBarContext';
+import { LanguageProvider } from './src/contexts/LanguageContext';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
 import SplashScreen from './src/components/Splash/SplashScreen';
@@ -21,9 +23,21 @@ import IncomingCallModal from './src/components/Chat/IncomingCallModal';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: Number(5 * 60 * 1000),
-      gcTime: Number(10 * 60 * 1000),
-      retry: Number(3),
+      staleTime: 0, // 0 = data is immediately stale, always fetch fresh data for instant updates
+      gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for instant display while fetching
+      retry: 1, // Retry once for faster failure detection
+      retryDelay: (attemptIndex) => Math.min(300 * 2 ** attemptIndex, 3000), // Faster exponential backoff (max 3s)
+      refetchOnWindowFocus: false, // Don't refetch on focus to reduce unnecessary requests
+      refetchOnReconnect: true, // Refetch when network reconnects
+      refetchOnMount: true, // Always refetch on mount for fresh data (no delay)
+      refetchInterval: false, // Disable automatic polling (use socket for real-time updates)
+      structuralSharing: true, // Enable structural sharing to prevent unnecessary re-renders
+      networkMode: 'online', // Only refetch when online
+      placeholderData: (previousData) => previousData, // Show cached data instantly while fetching
+    },
+    mutations: {
+      retry: 0, // Don't retry mutations - fail fast for better UX
+      networkMode: 'online',
     },
   },
 });
@@ -32,8 +46,25 @@ const queryClient = new QueryClient({
 const PaperWrapper = ({ children }: { children: React.ReactNode }) => {
   const { isDarkMode, colors } = useTheme();
   
+  const paperTheme = {
+    ...require('react-native-paper').MD3LightTheme,
+    colors: {
+      ...require('react-native-paper').MD3LightTheme.colors,
+      primary: colors.primary,
+      background: colors.background,
+      surface: colors.surface,
+      text: colors.text,
+      onSurface: colors.text,
+      onBackground: colors.text,
+      error: colors.error,
+      onError: '#FFFFFF',
+      outline: colors.border,
+    },
+    dark: isDarkMode,
+  };
+  
   return (
-    <PaperProvider>
+    <PaperProvider theme={paperTheme}>
       {children}
     </PaperProvider>
   );
@@ -109,21 +140,25 @@ const App = () => {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <GestureHandlerRootView style={{ flex: 1 as const }}>
-        <QueryClientProvider client={queryClient}>
-          <ThemeProvider>
-            <FontSizeProvider>
-              <PaperWrapper>
-                <AuthProvider>
-                  <AppContent />
-                </AuthProvider>
-              </PaperWrapper>
-            </FontSizeProvider>
-          </ThemeProvider>
-        </QueryClientProvider>
-      </GestureHandlerRootView>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <GestureHandlerRootView style={{ flex: 1 as const }}>
+          <QueryClientProvider client={queryClient}>
+            <LanguageProvider>
+              <ThemeProvider>
+                <FontSizeProvider>
+                  <PaperWrapper>
+                    <AuthProvider>
+                      <AppContent />
+                    </AuthProvider>
+                  </PaperWrapper>
+                </FontSizeProvider>
+              </ThemeProvider>
+            </LanguageProvider>
+          </QueryClientProvider>
+        </GestureHandlerRootView>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 };
 

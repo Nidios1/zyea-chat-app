@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, TouchableWithoutFeedback, LayoutAnimation, UIManager, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -27,26 +27,70 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [isTruncated, setIsTruncated] = useState(false);
+  const [hasMeasured, setHasMeasured] = useState(false);
+  const fullTextHeight = useRef<number>(0);
+  const truncatedTextHeight = useRef<number>(0);
+  
   useEffect(() => {
     if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
       UIManager.setLayoutAnimationEnabledExperimental(true);
     }
   }, []);
 
+  // Reset khi text thay đổi
+  useEffect(() => {
+    setIsTruncated(false);
+    setHasMeasured(false);
+    setExpanded(false);
+    fullTextHeight.current = 0;
+    truncatedTextHeight.current = 0;
+  }, [text]);
+
   const toggle = (to?: boolean) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpanded((v) => (typeof to === 'boolean' ? to : !v));
   };
 
-
-  const onTextLayout = useCallback((e) => {
-    if (!expanded) {
-      const tooLong = e?.nativeEvent?.lines?.length > numberOfLines;
-      if (tooLong !== isTruncated) setIsTruncated(tooLong);
+  // Kiểm tra xem text có bị truncate không
+  const checkIfTruncated = useCallback(() => {
+    if (fullTextHeight.current > 0 && truncatedTextHeight.current > 0) {
+      // Nếu chiều cao text đầy đủ lớn hơn text bị truncate, có nghĩa là text bị cắt
+      const truncated = fullTextHeight.current > truncatedTextHeight.current + 5; // +5 để có margin sai số
+      setIsTruncated(truncated);
+      setHasMeasured(true);
+    } else if (text.length > charLimitFallback) {
+      // Fallback: sử dụng độ dài text nếu chưa đo được chiều cao
+      const estimatedCharsPerLine = 45;
+      const estimatedLines = text.length / estimatedCharsPerLine;
+      const truncated = estimatedLines > numberOfLines;
+      setIsTruncated(truncated);
+      setHasMeasured(true);
     }
-  }, [expanded, isTruncated, numberOfLines]);
+  }, [text, numberOfLines, charLimitFallback]);
 
-  const shouldShowSeeMore = !expanded && (isTruncated || (text?.length || 0) > charLimitFallback);
+  // Đo chiều cao của text đầy đủ (không bị truncate)
+  const onFullTextLayout = useCallback((e) => {
+    if (!expanded && e?.nativeEvent?.layout?.height) {
+      fullTextHeight.current = e.nativeEvent.layout.height;
+      checkIfTruncated();
+    }
+  }, [expanded, checkIfTruncated]);
+
+  // Đo chiều cao của text bị truncate
+  const onTruncatedTextLayout = useCallback((e) => {
+    if (!expanded && e?.nativeEvent?.layout?.height) {
+      truncatedTextHeight.current = e.nativeEvent.layout.height;
+      checkIfTruncated();
+    }
+  }, [expanded, checkIfTruncated]);
+
+  // Hiển thị nút "Xem thêm" dựa trên nhiều điều kiện
+  // Ưu tiên: nếu đã đo được và text bị truncate -> hiển thị
+  // Nếu chưa đo được nhưng text dài hơn ngưỡng -> hiển thị ngay (fallback)
+  const shouldShowSeeMore = !expanded && text.length > 0 && (
+    (hasMeasured && isTruncated) || 
+    (text.length > charLimitFallback) // Luôn hiển thị nếu text dài hơn ngưỡng (fallback)
+  );
 
   if (expanded) {
     return (
@@ -63,32 +107,41 @@ const ExpandableText: React.FC<ExpandableTextProps> = ({
 
   return (
     <View style={{ position: 'relative' }}>
-      <TouchableWithoutFeedback onPress={() => shouldShowSeeMore && toggle(true)}>
-        <View>
-          <Text onTextLayout={onTextLayout} numberOfLines={numberOfLines} style={{ color }}>
-            {text}
-          </Text>
-        </View>
-      </TouchableWithoutFeedback>
-      {shouldShowSeeMore && gradient ? (
-        <LinearGradient
-          colors={[
-            'rgba(0,0,0,0)',
-            backgroundColor ? `${backgroundColor}CC` : 'rgba(255,255,255,0.8)',
-            backgroundColor || 'rgba(255,255,255,1)'
-          ]}
-          style={{ position: 'absolute', right: 0, bottom: 0, left: 0, height: 28 }}
-          pointerEvents="none"
-        />
-      ) : null}
-      {shouldShowSeeMore ? (
-        <TouchableOpacity
-          onPress={() => toggle(true)}
-          style={{ position: 'absolute', right: 0, bottom: 0, paddingLeft: 8, paddingVertical: 2 }}
+      {/* Text ẩn để đo chiều cao đầy đủ */}
+      <Text
+        onLayout={onFullTextLayout}
+        style={{ 
+          position: 'absolute', 
+          opacity: 0, 
+          zIndex: -1,
+          color,
+          width: '100%',
+        }}
+        numberOfLines={0}
+      >
+        {text}
+      </Text>
+      
+      <View>
+        <Text 
+          onLayout={onTruncatedTextLayout}
+          numberOfLines={numberOfLines} 
+          style={{ color }}
         >
-          <Text style={{ color: linkColor || '#3b82f6', fontWeight: '600' }}>{seeMoreLabel}</Text>
-        </TouchableOpacity>
-      ) : null}
+          {text}
+        </Text>
+        {shouldShowSeeMore && (
+          <TouchableOpacity
+            onPress={() => toggle(true)}
+            style={{ 
+              marginTop: 8,
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={{ color: linkColor || '#1877F2', fontWeight: '500', fontSize: 15, opacity: 0.85 }}>{seeMoreLabel}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 };

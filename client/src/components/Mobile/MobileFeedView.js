@@ -970,7 +970,7 @@ const MobileFeedView = ({ currentUser, onScrollDirectionChange }) => {
       {/* App Header */}
       <AppHeader>
         <LogoSection>
-          <LogoImage src="/Zyea.jpg" alt="Zyea+ Logo" />
+          <LogoImage src="/Zyea.jpg?v=3" alt="Zyea+ Logo" />
           <LogoText>Zyea+</LogoText>
         </LogoSection>
         <RightIcons>

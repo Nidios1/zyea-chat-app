@@ -16,13 +16,18 @@ import Register from './components/Auth/Register';
 import ForgotPassword from './components/Auth/ForgotPassword';
 import DesktopChat from './components/Desktop/DesktopChat';
 import MobileChat from './components/Mobile/MobileChat';
-import SplashScreen from './components/Loading/SplashScreen';
 import AppDownloadPrompt from './components/Loading/AppDownloadPrompt';
 import InstallPrompt from './components/Common/InstallPrompt';
-import UpdatePrompt from './components/Common/UpdatePrompt';
-import SuccessToast from './components/Common/SuccessToast';
 import BundleProtectionError from './components/Common/BundleProtectionError';
 // import PerformanceMonitor from './components/Common/PerformanceMonitor';
+import AdminLayout from './components/Admin/AdminLayout';
+import AdminDashboard from './components/Admin/AdminDashboard';
+import AdminUsers from './components/Admin/AdminUsers';
+import AdminPosts from './components/Admin/AdminPosts';
+import AdminStickers from './components/Admin/AdminStickers';
+import AdminActivity from './components/Admin/AdminActivity';
+import AdminSystemNotifications from './components/Admin/AdminSystemNotifications';
+import AdminRouteGuard from './components/Admin/AdminRouteGuard';
 import { getToken, removeToken, getTokenAsync } from './utils/auth';
 import { initCopyProtection, preventDevTools } from './utils/copyProtection';
 import { initBundleProtection, startContinuousValidation } from './utils/bundleProtection';
@@ -30,7 +35,6 @@ import { useOfflineSync } from './hooks/useOfflineSync';
 import { useNativeFeatures } from './hooks/useNativeFeatures';
 import { isCapacitor, logPlatformInfo } from './utils/platformDetection';
 import { getApiBaseUrl } from './utils/platformConfig';
-import { checkForUpdates, downloadUpdate, applyUpdate, startAutoUpdateCheck } from './utils/liveUpdate';
 
 
 function App() {
@@ -38,17 +42,10 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [showDownloadPrompt, setShowDownloadPrompt] = useState(false);
   const [preloadedData, setPreloadedData] = useState(null);
-  const [dataLoadingProgress, setDataLoadingProgress] = useState(0);
-  const [appStartTime] = useState(Date.now()); // Track khi app bắt đầu
   
   // Bundle Protection state
   const [bundleProtectionFailed, setBundleProtectionFailed] = useState(false);
   
-  // Live Update states
-  const [updateInfo, setUpdateInfo] = useState(null);
-  const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
-  const [updateProgress, setUpdateProgress] = useState(0);
-  const [showSuccessToast, setShowSuccessToast] = useState(false);
   
   // Detect mobile once at initialization
   const [isMobile] = useState(() => {
@@ -94,66 +91,6 @@ function App() {
     validateBundle();
   }, []);
 
-  // Check for updates khi app load
-  useEffect(() => {
-    const checkUpdate = async () => {
-      const update = await checkForUpdates();
-      if (update && update.hasUpdate) {
-        setUpdateInfo(update);
-      }
-    };
-    
-    // Check ngay khi app start
-    checkUpdate();
-    
-    // Auto check mỗi 30s
-    const cleanup = startAutoUpdateCheck((update) => {
-      setUpdateInfo(update);
-    });
-    
-    return cleanup;
-  }, []);
-
-  // Handle update
-  const handleUpdate = async () => {
-    if (!updateInfo) return;
-    
-    try {
-      setIsDownloadingUpdate(true);
-      setUpdateProgress(0);
-      
-      // Simulate progress (trong thực tế sẽ track download progress)
-      const progressInterval = setInterval(() => {
-        setUpdateProgress(prev => {
-          if (prev >= 90) return prev;
-          return prev + 10;
-        });
-      }, 300);
-      
-      await downloadUpdate(updateInfo.updateUrl);
-      
-      clearInterval(progressInterval);
-      setUpdateProgress(100);
-      
-      // Hiển thị thông báo thành công
-      setShowSuccessToast(true);
-      setIsDownloadingUpdate(false);
-      
-      // Apply update sau 2.5s (để user thấy toast)
-      setTimeout(() => {
-        applyUpdate(updateInfo.version); // Pass version mới
-      }, 2500);
-    } catch (error) {
-      console.error('Update failed:', error);
-      setIsDownloadingUpdate(false);
-      setUpdateProgress(0);
-      alert('Cập nhật thất bại. Vui lòng thử lại sau.');
-    }
-  };
-
-  const handleSkipUpdate = () => {
-    setUpdateInfo(null);
-  };
 
   useEffect(() => {
     // Log platform info for debugging
@@ -200,42 +137,28 @@ function App() {
       console.log('📱 Running as PWA - Service worker registration handled in index.js');
     }
 
-    // Request notification permission
-    requestNotificationPermission();
+    // Request notification permission - CHỈ TRÊN PC, KHÔNG TRÊN MOBILE
+    if (!isMobile) {
+      requestNotificationPermission();
+    }
 
-    // Listen for PWA install prompt (Web/PWA only, not for Capacitor)
-    if (!isCapacitor()) {
+    // Listen for PWA install prompt - CHỈ TRÊN PC, KHÔNG TRÊN MOBILE (Web/PWA only, not for Capacitor)
+    if (!isCapacitor() && !isMobile) {
       const handleBeforeInstallPrompt = (e) => {
         console.log('beforeinstallprompt event fired');
-        // Prevent the mini-infobar from appearing on mobile
+        // Prevent the mini-infobar from appearing
         e.preventDefault();
         // Stash the event so it can be triggered later
         window.deferredPrompt = e;
-        
-        // Auto-trigger install prompt only on Android web
-        const isAndroid = /Android/i.test(navigator.userAgent);
-        if (isAndroid) {
-          setTimeout(() => {
-            if (window.deferredPrompt) {
-              console.log('Auto-triggering install prompt on Android');
-              window.deferredPrompt.prompt();
-              window.deferredPrompt.userChoice.then((choiceResult) => {
-                console.log('User choice:', choiceResult.outcome);
-                if (choiceResult.outcome === 'accepted') {
-                  console.log('User accepted the install prompt');
-                } else {
-                  console.log('User dismissed the install prompt');
-                }
-                window.deferredPrompt = null;
-              });
-            }
-          }, 2000); // 2 second delay
-        }
       };
 
       window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     } else {
-      console.log('📱 Capacitor app - PWA install prompt disabled');
+      if (isMobile) {
+        console.log('📱 Mobile device - PWA install prompt disabled');
+      } else {
+        console.log('📱 Capacitor app - PWA install prompt disabled');
+      }
     }
 
     let token = getToken();
@@ -258,10 +181,27 @@ function App() {
       console.log('⚠️ No token in localStorage, trying to restore from IndexedDB...');
       
       // Try async restore
-      getTokenAsync().then(restoredToken => {
+      getTokenAsync().then((restoredToken) => {
         if (restoredToken) {
-          console.log('✅ Token restored from IndexedDB! Reloading...');
-          window.location.reload();
+          console.log('✅ Token restored from IndexedDB!');
+          // Không reload ngay, chỉ set user từ token
+          // Reload có thể gây loop trên mobile
+          // Sử dụng async function riêng để tránh lỗi syntax
+          (async () => {
+            try {
+              const userResponse = await fetch(`${getApiBaseUrl()}/auth/me`, {
+                headers: { Authorization: `Bearer ${restoredToken}` }
+              });
+              if (userResponse.ok) {
+                const userData = await userResponse.json();
+                setUser(userData.user);
+                localStorage.setItem('token', restoredToken);
+              }
+            } catch (error) {
+              console.log('Error restoring user from token:', error);
+              // Nếu không restore được, không reload để tránh loop
+            }
+          })();
         } else {
           console.log('❌ No token in any storage, showing login screen');
           // Let the app continue to show login screen
@@ -311,9 +251,7 @@ function App() {
           console.log('✅ Token valid, user loaded:', userData);
           setUser(userData);
           
-          // Preload data trong khi splash screen hiển thị (1 giây)
-          // Load song song nhiều request để tăng tốc độ
-          setDataLoadingProgress(20);
+          // Preload data - Load song song nhiều request để tăng tốc độ
           
           try {
             const [conversationsRes, friendsRes, postsRes, notificationsRes] = await Promise.all([
@@ -334,14 +272,10 @@ function App() {
               }).catch(() => null)
             ]);
             
-            setDataLoadingProgress(50);
-            
             const conversations = conversationsRes ? await conversationsRes.json().catch(() => []) : [];
             const friends = friendsRes ? await friendsRes.json().catch(() => []) : [];
             const posts = postsRes ? await postsRes.json().catch(() => []) : [];
             const notifications = notificationsRes ? await notificationsRes.json().catch(() => []) : [];
-            
-            setDataLoadingProgress(80);
             
             // Lưu preloaded data để các component khác sử dụng
             setPreloadedData({
@@ -351,8 +285,6 @@ function App() {
               notifications: Array.isArray(notifications) ? notifications : notifications.notifications || [],
               loadedAt: Date.now()
             });
-            
-            setDataLoadingProgress(100);
             
             console.log('✅ Preloaded data:', {
               conversations: conversations.length || (conversations.conversations?.length || 0),
@@ -408,20 +340,9 @@ function App() {
         }
       })
       .finally(() => {
-        // Đảm bảo splash screen hiển thị ít nhất 2 giây (mượt mà)
-        // CRITICAL: Có user đăng nhập rồi thì hiển thị splash mỗi khi mở app
-        const loadDuration = Date.now() - loadStartTime;
-        const minSplashTime = 1500; // 
-        // 5 giây cho UX mượt mà
-        const remainingTime = Math.max(0, minSplashTime - loadDuration);
-        
-        console.log(`⏱️ Loading took ${loadDuration}ms, waiting ${remainingTime}ms more`);
-        
-        setTimeout(() => {
-          console.log('✅ Setting loading to false after token verification');
-          setLoading(false);
-          // Don't show download prompt if user is already logged in
-        }, remainingTime);
+        // Không còn splash screen - set loading false ngay
+        console.log('✅ Setting loading to false after token verification');
+        setLoading(false);
       });
     } else {
       // Nếu không có token (chưa đăng nhập)
@@ -438,24 +359,27 @@ function App() {
         setLoading(false);
         setShowDownloadPrompt(true);
       } else {
-        // Nếu không cần download prompt → hiển thị splash screen bình thường
-        console.log('⏱️ No token found, showing splash screen for minimum time');
-        const elapsed = Date.now() - appStartTime;
-        const minSplashTime = 1500; // 1.5 giây để hiển thị custom splash screen đẹp
-        const remainingTime = Math.max(0, minSplashTime - elapsed);
-        
-        console.log(`⏱️ Elapsed: ${elapsed}ms, waiting ${remainingTime}ms more for splash`);
-        
-        setTimeout(() => {
-          console.log('✅ Setting loading to false (no token)');
-          setLoading(false);
-        }, remainingTime);
+        // Không còn splash screen - set loading false ngay
+        console.log('✅ Setting loading to false (no token)');
+        setLoading(false);
       }
     }
+    
+    // Listen for session revoked event (when token is invalidated)
+    const handleSessionRevoked = (event) => {
+      console.log('🔒 Session revoked event received, logging out immediately');
+      // Prevent multiple calls
+      if (user) {
+        logout();
+      }
+    };
+    
+    window.addEventListener('session-revoked', handleSessionRevoked);
     
     // Cleanup function
     return () => {
       clearTimeout(safetyTimeout);
+      window.removeEventListener('session-revoked', handleSessionRevoked);
     };
     
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -498,8 +422,19 @@ function App() {
   };
 
   const logout = () => {
+    console.log('🔒 Logout called');
     removeToken();
     setUser(null);
+    // Navigate to login if not already there
+    // Use setTimeout to avoid blocking UI and prevent freeze
+    setTimeout(() => {
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/login' && currentPath !== '/m/login') {
+        console.log('🔒 Navigating to login page');
+        // Use window.location.replace instead of href to prevent back button issues
+        window.location.replace(isMobile ? '/m/login' : '/login');
+      }
+    }, 100);
   };
 
   const clearUserState = () => {
@@ -513,24 +448,8 @@ function App() {
   }
 
   if (loading) {
-    // CRITICAL: Show custom splash screen ONLY on mobile devices
-    if (isMobile) {
-      console.log('🔄 Showing custom splash screen (mobile only)...');
-      return (
-        <SplashScreen 
-          isVisible={true}
-          loadingProgress={dataLoadingProgress}
-          onComplete={() => {
-            console.log('✅ Splash screen completed');
-            setLoading(false);
-          }}
-        />
-      );
-    } else {
-      // PC: Show minimal loading (no splash screen)
-      console.log('💻 PC device - skipping splash screen');
-      return null;
-    }
+    // Không còn splash screen - return null để load trực tiếp
+    return null;
   }
 
   // Show download prompt on mobile ONLY when not logged in
@@ -615,28 +534,73 @@ function App() {
                 path="/" 
                 element={user ? (isMobile ? <MobileChat /> : <DesktopChat />) : (isMobile ? <Navigate to="/m/login" replace /> : <Navigate to="/login" replace />)} 
               />
+              
+              {/* Admin Routes - Only accessible by admin users */}
+              <Route
+                path="/admin"
+                element={
+                  <AdminRouteGuard>
+                    <AdminLayout>
+                      <AdminDashboard />
+                    </AdminLayout>
+                  </AdminRouteGuard>
+                }
+              />
+              <Route
+                path="/admin/users"
+                element={
+                  <AdminRouteGuard>
+                    <AdminLayout>
+                      <AdminUsers />
+                    </AdminLayout>
+                  </AdminRouteGuard>
+                }
+              />
+              <Route
+                path="/admin/posts"
+                element={
+                  <AdminRouteGuard>
+                    <AdminLayout>
+                      <AdminPosts />
+                    </AdminLayout>
+                  </AdminRouteGuard>
+                }
+              />
+              <Route
+                path="/admin/stickers"
+                element={
+                  <AdminRouteGuard>
+                    <AdminLayout>
+                      <AdminStickers />
+                    </AdminLayout>
+                  </AdminRouteGuard>
+                }
+              />
+              <Route
+                path="/admin/activity"
+                element={
+                  <AdminRouteGuard>
+                    <AdminLayout>
+                      <AdminActivity />
+                    </AdminLayout>
+                  </AdminRouteGuard>
+                }
+              />
+              <Route
+                path="/admin/system-notifications"
+                element={
+                  <AdminRouteGuard>
+                    <AdminLayout>
+                      <AdminSystemNotifications />
+                    </AdminLayout>
+                  </AdminRouteGuard>
+                }
+              />
             </Routes>
             
             {/* PWA Components */}
             <InstallPrompt />
             
-            {/* Live Update Prompt */}
-            <UpdatePrompt
-              updateInfo={updateInfo}
-              onUpdate={handleUpdate}
-              onSkip={handleSkipUpdate}
-              isDownloading={isDownloadingUpdate}
-              downloadProgress={updateProgress}
-            />
-            
-            {/* Success Toast */}
-            {showSuccessToast && (
-              <SuccessToast
-                title="Cập nhật thành công!"
-                message="Ứng dụng sẽ được khởi động lại để áp dụng phiên bản mới."
-                onClose={() => setShowSuccessToast(false)}
-              />
-            )}
             
             <ToastContainer
               position="top-right"

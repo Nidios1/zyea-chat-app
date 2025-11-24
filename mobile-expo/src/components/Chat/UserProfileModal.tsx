@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -11,6 +11,8 @@ import { Text, Avatar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getAvatarURL } from '../../utils/imageUtils';
+import { useQuery } from '@tanstack/react-query';
+import { usersAPI } from '../../utils/api';
 
 interface UserProfileModalProps {
   visible: boolean;
@@ -21,7 +23,7 @@ interface UserProfileModalProps {
   isOwnProfile?: boolean;
 }
 
-type TabType = 'profile' | 'search' | 'all' | 'options';
+type TabType = 'work' | 'files' | 'media' | 'links' | 'audio';
 
 const UserProfileModal: React.FC<UserProfileModalProps> = ({
   visible,
@@ -32,124 +34,119 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
   isOwnProfile = false,
 }) => {
   const { isDarkMode, colors } = useTheme();
-  const [activeTab, setActiveTab] = useState<TabType>('profile');
+  const [activeTab, setActiveTab] = useState<TabType>('work');
+  const isMountedRef = useRef(true);
+
+  // Fetch user profile information
+  const { data: userProfile } = useQuery({
+    queryKey: ['userProfile', userId],
+    queryFn: async () => {
+      if (!userId) return null;
+      const response = await usersAPI.getProfile(userId);
+      return response.data;
+    },
+    enabled: !!userId && visible,
+  });
+
+  const userEmail = userProfile?.email || '';
+  const userOrganization = userProfile?.location || userProfile?.username || '';
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Reset activeTab when modal opens
+  useEffect(() => {
+    if (visible && isMountedRef.current) {
+      setActiveTab('work');
+    }
+  }, [visible]);
 
   const tabs = [
-    { id: 'profile' as TabType, label: 'Trang cá nhân', icon: 'account' },
-    { id: 'search' as TabType, label: 'Tìm kiếm', icon: 'magnify' },
-    { id: 'all' as TabType, label: 'Tất', icon: 'bell' },
-    { id: 'options' as TabType, label: 'Lựa chọn', icon: 'dots-horizontal' },
+    { id: 'work' as TabType, label: 'Công việc', icon: 'briefcase' },
+    { id: 'files' as TabType, label: 'Tệp', icon: 'file-document' },
+    { id: 'media' as TabType, label: 'Ảnh & Video', icon: 'image' },
+    { id: 'links' as TabType, label: 'Liên kết', icon: 'link' },
+    { id: 'audio' as TabType, label: 'Âm thanh', icon: 'music' },
   ];
 
-  const renderProfileTab = () => (
-    <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
-      <View style={styles.optionItem}>
-        <View style={[styles.optionIcon, { backgroundColor: isDarkMode ? '#3a3a3b' : '#e0e0e0' }]}>
-          <MaterialCommunityIcons name="theme-light-dark" size={24} color={colors.primary} />
-        </View>
-        <View style={styles.optionContent}>
-          <Text style={[styles.optionTitle, { color: colors.text }]}>Chủ đề</Text>
-          <Text style={[styles.optionSubtitle, { color: colors.textSecondary }]}>Mặc định</Text>
-        </View>
-        <View style={[styles.optionBadge, { backgroundColor: colors.primary }]}>
-          <Text style={styles.optionBadgeText}>Mới</Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSecondary} />
+  const renderEmptyState = (icon: string, title: string, description: string) => (
+    <View style={styles.emptyStateContainer}>
+      <View style={styles.emptyStateIconContainer}>
+        <MaterialCommunityIcons name={icon as any} size={80} color={colors.textSecondary} />
       </View>
-
-      <View style={styles.optionItem}>
-        <View style={[styles.optionIcon, { backgroundColor: isDarkMode ? '#3a3a3b' : '#e0e0e0' }]}>
-          <MaterialCommunityIcons name="account-edit" size={24} color={colors.primary} />
-        </View>
-        <View style={styles.optionContent}>
-          <Text style={[styles.optionTitle, { color: colors.text }]}>Biệt danh</Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSecondary} />
-      </View>
-
-      <View style={styles.optionItem}>
-        <View style={[styles.optionIcon, { backgroundColor: isDarkMode ? '#3a3a3b' : '#e0e0e0' }]}>
-          <MaterialCommunityIcons name="clock-time-eight" size={24} color={colors.primary} />
-        </View>
-        <View style={styles.optionContent}>
-          <Text style={[styles.optionTitle, { color: colors.text }]}>Tin nhắn tự hủy</Text>
-          <Text style={[styles.optionSubtitle, { color: colors.textSecondary }]}>Tắt</Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSecondary} />
-      </View>
-
-      <View style={styles.optionItem}>
-        <View style={[styles.optionIcon, { backgroundColor: isDarkMode ? '#3a3a3b' : '#e0e0e0' }]}>
-          <MaterialCommunityIcons name="message-text-check" size={24} color={colors.primary} />
-        </View>
-        <View style={styles.optionContent}>
-          <Text style={[styles.optionTitle, { color: colors.text }]}>Kiểm soát nội dung chat</Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSecondary} />
-      </View>
-
-      <View style={styles.optionItem}>
-        <View style={[styles.optionIcon, { backgroundColor: isDarkMode ? '#3a3a3b' : '#e0e0e0' }]}>
-          <MaterialCommunityIcons name="lock" size={24} color={colors.primary} />
-        </View>
-        <View style={styles.optionContent}>
-          <Text style={[styles.optionTitle, { color: colors.text }]}>Quyền riêng tư và an toàn</Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSecondary} />
-      </View>
-
-      <View style={styles.optionItem}>
-        <View style={[styles.optionIcon, { backgroundColor: isDarkMode ? '#3a3a3b' : '#e0e0e0' }]}>
-          <MaterialCommunityIcons name="account-group" size={24} color={colors.primary} />
-        </View>
-        <View style={styles.optionContent}>
-          <Text style={[styles.optionTitle, { color: colors.text }]}>Tạo nhóm chat</Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSecondary} />
-      </View>
-
-      <View style={styles.optionItem}>
-        <View style={[styles.optionIcon, { backgroundColor: isDarkMode ? '#3a3a3b' : '#e0e0e0' }]}>
-          <MaterialCommunityIcons name="alert-circle" size={24} color="#ef4444" />
-        </View>
-        <View style={styles.optionContent}>
-          <Text style={[styles.optionTitle, { color: colors.text }]}>Đã xảy ra lỗi</Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-right" size={24} color={colors.textSecondary} />
-      </View>
-    </ScrollView>
+      <Text style={[styles.emptyStateTitle, { color: colors.text }]}>{title}</Text>
+      <Text style={[styles.emptyStateDescription, { color: colors.textSecondary }]}>
+        {description}
+      </Text>
+    </View>
   );
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'profile':
-        return renderProfileTab();
-      case 'search':
+      case 'work':
         return (
-          <View style={styles.tabContent}>
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Tính năng đang phát triển
-            </Text>
-          </View>
+          <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+            {renderEmptyState(
+              'clipboard-text',
+              'Chưa có công việc',
+              'Danh sách công việc của bạn sẽ được hiển thị tại đây.'
+            )}
+          </ScrollView>
         );
-      case 'all':
+      case 'files':
         return (
-          <View style={styles.tabContent}>
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Tính năng đang phát triển
-            </Text>
-          </View>
+          <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+            {renderEmptyState(
+              'file-document',
+              'Chưa có tệp',
+              'Danh sách tệp sẽ được hiển thị tại đây.'
+            )}
+          </ScrollView>
         );
-      case 'options':
+      case 'media':
         return (
-          <View style={styles.tabContent}>
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              Tính năng đang phát triển
-            </Text>
-          </View>
+          <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+            {renderEmptyState(
+              'image',
+              'Chưa có ảnh & video',
+              'Danh sách ảnh và video sẽ được hiển thị tại đây.'
+            )}
+          </ScrollView>
+        );
+      case 'links':
+        return (
+          <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+            {renderEmptyState(
+              'link',
+              'Chưa có liên kết',
+              'Danh sách liên kết sẽ được hiển thị tại đây.'
+            )}
+          </ScrollView>
+        );
+      case 'audio':
+        return (
+          <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+            {renderEmptyState(
+              'music',
+              'Chưa có âm thanh',
+              'Danh sách âm thanh sẽ được hiển thị tại đây.'
+            )}
+          </ScrollView>
         );
       default:
-        return renderProfileTab();
+        return (
+          <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+            {renderEmptyState(
+              'clipboard-text',
+              'Chưa có công việc',
+              'Danh sách công việc của bạn sẽ được hiển thị tại đây.'
+            )}
+          </ScrollView>
+        );
     }
   };
 
@@ -160,27 +157,38 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
       visible={visible}
       animationType="slide"
       transparent={false}
-      onRequestClose={onClose}
+      onRequestClose={() => {
+        if (isMountedRef.current) {
+          onClose();
+        }
+      }}
       statusBarTranslucent={false}
     >
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Header */}
-        <View style={[styles.header, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
-          <TouchableOpacity onPress={onClose} style={styles.backButton}>
+        <View style={[styles.header, { backgroundColor: colors.background }]}>
+          <TouchableOpacity 
+            onPress={() => {
+              if (isMountedRef.current) {
+                onClose();
+              }
+            }} 
+            style={styles.backButton}
+          >
             <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
           </TouchableOpacity>
           
-          {/* Avatar and Username */}
+          {/* Avatar and Username - Centered */}
           <View style={styles.headerCenter}>
             {userAvatar ? (
               <Avatar.Image
-                size={80}
+                size={100}
                 source={{ uri: getAvatarURL(userAvatar) }}
                 style={styles.avatar}
               />
             ) : (
               <Avatar.Text
-                size={80}
+                size={100}
                 label={userName.substring(0, 2).toUpperCase()}
                 style={[styles.avatar, { backgroundColor: colors.primary }]}
               />
@@ -188,10 +196,66 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <Text style={[styles.username, { color: colors.text }]} numberOfLines={1}>
               {userName}
             </Text>
+            {userOrganization && (
+              <Text style={[styles.organization, { color: colors.textSecondary }]} numberOfLines={1}>
+                {userOrganization}
+              </Text>
+            )}
           </View>
-
-          <View style={styles.headerRight} />
         </View>
+
+        {/* Action Buttons */}
+        <View style={[styles.actionButtonsContainer, { backgroundColor: colors.background }]}>
+          <TouchableOpacity style={styles.actionButton}>
+            <View style={[styles.actionButtonIcon, { backgroundColor: isDarkMode ? '#2a2a2b' : '#f0f0f0' }]}>
+              <MaterialCommunityIcons name="magnify" size={24} color={colors.text} />
+            </View>
+            <Text style={[styles.actionButtonLabel, { color: colors.text }]}>Tìm kiếm</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton}>
+            <View style={[styles.actionButtonIcon, { backgroundColor: isDarkMode ? '#2a2a2b' : '#f0f0f0' }]}>
+              <MaterialCommunityIcons name="bell" size={24} color={colors.text} />
+            </View>
+            <Text style={[styles.actionButtonLabel, { color: colors.text }]}>Bật</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton}>
+            <View style={[styles.actionButtonIcon, { backgroundColor: isDarkMode ? '#2a2a2b' : '#f0f0f0' }]}>
+              <MaterialCommunityIcons name="pin" size={24} color={colors.text} />
+            </View>
+            <Text style={[styles.actionButtonLabel, { color: colors.text }]}>Ghim</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actionButton}>
+            <View style={[styles.actionButtonIcon, { backgroundColor: isDarkMode ? '#2a2a2b' : '#f0f0f0' }]}>
+              <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.text} />
+            </View>
+            <Text style={[styles.actionButtonLabel, { color: colors.text }]}>Xem thêm</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Contact Information */}
+        {(userEmail || userOrganization) && (
+          <View style={[styles.contactInfoContainer, { backgroundColor: isDarkMode ? '#2a2a2b' : '#f5f5f5' }]}>
+            {userEmail && (
+              <View style={[styles.contactInfoRow, userOrganization && styles.contactInfoRowWithMargin]}>
+                <Text style={[styles.contactInfoLabel, { color: colors.textSecondary }]}>Email</Text>
+                <View style={styles.contactInfoValue}>
+                  <MaterialCommunityIcons name="paperclip" size={16} color={colors.textSecondary} />
+                  <Text style={[styles.contactInfoText, { color: colors.text }]} numberOfLines={1}>
+                    {userEmail}
+                  </Text>
+                </View>
+              </View>
+            )}
+            {userOrganization && (
+              <View style={styles.contactInfoRow}>
+                <Text style={[styles.contactInfoLabel, { color: colors.textSecondary }]}>Đơn vị</Text>
+                <Text style={[styles.contactInfoText, { color: colors.text }]} numberOfLines={1}>
+                  {userOrganization}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Navigation Tabs */}
         <View style={[styles.tabsContainer, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
@@ -200,21 +264,19 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({
               key={tab.id}
               style={[
                 styles.tab,
-                activeTab === tab.id && [styles.activeTab, { borderBottomColor: colors.primary }],
+                activeTab === tab.id && [styles.activeTab, { borderBottomColor: colors.text }],
               ]}
-              onPress={() => setActiveTab(tab.id)}
+              onPress={() => {
+                if (isMountedRef.current) {
+                  setActiveTab(tab.id);
+                }
+              }}
             >
-              <MaterialCommunityIcons
-                name={tab.icon as any}
-                size={20}
-                color={activeTab === tab.id ? colors.primary : colors.textSecondary}
-                style={styles.tabIcon}
-              />
               <Text
                 style={[
                   styles.tabLabel,
                   {
-                    color: activeTab === tab.id ? colors.primary : colors.textSecondary,
+                    color: activeTab === tab.id ? colors.text : colors.textSecondary,
                     fontWeight: activeTab === tab.id ? '600' : '400',
                   },
                 ]}
@@ -240,32 +302,91 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    paddingTop: 12,
+    paddingBottom: 20,
+    position: 'relative',
   },
   backButton: {
     width: 40,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'absolute',
+    left: 16,
+    top: 12,
+    zIndex: 1,
   },
   headerCenter: {
-    flex: 1,
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerRight: {
-    width: 40,
-  },
   avatar: {
-    marginBottom: 8,
+    marginBottom: 12,
   },
   username: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
     textAlign: 'center',
+    marginBottom: 4,
+  },
+  organization: {
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  actionButton: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  actionButtonIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  actionButtonLabel: {
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  contactInfoContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+    padding: 16,
+  },
+  contactInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  contactInfoRowWithMargin: {
+    marginBottom: 12,
+  },
+  contactInfoLabel: {
+    fontSize: 14,
+  },
+  contactInfoValue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'flex-end',
+    marginLeft: 16,
+  },
+  contactInfoText: {
+    fontSize: 14,
+    marginLeft: 8,
+    flex: 1,
+    textAlign: 'right',
   },
   tabsContainer: {
     flexDirection: 'row',
@@ -273,7 +394,6 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
@@ -284,58 +404,32 @@ const styles = StyleSheet.create({
   activeTab: {
     borderBottomWidth: 2,
   },
-  tabIcon: {
-    marginRight: 4,
-  },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 14,
   },
   tabContent: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 16,
   },
-  optionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#2a2a2b',
-  },
-  optionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  emptyStateContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    paddingVertical: 60,
+    paddingHorizontal: 32,
   },
-  optionContent: {
-    flex: 1,
+  emptyStateIconContainer: {
+    marginBottom: 24,
   },
-  optionTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  optionSubtitle: {
-    fontSize: 13,
-  },
-  optionBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 8,
-  },
-  optionBadgeText: {
-    color: '#ffffff',
-    fontSize: 11,
+  emptyStateTitle: {
+    fontSize: 18,
     fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  emptyText: {
+  emptyStateDescription: {
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 32,
+    lineHeight: 20,
   },
 });
 

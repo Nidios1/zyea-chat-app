@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { PixelRatio } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type FontSizeScale = 'small' | 'medium' | 'large' | 'extra-large';
@@ -85,7 +86,9 @@ export const FontSizeProvider: React.FC<FontSizeProviderProps> = ({ children }) 
   // Get adjusted font size based on scale
   const getFontSize = (baseSize: number): number => {
     if (useSystemFontSize) {
-      return baseSize; // Use system font size
+      // Use system font scale from device accessibility settings
+      const systemFontScale = PixelRatio.getFontScale();
+      return Math.round(baseSize * systemFontScale);
     }
     const multiplier = FONT_SIZE_MULTIPLIERS[fontSizeScale];
     return Math.round(baseSize * multiplier);

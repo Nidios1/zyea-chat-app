@@ -3,24 +3,47 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { NavigationContainer } from '@react-navigation/native';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { FontSizeProvider } from './contexts/FontSizeContext';
 import { TabBarProvider } from './contexts/TabBarContext';
+import { LanguageProvider } from './contexts/LanguageContext';
+import { NetworkProvider } from './contexts/NetworkContext';
+import { LightboxProvider } from './contexts/LightboxContext';
+import { Lightbox } from './components/Common/Lightbox';
 import AuthNavigator from './navigation/AuthNavigator';
 import MainNavigator from './navigation/MainNavigator';
 import { useUpdates } from './hooks/useUpdates';
 import { UpdateModal } from './components/Common/UpdateModal';
+import MessageNotificationBanner from './components/Common/MessageNotificationBanner';
+import useSocket from './hooks/useSocket';
+import { chatAPI } from './utils/api';
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: Number(5 * 60 * 1000),
-      gcTime: Number(10 * 60 * 1000),
-      retry: Number(3),
+      staleTime: 0, // 0 = data is immediately stale, always fetch fresh data for instant updates
+      gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for instant display while fetching
+      retry: 1, // Retry once for faster failure detection
+      retryDelay: (attemptIndex) => Math.min(300 * 2 ** attemptIndex, 3000), // Faster exponential backoff (max 3s)
+      refetchOnWindowFocus: false, // Don't refetch on focus to reduce unnecessary requests
+      refetchOnReconnect: true, // Refetch when network reconnects
+      refetchOnMount: true, // Always refetch on mount for fresh data (no delay)
+      refetchInterval: false, // Disable automatic polling (use socket for real-time updates)
+      // Enable structural sharing to prevent unnecessary re-renders
+      structuralSharing: true,
+      // Network mode optimization
+      networkMode: 'online', // Only refetch when online
+      // Optimize for instant data fetching
+      placeholderData: (previousData) => previousData, // Show cached data instantly while fetching
+    },
+    mutations: {
+      retry: 0, // Don't retry mutations - fail fast for better UX
+      networkMode: 'online',
     },
   },
 });
@@ -33,6 +56,114 @@ const PaperWrapper = ({ children }: { children: React.ReactNode }) => {
     <PaperProvider>
       {children}
     </PaperProvider>
+  );
+};
+
+// Component để xử lý message notifications (phải ở trong NavigationContainer)
+const MessageNotificationHandler = () => {
+  const { user } = useAuth();
+  const { socket } = useSocket();
+  const navigation = useNavigation<any>();
+  
+  const [notificationMessage, setNotificationMessage] = React.useState<{
+    senderName: string;
+    senderAvatar?: string;
+    content: string;
+    conversationId?: string | number;
+    senderId?: string | number;
+  } | null>(null);
+  const [showNotification, setShowNotification] = React.useState(false);
+
+  // Fetch conversations để lấy thông tin người gửi
+  const { data: conversations = [] } = useQuery({
+    queryKey: ['conversations'],
+    queryFn: async () => {
+      const res = await chatAPI.getConversations();
+      return Array.isArray(res.data) ? res.data : (res.data?.data || []);
+    },
+    enabled: !!user,
+  });
+
+  // Listen for new messages via socket
+  React.useEffect(() => {
+    if (!socket || !user) return;
+
+    const handleReceiveMessage = (data: any) => {
+      // Chỉ hiển thị notification nếu không phải tin nhắn của chính mình
+      if (data.senderId && String(data.senderId) !== String(user.id)) {
+        // Tìm conversation để lấy thông tin người gửi
+        const conversation = conversations.find((conv: any) => {
+          const otherUserId = conv?.other_user_id || conv?.otherUserId;
+          return String(otherUserId) === String(data.senderId);
+        });
+
+        const senderName = conversation?.full_name || conversation?.username || data.senderName || data.full_name || 'Người dùng';
+        const senderAvatar = conversation?.avatar_url || conversation?.avatar || data.avatar_url || data.avatar;
+        const content = data.message || data.content || '';
+        const conversationId = data.conversationId || data.conversation_id || conversation?.id;
+        const senderId = data.senderId;
+
+        setNotificationMessage({
+          senderName,
+          senderAvatar,
+          content,
+          conversationId,
+          senderId,
+        });
+        setShowNotification(true);
+      }
+    };
+
+    socket.on('receiveMessage', handleReceiveMessage);
+
+    return () => {
+      socket.off('receiveMessage', handleReceiveMessage);
+    };
+  }, [socket, user, conversations]);
+
+  const handleNotificationPress = () => {
+    if (notificationMessage?.conversationId) {
+      // Navigate to chat detail screen
+      navigation.navigate('Chat', {
+        screen: 'ChatDetail',
+        params: {
+          conversationId: notificationMessage.conversationId,
+          userName: notificationMessage.senderName,
+          userAvatar: notificationMessage.senderAvatar,
+          userId: notificationMessage.senderId,
+        },
+      });
+    } else if (notificationMessage?.senderId) {
+      // Navigate to chat list first, then to chat detail
+      navigation.navigate('Chat', {
+        screen: 'ChatList',
+      });
+      // Try to navigate to chat detail after a short delay
+      setTimeout(() => {
+        navigation.navigate('Chat', {
+          screen: 'ChatDetail',
+          params: {
+            userId: notificationMessage.senderId,
+            userName: notificationMessage.senderName,
+            userAvatar: notificationMessage.senderAvatar,
+          },
+        });
+      }, 500);
+    }
+  };
+
+  const handleNotificationDismiss = () => {
+    setShowNotification(false);
+    setNotificationMessage(null);
+  };
+
+  return (
+    <MessageNotificationBanner
+      visible={showNotification}
+      message={notificationMessage}
+      onPress={handleNotificationPress}
+      onDismiss={handleNotificationDismiss}
+    />
   );
 };
 
@@ -72,6 +203,9 @@ const AppContent = () => {
         {authenticated ? <MainNavigator /> : <AuthNavigator />}
         <Toast position="bottom" />
         
+        {/* Message Notification Banner - Hiển thị khi có tin nhắn mới */}
+        {authenticated && <MessageNotificationHandler />}
+        
         {/* Update Modal - Hiển thị khi có phiên bản mới */}
         <UpdateModal
           visible={showUpdateModal}
@@ -83,6 +217,9 @@ const AppContent = () => {
           error={error}
           showProgress={true}
         />
+        
+        {/* Lightbox - Hiển thị fullscreen image viewer */}
+        <Lightbox />
       </NavigationContainer>
     </TabBarProvider>
   );
@@ -106,13 +243,21 @@ const App = () => {
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 as const }}>
         <QueryClientProvider client={queryClient}>
-          <ThemeProvider>
-            <PaperWrapper>
-              <AuthProvider>
-                <AppContent />
-              </AuthProvider>
-            </PaperWrapper>
-          </ThemeProvider>
+          <LanguageProvider>
+            <ThemeProvider>
+              <FontSizeProvider>
+                <NetworkProvider>
+                  <LightboxProvider>
+                    <PaperWrapper>
+                      <AuthProvider>
+                        <AppContent />
+                      </AuthProvider>
+                    </PaperWrapper>
+                  </LightboxProvider>
+                </NetworkProvider>
+              </FontSizeProvider>
+            </ThemeProvider>
+          </LanguageProvider>
         </QueryClientProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>

@@ -14,6 +14,7 @@ import useSwipeNavigation from '../../../hooks/useSwipeNavigation';
 import SmartNavigationIndicator from '../Common/SmartNavigationIndicator';
 import { getInitials } from '../../../utils/nameUtils';
 import { getAvatarURL } from '../../../utils/imageUtils';
+import { getApiBaseUrl } from '../../../utils/platformConfig';
 
 const ChatContainer = styled.div`
   flex: 1;
@@ -1196,6 +1197,69 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
     setShowEmojiPicker(false);
   };
 
+  const handleStickerSelect = async (packId, stickerIndex, sticker) => {
+    if (!conversation) return;
+
+    try {
+      // Create sticker content as JSON string
+      const stickerContent = JSON.stringify({ packId, stickerIndex });
+
+      // Send sticker message via API
+      const response = await chatAPI.sendMessage(conversation.id, stickerContent, 'text');
+      const realMessageId = response.messageId || Date.now();
+
+      // Send message via socket for real-time delivery
+      if (socket) {
+        socket.emit('sendMessage', {
+          receiverId: conversation.other_user_id,
+          message: stickerContent,
+          senderId: currentUser.id,
+          conversationId: conversation.id
+        });
+      }
+
+      // Add message to local state immediately
+      const newMsg = {
+        id: realMessageId,
+        content: stickerContent,
+        sender_id: currentUser.id,
+        created_at: new Date().toISOString(),
+        username: currentUser.username,
+        full_name: currentUser.fullName,
+        avatar_url: currentUser.avatar_url,
+        status: 'sent'
+      };
+
+      setMessages(prev => [...prev, newMsg]);
+
+      // Auto scroll to bottom when sending new message
+      setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+
+      // Update sidebar immediately
+      if (onMessageSent) {
+        onMessageSent(conversation.id, '[Sticker]', new Date().toISOString());
+      }
+
+      // Simulate message delivery after a short delay
+      setTimeout(() => {
+        setMessages(prev => prev.map(msg => 
+          msg.id === newMsg.id ? { ...msg, status: 'delivered' } : msg
+        ));
+      }, 500);
+
+      // If other user is currently viewing, mark as read immediately
+      if (otherUserViewing) {
+        setMessages(prev => prev.map(msg => 
+          msg.id === newMsg.id ? { ...msg, status: 'read' } : msg
+        ));
+      }
+    } catch (error) {
+      console.error('Error sending sticker:', error);
+    }
+  };
+
   const handleImageSelect = (file) => {
     setSelectedImage(file);
   };
@@ -1210,7 +1274,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
       formData.append('conversationId', conversation.id);
 
       // Upload image
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://192.168.0.103:5000/api'}/chat/upload-image`, {
+      const response = await fetch(`${getApiBaseUrl()}/chat/upload-image`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -1530,6 +1594,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         {showEmojiPicker && (
           <EmojiPicker
             onEmojiSelect={handleEmojiSelect}
+            onStickerSelect={handleStickerSelect}
             isOpen={showEmojiPicker}
             onClose={() => setShowEmojiPicker(false)}
           />

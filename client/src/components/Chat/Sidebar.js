@@ -4,6 +4,7 @@ import { FiSearch, FiPlus, FiMessageCircle, FiUser } from 'react-icons/fi';
 import { chatAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL } from '../../utils/imageUtils';
+import { useActivityStatus } from '../../hooks/useActivityStatus';
 
 const SidebarContainer = styled.div`
   width: 300px;
@@ -391,6 +392,8 @@ const Sidebar = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [conversationSettings, setConversationSettings] = useState({});
+  const [typingMap, setTypingMap] = useState({}); // Track typing status for each conversation
+  const activityStatusEnabled = useActivityStatus();
   
   console.log('Sidebar conversations:', conversations);
   console.log('Conversations length:', conversations?.length || 0);
@@ -425,7 +428,7 @@ const Sidebar = ({
     }
   }, [reloadKey]);
 
-  // Handle socket events for status changes
+  // Handle socket events for status changes and typing indicators
   useEffect(() => {
     if (socket) {
       const handleUserStatusChanged = (data) => {
@@ -434,10 +437,44 @@ const Sidebar = ({
         // The parent will update conversations and pass them down as props
       };
 
+      const handleUserTyping = (data) => {
+        console.log('Sidebar: User typing:', data);
+        if (data.conversationId) {
+          setTypingMap(prev => ({
+            ...prev,
+            [data.conversationId]: true
+          }));
+          
+          // Auto-clear typing after 5 seconds if no stopTyping event
+          setTimeout(() => {
+            setTypingMap(prev => {
+              if (prev[data.conversationId]) {
+                return { ...prev, [data.conversationId]: false };
+              }
+              return prev;
+            });
+          }, 5000);
+        }
+      };
+
+      const handleUserStoppedTyping = (data) => {
+        console.log('Sidebar: User stopped typing:', data);
+        if (data.conversationId) {
+          setTypingMap(prev => ({
+            ...prev,
+            [data.conversationId]: false
+          }));
+        }
+      };
+
       socket.on('userStatusChanged', handleUserStatusChanged);
+      socket.on('userTyping', handleUserTyping);
+      socket.on('userStoppedTyping', handleUserStoppedTyping);
 
       return () => {
         socket.off('userStatusChanged', handleUserStatusChanged);
+        socket.off('userTyping', handleUserTyping);
+        socket.off('userStoppedTyping', handleUserStoppedTyping);
       };
     }
   }, [socket]);
@@ -563,16 +600,32 @@ const Sidebar = ({
                   ) : (
                     getInitials(conversation.full_name)
                   )}
-                  {conversation.status === 'online' && <OnlineIndicator />}
-                  {conversation.status === 'recently_active' && <RecentlyActiveIndicator />}
-                  {conversation.status === 'away' && <AwayIndicator />}
+                  {activityStatusEnabled && (conversation.status === 'online' || conversation.participant_status === 'online') && <OnlineIndicator />}
+                  {activityStatusEnabled && (conversation.status === 'recently_active' || conversation.participant_status === 'recently_active') && <RecentlyActiveIndicator />}
+                  {activityStatusEnabled && (conversation.status === 'away' || conversation.participant_status === 'away') && <AwayIndicator />}
                 </Avatar>
                 <ConversationInfo>
                   <ConversationName>
                     {conversationSettings[conversation.id]?.nickname || conversation.full_name || conversation.username}
                   </ConversationName>
                   <LastMessage>
-                    {conversation.last_message || 'Chưa có tin nhắn'}
+                    {typingMap[conversation.id] 
+                      ? '... đang soạn tin nhắn' 
+                      : (() => {
+                          // Check if last message is a sticker
+                          if (conversation.last_message) {
+                            try {
+                              const parsed = JSON.parse(conversation.last_message);
+                              if (parsed && (parsed.packId || parsed.packid || parsed.pack_id) && 
+                                  (parsed.stickerIndex !== undefined || parsed.stickerindex !== undefined || parsed.sticker_index !== undefined)) {
+                                return 'Bạn đã gửi sticker';
+                              }
+                            } catch (e) {
+                              // Not JSON, continue
+                            }
+                          }
+                          return conversation.last_message || 'Chưa có tin nhắn';
+                        })()}
                   </LastMessage>
                 </ConversationInfo>
                 <TimeStamp>

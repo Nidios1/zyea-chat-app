@@ -16,6 +16,7 @@ const profileRoutes = require('./routes/profile');
 const newsfeedRoutes = require('./routes/newsfeed');
 const friendsRoutes = require('./routes/friends');
 const appRoutes = require('./routes/app');
+const adminRoutes = require('./routes/admin');
 const { router: notificationRoutes } = require('./routes/notifications');
 const { connectDB } = require('./config/database');
 const { authenticateToken } = require('./middleware/auth');
@@ -60,6 +61,7 @@ const io = socketIo(server, {
       ];
       
       // Allow server URL itself (mobile app might send this as origin)
+      // IP sẽ được sync từ network-config.js qua config.env
       const serverUrl = process.env.SERVER_URL || 'http://192.168.0.103:5000';
       const allowedServerOrigins = [
         serverUrl,
@@ -147,6 +149,8 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../client/build')));
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Serve assets (for system user logo, etc.)
+app.use('/assets', express.static(path.join(__dirname, '../mobile-expo/assets')));
 
 // Connect to database
 connectDB();
@@ -156,6 +160,9 @@ app.use((req, res, next) => {
   req.io = io;
   next();
 });
+
+// Make io available to routes
+app.set('io', io);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -168,6 +175,7 @@ app.use('/api/friends', authenticateToken, friendsRoutes);
 app.use('/api/notifications', authenticateToken, notificationRoutes);
 app.use('/api/app', appRoutes); // Live update endpoints
 app.use('/api/upload', uploadRoutes);
+app.use('/api/admin', adminRoutes); // Admin routes (requires admin role)
 
 // ✅ Tối ưu: Tạo helper function để tránh lặp code get connection
 const { getConnection } = require('./config/database');
@@ -254,7 +262,7 @@ const notifyFriendsStatusChange = async (socket, userId, status) => {
     
     // Emit status change to all friends
     friends.forEach(friend => {
-      socket.to(friend.user_id.toString()).emit('userStatusChanged', statusData);
+      io.to(friend.user_id.toString()).emit('userStatusChanged', statusData);
     });
     
     console.log(`Notified ${friends.length} friends about ${userId}'s status change to ${status}`);
@@ -284,6 +292,15 @@ io.on('connection', (socket) => {
     socket.join(userId.toString());
     socket.userId = userId; // Store userId in socket for disconnect handling
     socket.lastActivity = Date.now(); // Track last activity time
+    
+    // Store token in socket for session identification
+    // Try to get token from auth object first, then from headers
+    const token = socket.handshake.auth?.token || 
+                  (socket.handshake.headers.authorization && socket.handshake.headers.authorization.split(' ')[1]);
+    if (token) {
+      socket.token = token; // Store token for session revocation
+    }
+    
     console.log(`✅ User ${userId} joined their room (socket: ${socket.id})`);
     
     // Update user status to online when they join
@@ -314,7 +331,7 @@ io.on('connection', (socket) => {
       // Emit online status to all friends
       if (friends.length > 0) {
         friends.forEach(friend => {
-          socket.to(friend.user_id.toString()).emit('userStatusChanged', statusData);
+          io.to(friend.user_id.toString()).emit('userStatusChanged', statusData);
         });
         console.log(`📤 Notified ${friends.length} friends about ${userId}'s status change to online`);
       } else {
@@ -394,7 +411,14 @@ io.on('connection', (socket) => {
   // Handle message deleted
   socket.on('messageDeleted', async (data) => {
     console.log('Received messageDeleted:', data);
-    const { messageId, conversationId } = data;
+    const { messageId, conversationId, deleteForEveryone } = data;
+    
+    // Only emit to other users if deleteForEveryone is true
+    // If deleteForMe (false), don't emit - each user handles their own deletion locally
+    if (deleteForEveryone !== true) {
+      console.log('Message deleted for me only, not broadcasting to other users');
+      return;
+    }
     
     try {
       // Get conversation participants
@@ -408,7 +432,8 @@ io.on('connection', (socket) => {
       participants.forEach((participant) => {
         io.to(participant.user_id.toString()).emit('messageDeleted', {
           messageId,
-          conversationId
+          conversationId,
+          deleteForEveryone: true
         });
         console.log('Sent messageDeleted to user:', participant.user_id);
       });
@@ -522,14 +547,38 @@ io.on('connection', (socket) => {
     socket.lastActivity = Date.now();
     throttledUpdateLastSeen(data.userId);
     
-    // Emit to other users in conversation
-    socket.to(data.conversationId).emit('userTyping', {
-      conversationId: data.conversationId,
-      userId: data.userId,
-      isTyping: data.isTyping,
-      username: data.username,
-      fullName: data.fullName
-    });
+    // Get conversation participants to emit to all users in conversation
+    try {
+      const connection = getConnection();
+      const [participants] = await connection.execute(
+        'SELECT user_id FROM conversation_participants WHERE conversation_id = ?',
+        [data.conversationId]
+      );
+      
+      console.log(`📝 Found ${participants.length} participants for conversation ${data.conversationId}`);
+      
+      // Emit to all participants except the sender
+      participants.forEach((participant) => {
+        const participantId = participant.user_id.toString();
+        if (String(participantId) !== String(data.userId)) {
+          io.to(participantId).emit('userTyping', {
+            conversationId: data.conversationId,
+            userId: data.userId,
+            isTyping: data.isTyping,
+            username: data.username,
+            fullName: data.fullName
+          });
+          console.log('📝 Emitted userTyping to user:', participantId, 'in room:', participantId);
+        }
+      });
+      
+      // If no participants found, log warning
+      if (participants.length === 0) {
+        console.warn(`⚠️ No participants found for conversation ${data.conversationId}`);
+      }
+    } catch (error) {
+      console.error('Error getting conversation participants for typing:', error);
+    }
   });
 
   // Handle stop typing
@@ -540,13 +589,37 @@ io.on('connection', (socket) => {
     socket.lastActivity = Date.now();
     throttledUpdateLastSeen(data.userId);
     
-    // Emit to other users in conversation
-    socket.to(data.conversationId).emit('userStoppedTyping', {
-      conversationId: data.conversationId,
-      userId: data.userId,
-      username: data.username,
-      fullName: data.fullName
-    });
+    // Get conversation participants to emit to all users in conversation
+    try {
+      const connection = getConnection();
+      const [participants] = await connection.execute(
+        'SELECT user_id FROM conversation_participants WHERE conversation_id = ?',
+        [data.conversationId]
+      );
+      
+      console.log(`📝 Found ${participants.length} participants for conversation ${data.conversationId}`);
+      
+      // Emit to all participants except the sender
+      participants.forEach((participant) => {
+        const participantId = participant.user_id.toString();
+        if (String(participantId) !== String(data.userId)) {
+          io.to(participantId).emit('userStoppedTyping', {
+            conversationId: data.conversationId,
+            userId: data.userId,
+            username: data.username,
+            fullName: data.fullName
+          });
+          console.log('📝 Emitted userStoppedTyping to user:', participantId, 'in room:', participantId);
+        }
+      });
+      
+      // If no participants found, log warning
+      if (participants.length === 0) {
+        console.warn(`⚠️ No participants found for conversation ${data.conversationId}`);
+      }
+    } catch (error) {
+      console.error('Error getting conversation participants for stop typing:', error);
+    }
   });
 
   // Handle user activity (general activity tracking)

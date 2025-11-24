@@ -96,7 +96,7 @@ const fontConfig = {
 // Light Theme
 export const lightTheme = MD3LightTheme;
 
-// Dark Theme - Threads Style (Pure Black)
+// Dark Theme - Dark Gray Background (like image)
 export const darkTheme = {
   ...MD3DarkTheme,
   colors: {
@@ -108,14 +108,14 @@ export const darkTheme = {
     tertiary: '#ffffff',
     error: '#ef5350',
     errorContainer: '#c62828',
-    background: '#000000', // Pure black like Threads
-    surface: '#000000', // Pure black
-    surfaceVariant: '#101010', // Very dark gray for cards
+    background: '#1a1a1a', // Dark gray background like image
+    surface: '#1a1a1a', // Dark gray surface
+    surfaceVariant: '#2a2a2b', // Dark gray for cards
     onPrimary: '#000000',
     onSecondary: '#000000',
     onTertiary: '#000000',
     onError: '#ffffff',
-    onBackground: '#ffffff', // White text on black
+    onBackground: '#ffffff', // White text on dark gray
     onSurface: '#ffffff', // White text
     onSurfaceVariant: '#b0b0b0', // Light gray for secondary text
   },

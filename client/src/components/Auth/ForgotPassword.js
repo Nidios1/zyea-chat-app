@@ -270,7 +270,7 @@ const ForgotPassword = () => {
           </BackButton>
           
           <Logo>
-            <div className="logo-icon"><img src={`${process.env.PUBLIC_URL || ''}/Zyea.jpg?v=2`} alt="Zyea+" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} /></div>
+            <div className="logo-icon"><img src={`${process.env.PUBLIC_URL || ''}/Zyea.jpg?v=3`} alt="Zyea+" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} /></div>
             <h1>Zyea+</h1>
             <p>Kết nối mọi người</p>
           </Logo>

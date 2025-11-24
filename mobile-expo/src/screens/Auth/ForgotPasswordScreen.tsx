@@ -6,18 +6,22 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Text, TextInput, Button, useTheme } from 'react-native-paper';
+import { Text, TextInput, Button, useTheme as usePaperTheme } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../navigation/types';
 import { authAPI } from '../../utils/api';
 import Toast from 'react-native-toast-message';
+import { useTheme } from '../../contexts/ThemeContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 type ForgotPasswordScreenNavigationProp = StackNavigationProp<AuthStackParamList>;
 
 const ForgotPasswordScreen = () => {
-  const theme = useTheme();
+  const paperTheme = usePaperTheme();
+  const { isDarkMode, colors } = useTheme();
   const navigation = useNavigation<ForgotPasswordScreenNavigationProp>();
+  const { t } = useLanguage();
 
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -58,27 +62,27 @@ const ForgotPasswordScreen = () => {
   return (
     <KeyboardAvoidingView
       behavior="padding"
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.surface }]}
     >
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.content}>
-          <Text variant="displaySmall" style={styles.title}>
-            Quên mật khẩu
+          <Text variant="displaySmall" style={[styles.title, { color: colors.primary }]}>
+            {t('auth.forgotPassword')}
           </Text>
-          <Text variant="bodyLarge" style={styles.subtitle}>
-            Nhập email của bạn để nhận link reset mật khẩu
+          <Text variant="bodyLarge" style={[styles.subtitle, { color: colors.textSecondary }]}>
+            {t('auth.emailSentDesc')}
           </Text>
 
           {success ? (
-            <View style={styles.successContainer}>
-              <Text style={[styles.successText, { color: theme.colors.primary }]}>
-                Đã gửi email thành công! Vui lòng kiểm tra hộp thư của bạn.
+            <View style={[styles.successContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[styles.successText, { color: colors.primary }]}>
+                {t('auth.emailSent')} {t('auth.emailSentDesc')}
               </Text>
             </View>
           ) : (
             <>
               <TextInput
-                label="Email"
+                label={t('auth.enterYourEmail')}
                 value={email}
                 onChangeText={setEmail}
                 mode="outlined"
@@ -89,7 +93,7 @@ const ForgotPasswordScreen = () => {
               />
 
               {error ? (
-                <Text style={[styles.error, { color: theme.colors.error }]}>
+                <Text style={[styles.error, { color: colors.error }]}>
                   {error}
                 </Text>
               ) : null}
@@ -101,7 +105,7 @@ const ForgotPasswordScreen = () => {
                 disabled={Boolean(loading)}
                 style={styles.button}
               >
-                Gửi email
+                {t('auth.sendEmail')}
               </Button>
             </>
           )}
@@ -111,7 +115,7 @@ const ForgotPasswordScreen = () => {
             onPress={() => navigation.navigate('Login')}
             style={styles.linkButton}
           >
-            Quay lại đăng nhập
+            {t('auth.backToLogin')}
           </Button>
         </View>
       </ScrollView>
@@ -136,7 +140,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8,
     fontWeight: 'bold',
-    color: '#0068ff',
   },
   subtitle: {
     textAlign: 'center',
@@ -159,9 +162,9 @@ const styles = StyleSheet.create({
   },
   successContainer: {
     padding: 20,
-    backgroundColor: '#e3f2fd',
     borderRadius: 12,
     marginBottom: 20,
+    borderWidth: 1,
   },
   successText: {
     textAlign: 'center',

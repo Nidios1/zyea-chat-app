@@ -3,13 +3,11 @@ import { API_BASE_URL } from '../config/constants';
 // Get Avatar URL
 export const getAvatarURL = (avatarPath: string | null | undefined): string => {
   if (!avatarPath || avatarPath.trim() === '' || avatarPath === 'null' || avatarPath === 'undefined') {
-    console.log('⚠️ getAvatarURL: Empty or invalid avatarPath:', avatarPath);
     return '';
   }
 
   // If already a full URL
   if (avatarPath.startsWith('http://') || avatarPath.startsWith('https://')) {
-    console.log('✅ getAvatarURL: Already full URL:', avatarPath);
     return avatarPath;
   }
 
@@ -19,16 +17,20 @@ export const getAvatarURL = (avatarPath: string | null | undefined): string => {
     cleanPath = '/' + cleanPath;
   }
 
+  // Handle /assets/ paths (for system user logo, etc.)
+  if (cleanPath.startsWith('/assets/')) {
+    const fullURL = `${API_BASE_URL.replace('/api', '')}${cleanPath}`;
+    return fullURL;
+  }
+
   // If path already includes /uploads/avatars/, use as is
   if (cleanPath.includes('/uploads/avatars/')) {
     const fullURL = `${API_BASE_URL.replace('/api', '')}${cleanPath}`;
-    console.log('✅ getAvatarURL: Constructed URL from path:', fullURL);
     return fullURL;
   }
 
   // Construct full URL
   const fullURL = `${API_BASE_URL.replace('/api', '')}/uploads/avatars${cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath}`;
-  console.log('✅ getAvatarURL: Constructed URL:', fullURL);
   return fullURL;
 };
 
@@ -74,27 +76,42 @@ export const getImageURL = (imagePath: string | null | undefined): string => {
 
 // Get Video URL
 export const getVideoURL = (videoPath: string | null | undefined): string => {
-  if (!videoPath) {
+  if (!videoPath || videoPath.trim() === '' || videoPath === 'null' || videoPath === 'undefined') {
     return '';
   }
 
+  // Trim whitespace
+  const trimmedPath = videoPath.trim();
+
   // If already a full URL
-  if (videoPath.startsWith('http://') || videoPath.startsWith('https://')) {
-    return videoPath;
+  if (trimmedPath.startsWith('http://') || trimmedPath.startsWith('https://')) {
+    return trimmedPath;
   }
 
+  const baseUrl = API_BASE_URL.replace('/api', '');
+
   // If path already includes /uploads/videos/, use as is
-  if (videoPath.includes('/uploads/videos/')) {
-    return `${API_BASE_URL.replace('/api', '')}${videoPath.startsWith('/') ? videoPath : '/' + videoPath}`;
+  if (trimmedPath.includes('/uploads/videos/')) {
+    // Ensure it starts with /
+    const normalizedPath = trimmedPath.startsWith('/') ? trimmedPath : '/' + trimmedPath;
+    return `${baseUrl}${normalizedPath}`;
   }
 
   // If path starts with uploads/videos/ (without leading slash)
-  if (videoPath.startsWith('uploads/videos/')) {
-    return `${API_BASE_URL.replace('/api', '')}/${videoPath}`;
+  if (trimmedPath.startsWith('uploads/videos/')) {
+    return `${baseUrl}/${trimmedPath}`;
+  }
+
+  // If path contains uploads/videos/ anywhere
+  if (trimmedPath.includes('uploads/videos/')) {
+    const normalizedPath = trimmedPath.startsWith('/') ? trimmedPath : '/' + trimmedPath;
+    return `${baseUrl}${normalizedPath}`;
   }
 
   // Construct full URL from filename only
-  return `${API_BASE_URL.replace('/api', '')}/uploads/videos/${videoPath}`;
+  // Remove leading slash if present to avoid double slashes
+  const cleanPath = trimmedPath.startsWith('/') ? trimmedPath.substring(1) : trimmedPath;
+  return `${baseUrl}/uploads/videos/${cleanPath}`;
 };
 
 // Get Initials from name
@@ -107,6 +124,17 @@ export const getInitials = (name?: string): string => {
   }
 
   return name.substring(0, 2).toUpperCase();
+};
+
+// Get avatar color based on name - shared utility function
+export const getAvatarColor = (name?: string): string => {
+  if (!name) return '#0084ff';
+  const colors = ['#0084ff', '#00a651', '#ff6b6b', '#4ecdc4', '#45b7d1', '#f59e0b', '#8b5cf6', '#ec4899'];
+  const hash = name.split('').reduce((a, b) => {
+    a = ((a << 5) - a) + b.charCodeAt(0);
+    return a & a;
+  }, 0);
+  return colors[Math.abs(hash) % colors.length];
 };
 
 // Format file size
@@ -146,5 +174,35 @@ export const validateImageSize = (bytes: number): boolean => {
 export const compressImage = async (imageUri: string): Promise<string> => {
   // TODO: Implement image compression using react-native-image-resizer
   return imageUri;
+};
+
+// Get Sticker URL from database path
+export const getStickerURL = (stickerPath: string | null | undefined): string => {
+  if (!stickerPath) {
+    return '';
+  }
+
+  // If already a full URL
+  if (stickerPath.startsWith('http://') || stickerPath.startsWith('https://')) {
+    return stickerPath;
+  }
+
+  const baseUrl = API_BASE_URL.replace('/api', '');
+  
+  // Normalize path
+  let normalizedPath = stickerPath.trim();
+  
+  // If path starts with /uploads/stickers/
+  if (normalizedPath.startsWith('/uploads/stickers/')) {
+    return `${baseUrl}${normalizedPath}`;
+  }
+  
+  // If path starts with uploads/stickers/ (without leading slash)
+  if (normalizedPath.startsWith('uploads/stickers/')) {
+    return `${baseUrl}/${normalizedPath}`;
+  }
+  
+  // Default: assume it's a filename in /uploads/stickers/ directory
+  return `${baseUrl}/uploads/stickers/${normalizedPath}`;
 };
 

@@ -114,8 +114,9 @@ const MessageList = ({ messages, currentUserId, onReply, onForward, onReaction, 
         const prevMessage = messages[index - 1];
         const nextMessage = messages[index + 1];
         
-        // Show avatar if it's the first message or different sender
-        const showAvatar = !prevMessage || prevMessage.sender_id !== message.sender_id;
+        // Show avatar if it's the first message or different sender, but NOT for own messages
+        const isOwn = message.sender_id === currentUserId;
+        const showAvatar = !isOwn && (!prevMessage || prevMessage.sender_id !== message.sender_id);
         
         // Show time if:
         // 1. It's the last message in the group

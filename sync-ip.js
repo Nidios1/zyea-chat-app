@@ -83,6 +83,22 @@ updateFile(
   path.join(__dirname, 'client/src/utils/platformConfig.js'),
   [
     {
+      pattern: /let defaultApiUrl = 'http:\/\/[^']+:5000\/api'; \/\/ Fallback - sẽ được sync-ip\.js cập nhật/g,
+      replacement: `let defaultApiUrl = '${CONFIG.apiURL}'; // Fallback - sẽ được sync-ip.js cập nhật`
+    },
+    {
+      pattern: /let defaultSocketUrl = 'http:\/\/[^']+:5000'; \/\/ Fallback - sẽ được sync-ip\.js cập nhật/g,
+      replacement: `let defaultSocketUrl = '${CONFIG.socketURL}'; // Fallback - sẽ được sync-ip.js cập nhật`
+    },
+    {
+      pattern: /: 'http:\/\/[\d.]+:5000\/api'; \/\/ Fallback - sẽ được sync-ip\.js cập nhật/g,
+      replacement: `: '${CONFIG.apiURL}'; // Fallback - sẽ được sync-ip.js cập nhật`
+    },
+    {
+      pattern: /const defaultSocketUrl = 'http:\/\/[\d.]+:5000'; \/\/ Fallback - sẽ được sync-ip\.js cập nhật/g,
+      replacement: `const defaultSocketUrl = '${CONFIG.socketURL}'; // Fallback - sẽ được sync-ip.js cập nhật`
+    },
+    {
       pattern: /const defaultApiUrl = 'http:\/\/[\d.]+:5000\/api';/g,
       replacement: `const defaultApiUrl = '${CONFIG.apiURL}';`
     },
@@ -187,6 +203,14 @@ updateFile(
   path.join(__dirname, 'mobile-expo/src/config/constants.ts'),
   [
     {
+      pattern: /return 'http:\/\/[\d.]+:5000\/api';/g,
+      replacement: `return '${CONFIG.apiURL}';`
+    },
+    {
+      pattern: /return 'http:\/\/[\d.]+:5000';/g,
+      replacement: `return '${CONFIG.socketURL}';`
+    },
+    {
       pattern: /export const API_BASE_URL = 'http:\/\/[\d.]+:5000\/api';/g,
       replacement: `export const API_BASE_URL = '${CONFIG.apiURL}';`
     },
@@ -196,6 +220,24 @@ updateFile(
     }
   ],
   'Mobile Expo Constants (constants.ts)'
+);
+
+/**
+ * 7b. Update mobile-expo/app.json
+ */
+updateFile(
+  path.join(__dirname, 'mobile-expo/app.json'),
+  [
+    {
+      pattern: /"apiUrl": "http:\/\/[\d.]+:5000\/api",/g,
+      replacement: `"apiUrl": "${CONFIG.apiURL}",`
+    },
+    {
+      pattern: /"socketUrl": "http:\/\/[\d.]+:5000"/g,
+      replacement: `"socketUrl": "${CONFIG.socketURL}"`
+    }
+  ],
+  'Mobile Expo App Config (app.json)'
 );
 
 /**
@@ -210,6 +252,24 @@ updateFile(
     }
   ],
   'Server App Routes (app.js)'
+);
+
+/**
+ * 8b. Update server/index.js
+ */
+updateFile(
+  path.join(__dirname, 'server/index.js'),
+  [
+    {
+      pattern: /const serverUrl = process\.env\.SERVER_URL \|\| 'http:\/\/[\d.]+:5000';/g,
+      replacement: `const serverUrl = process.env.SERVER_URL || '${CONFIG.serverURL}';`
+    },
+    {
+      pattern: /const serverUrl = process\.env\.SERVER_URL \|\| 'http:\/\/localhost:5000';/g,
+      replacement: `const serverUrl = process.env.SERVER_URL || '${CONFIG.serverURL}';`
+    }
+  ],
+  'Server Index (index.js)'
 );
 
 /**
@@ -228,6 +288,38 @@ updateFile(
     }
   ],
   'Start Script (START-ALL.bat)'
+);
+
+/**
+ * 9b. Update START-ALL-DOCKER.bat
+ */
+updateFile(
+  path.join(__dirname, 'START-ALL-DOCKER.bat'),
+  [
+    {
+      pattern: /echo Backend: http:\/\/[\d.]+:5000/g,
+      replacement: `echo Backend: ${CONFIG.serverURL}`
+    },
+    {
+      pattern: /echo Frontend: http:\/\/[\d.]+:3000/g,
+      replacement: `echo Frontend: ${CONFIG.clientURL}`
+    }
+  ],
+  'Start Script Docker (START-ALL-DOCKER.bat)'
+);
+
+/**
+ * 9c. Update START-SERVER.bat
+ */
+updateFile(
+  path.join(__dirname, 'START-SERVER.bat'),
+  [
+    {
+      pattern: /echo Backend: http:\/\/[\d.]+:5000/g,
+      replacement: `echo Backend: ${CONFIG.serverURL}`
+    }
+  ],
+  'Start Server Script (START-SERVER.bat)'
 );
 
 /**

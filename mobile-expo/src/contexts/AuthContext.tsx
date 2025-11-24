@@ -10,6 +10,9 @@ interface User {
   full_name: string;
   avatar_url?: string;
   email?: string;
+  role?: string; // User role: 'admin', 'user', etc.
+  is_admin?: boolean; // Admin flag
+  isAdmin?: boolean; // Alternative admin flag (camelCase)
 }
 
 interface AuthContextType {
@@ -33,9 +36,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   const initializeAuth = async () => {
-    // Set maximum timeout for auth initialization (10 seconds)
-    // This prevents app from hanging indefinitely if server is down
-    const MAX_INIT_TIMEOUT = 10000; // 10 seconds
+    // Reduced minimum splash screen display time for faster app startup
+    const MIN_SPLASH_TIME = 500; // 0.5 seconds - instant startup
+    const startTime = Date.now();
+    
+    // Set maximum timeout for auth initialization (reduced for faster failure)
+    const MAX_INIT_TIMEOUT = 3000; // 3 seconds - no delay
     const timeoutId = setTimeout(() => {
       console.warn('⚠️ Auth initialization timeout - proceeding without verification');
       setLoading(false);
@@ -47,20 +53,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (storedToken) {
         setToken(storedToken);
         // Verify token and get user info (with timeout protection)
-        await verifyToken(storedToken);
+        // Use Promise.race to ensure we don't wait too long
+        await Promise.race([
+          verifyToken(storedToken),
+          new Promise((resolve) => setTimeout(resolve, MAX_INIT_TIMEOUT - 500))
+        ]);
       }
     } catch (error) {
       console.error('Auth initialization error:', error);
     } finally {
       clearTimeout(timeoutId);
+      
+      // Ensure splash screen displays for at least MIN_SPLASH_TIME
+      const elapsedTime = Date.now() - startTime;
+      const remainingTime = Math.max(0, MIN_SPLASH_TIME - elapsedTime);
+      
+      if (remainingTime > 0) {
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+      }
+      
       setLoading(false);
     }
   };
 
   const verifyToken = async (token: string, retryCount = 0) => {
     const MAX_RETRIES = 1; // Reduced to 1 retry to avoid long wait
-    const RETRY_DELAY = 2000; // 2 seconds
-    const REQUEST_TIMEOUT = 8000; // 8 seconds per request (reduced from 30s)
+    const RETRY_DELAY = 500; // 0.5 second - instant retry
+    const REQUEST_TIMEOUT = 3000; // 3 seconds per request - no delay
     
     try {
       console.log(`🔐 Verifying token... (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
@@ -71,7 +90,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         headers: {
           Authorization: `Bearer ${token}`,
         },
-        timeout: REQUEST_TIMEOUT, // 8 seconds timeout (reduced for faster response)
+        timeout: REQUEST_TIMEOUT, // 3 seconds timeout for instant response
       });
 
       if (response.data) {

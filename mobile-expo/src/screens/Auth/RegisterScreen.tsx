@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useReducer } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,51 +10,225 @@ import {
   Platform,
   Modal,
   Pressable,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
-import { Text, TextInput, Button, RadioButton, Checkbox, useTheme } from 'react-native-paper';
+import { Text, TextInput, Button, RadioButton, useTheme as usePaperTheme, Avatar } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../navigation/types';
-import { authAPI } from '../../utils/api';
+import { authAPI, uploadAPI, friendsAPI, usersAPI } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { storeToken } from '../../utils/auth';
+import { useLanguage } from '../../contexts/LanguageContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import Toast from 'react-native-toast-message';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { spacing, typography, borderRadius } from '../../config/designTokens';
+import { launchImageLibrary, launchCamera } from '../../utils/imagePicker';
+import { getInitials, getAvatarURL } from '../../utils/imageUtils';
+
+// Email validation function
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
 
 type RegisterScreenNavigationProp = StackNavigationProp<AuthStackParamList>;
 
+enum SignupStep {
+  INFO = 0,
+  HANDLE = 1,
+  OTP = 2,
+  AVATAR = 3,
+  SUGGESTED_USERS = 4,
+}
+
+type SignupState = {
+  activeStep: SignupStep;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  fullName: string;
+  dateOfBirth: Date;
+  gender: string;
+  handle: string;
+  error: string;
+  errorField?: 'email' | 'password' | 'fullName' | 'handle' | 'date-of-birth' | 'gender';
+  isLoading: boolean;
+  otp: string;
+  otpStep: boolean;
+  resendCountdown: number;
+  avatarUri: string | null;
+  isRegistered: boolean;
+  token: string | null;
+  userData: any | null; // Store user data from registration
+  suggestedUsers: any[];
+  followedUserIds: string[];
+  otpError: string;
+};
+
+type SignupAction =
+  | { type: 'setEmail'; value: string }
+  | { type: 'setPassword'; value: string }
+  | { type: 'setConfirmPassword'; value: string }
+  | { type: 'setFullName'; value: string }
+  | { type: 'setDateOfBirth'; value: Date }
+  | { type: 'setGender'; value: string }
+  | { type: 'setHandle'; value: string }
+  | { type: 'setError'; value: string; field?: SignupState['errorField'] }
+  | { type: 'clearError' }
+  | { type: 'setIsLoading'; value: boolean }
+  | { type: 'next' }
+  | { type: 'prev' }
+  | { type: 'setOtp'; value: string }
+  | { type: 'setOtpStep'; value: boolean }
+  | { type: 'setResendCountdown'; value: number }
+  | { type: 'setAvatarUri'; value: string | null }
+  | { type: 'setIsRegistered'; value: boolean; token: string | null; userData?: any }
+  | { type: 'setSuggestedUsers'; value: any[] }
+  | { type: 'addFollowedUser'; userId: string }
+  | { type: 'removeFollowedUser'; userId: string }
+  | { type: 'setOtpError'; value: string }
+  | { type: 'clearOtpError' };
+
+const initialState: SignupState = {
+  activeStep: SignupStep.INFO,
+  email: '',
+  password: '',
+  confirmPassword: '',
+  fullName: '',
+  dateOfBirth: new Date(Date.now() - 60e3 * 60 * 24 * 365 * 20), // 20 years ago
+  gender: '',
+  handle: '',
+  error: '',
+  errorField: undefined,
+  isLoading: false,
+  otp: '',
+  otpStep: false,
+  resendCountdown: 0,
+  avatarUri: null,
+  isRegistered: false,
+  token: null,
+  userData: null,
+  suggestedUsers: [],
+  followedUserIds: [],
+  otpError: '',
+};
+
+function reducer(state: SignupState, action: SignupAction): SignupState {
+  switch (action.type) {
+    case 'setEmail':
+      return { ...state, email: action.value };
+    case 'setPassword':
+      return { ...state, password: action.value };
+    case 'setConfirmPassword':
+      return { ...state, confirmPassword: action.value };
+    case 'setFullName':
+      return { ...state, fullName: action.value };
+    case 'setDateOfBirth':
+      return { ...state, dateOfBirth: action.value };
+    case 'setGender':
+      return { ...state, gender: action.value };
+    case 'setHandle':
+      return { ...state, handle: action.value };
+    case 'setError':
+      return { ...state, error: action.value, errorField: action.field };
+    case 'clearError':
+      return { ...state, error: '', errorField: undefined };
+    case 'setIsLoading':
+      return { ...state, isLoading: action.value };
+    case 'next':
+      if (state.activeStep < SignupStep.SUGGESTED_USERS) {
+        return { ...state, activeStep: state.activeStep + 1, error: '' };
+      }
+      return state;
+    case 'prev':
+      if (state.activeStep > SignupStep.INFO) {
+        return { ...state, activeStep: state.activeStep - 1, error: '' };
+      }
+      return state;
+    case 'setOtp':
+      return { ...state, otp: action.value };
+    case 'setOtpStep':
+      return { ...state, otpStep: action.value };
+    case 'setResendCountdown':
+      return { ...state, resendCountdown: action.value };
+    case 'setAvatarUri':
+      return { ...state, avatarUri: action.value };
+    case 'setIsRegistered':
+      return { 
+        ...state, 
+        isRegistered: action.value, 
+        token: action.token,
+        userData: action.userData || state.userData,
+      };
+    case 'setSuggestedUsers':
+      return { ...state, suggestedUsers: action.value };
+    case 'addFollowedUser':
+      return {
+        ...state,
+        followedUserIds: [...state.followedUserIds, action.userId],
+      };
+    case 'removeFollowedUser':
+      return {
+        ...state,
+        followedUserIds: state.followedUserIds.filter((id) => id !== action.userId),
+      };
+    case 'setOtpError':
+      return { ...state, otpError: action.value };
+    case 'clearOtpError':
+      return { ...state, otpError: '' };
+    default:
+      return state;
+  }
+}
+
+function getAge(date: Date): number {
+  const today = new Date();
+  let age = today.getFullYear() - date.getFullYear();
+  const monthDiff = today.getMonth() - date.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < date.getDate())) {
+    age--;
+  }
+  return age;
+}
+
+function is13(date: Date): boolean {
+  return getAge(date) >= 13;
+}
+
 const RegisterScreen = () => {
-  const theme = useTheme();
+  const paperTheme = usePaperTheme();
+  const { isDarkMode, colors } = useTheme();
   const navigation = useNavigation<RegisterScreenNavigationProp>();
   const { login } = useAuth();
+  const { t, language, setLanguage } = useLanguage();
 
-  const [step, setStep] = useState(1); // 1: intro, 2: name, 3: birthdate, 4: gender, 5: phone, 6: email, 7: password, 8: otp
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [birthDate, setBirthDate] = useState<Date | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [gender, setGender] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [state, dispatch] = useReducer(reducer, initialState);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [otpStep, setOtpStep] = useState(false);
-  const [otp, setOtp] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [resendCountdown, setResendCountdown] = useState(20);
-  const [registerMethod, setRegisterMethod] = useState<'phone' | 'email'>('phone');
-  const [alertData, setAlertData] = useState({ show: false, title: '', message: '', onConfirm: null as (() => void) | null });
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showGenderPicker, setShowGenderPicker] = useState(false);
+  const [tempBirthDate, setTempBirthDate] = useState(state.dateOfBirth);
+  const [isAutoVerifying, setIsAutoVerifying] = useState(false);
+  const [alertData, setAlertData] = useState({
+    show: false,
+    title: '',
+    message: '',
+    onConfirm: null as (() => void) | null,
+  });
 
   // Countdown effect for resend OTP
   useEffect(() => {
-    if (otpStep && resendCountdown > 0) {
+    if (state.otpStep && state.resendCountdown > 0) {
       const timer = setTimeout(() => {
-        setResendCountdown(resendCountdown - 1);
+        dispatch({ type: 'setResendCountdown', value: state.resendCountdown - 1 });
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [otpStep, resendCountdown]);
+  }, [state.otpStep, state.resendCountdown]);
 
   const showAlert = (title: string, message: string, onConfirm?: () => void) => {
     setAlertData({ show: true, title, message, onConfirm: onConfirm || null });
@@ -64,242 +238,451 @@ const RegisterScreen = () => {
     setAlertData({ show: false, title: '', message: '', onConfirm: null });
   };
 
-  const handleNext = async () => {
-    if (step === 2) {
-      if (!firstName.trim()) {
-        showAlert('Vui lòng nhập họ', 'Họ không được để trống.');
-        return;
-      }
-      if (!lastName.trim()) {
-        showAlert('Vui lòng nhập tên', 'Tên không được để trống.');
-        return;
-      }
-      if (firstName.trim().length < 2) {
-        showAlert('Họ quá ngắn', 'Họ phải có ít nhất 2 ký tự.');
-        return;
-      }
-      if (lastName.trim().length < 2) {
-        showAlert('Tên quá ngắn', 'Tên phải có ít nhất 2 ký tự.');
-        return;
-      }
-      const nameRegex = /^[a-zA-ZÀ-ỹ\s]+$/;
-      if (!nameRegex.test(firstName)) {
-        showAlert('Họ không hợp lệ', 'Họ chỉ được chứa chữ cái tiếng Việt. Vui lòng nhập tên thật.');
-        return;
-      }
-      if (!nameRegex.test(lastName)) {
-        showAlert('Tên không hợp lệ', 'Tên chỉ được chứa chữ cái tiếng Việt. Vui lòng nhập tên thật.');
-        return;
-      }
-      const combinedName = (firstName + lastName).toLowerCase();
-      if (/([a-z])\1{3,}/.test(combinedName)) {
-        showAlert('Tên không hợp lệ', 'Vui lòng nhập họ và tên thật, không phải username.');
-        return;
-      }
-      if (firstName.trim().length < 3 && lastName.trim().length < 3) {
-        showAlert('Tên quá ngắn', 'Vui lòng nhập đầy đủ họ và tên thật của bạn.');
-        return;
-      }
+  const validateStepInfo = (): boolean => {
+    if (!state.email.trim()) {
+      dispatch({
+        type: 'setError',
+        value: 'Vui lòng nhập email của bạn.',
+        field: 'email',
+      });
+      return false;
     }
-    if (step === 3) {
-      if (!birthDate) {
-        showAlert('Chưa chọn ngày sinh', 'Vui lòng chọn ngày sinh của bạn.');
-        return;
-      }
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (birthDate > today) {
-        showAlert('Ngày sinh không hợp lệ', 'Ngày sinh không được là ngày trong tương lai.');
-        return;
-      }
-      const age = today.getFullYear() - birthDate.getFullYear();
-      const monthDiff = today.getMonth() - birthDate.getMonth();
-      const dayDiff = today.getDate() - birthDate.getDate();
-      let actualAge = age;
-      if (monthDiff < 0 || (monthDiff === 0 && dayDiff < 0)) {
-        actualAge = age - 1;
-      }
-      if (actualAge < 13) {
-        showAlert('Tuổi không đủ', 'Bạn phải ít nhất 13 tuổi để đăng ký tài khoản.');
-        return;
-      }
-      if (actualAge > 120) {
-        showAlert('Ngày sinh không hợp lệ', 'Vui lòng kiểm tra lại ngày sinh của bạn.');
-        return;
-      }
+    if (!validateEmail(state.email)) {
+      dispatch({
+        type: 'setError',
+        value: 'Email không hợp lệ. Vui lòng kiểm tra lại.',
+        field: 'email',
+      });
+      return false;
     }
-    if (step === 4) {
-      if (!gender) {
-        showAlert('Chưa chọn giới tính', 'Vui lòng chọn giới tính của bạn.');
-        return;
-      }
+    if (!state.password.trim()) {
+      dispatch({
+        type: 'setError',
+        value: 'Vui lòng nhập mật khẩu của bạn.',
+        field: 'password',
+      });
+      return false;
     }
-    if (step === 5) {
-      if (registerMethod === 'phone') {
-        if (!phone.trim()) {
-          showAlert('Chưa nhập số điện thoại', 'Vui lòng nhập số điện thoại của bạn.');
-          return;
-        }
-        if (!phone.startsWith('+84') && !phone.startsWith('0')) {
-          showAlert('Số điện thoại không hợp lệ', 'Số điện thoại phải bắt đầu bằng 0 hoặc +84.');
-          return;
-        }
-        if (phone.replace(/\D/g, '').length < 10) {
-          showAlert('Số điện thoại không hợp lệ', 'Số điện thoại phải có ít nhất 10 số. Vui lòng kiểm tra lại.');
-          return;
-        }
-      } else {
-        setStep(6);
-        return;
-      }
+    if (state.password.length < 8) {
+      dispatch({
+        type: 'setError',
+        value: 'Mật khẩu phải có ít nhất 8 ký tự.',
+        field: 'password',
+      });
+      return false;
     }
-    if (step === 6) {
-      if (registerMethod === 'email') {
-        if (!email.trim()) {
-          showAlert('Chưa nhập email', 'Vui lòng nhập email của bạn.');
-          return;
-        }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-          showAlert('Email không hợp lệ', 'Email không đúng định dạng. Vui lòng kiểm tra lại.');
-          return;
-        }
-      } else {
-        // Phone method - validate password
-        if (!password.trim()) {
-          showAlert('Chưa nhập mật khẩu', 'Vui lòng nhập mật khẩu của bạn.');
-          return;
-        }
-        if (password.length < 6) {
-          showAlert('Mật khẩu quá ngắn', 'Mật khẩu phải có ít nhất 6 ký tự.');
-          return;
-        }
-        if (password.length > 50) {
-          showAlert('Mật khẩu quá dài', 'Mật khẩu không được vượt quá 50 ký tự.');
-          return;
-        }
-        if (!confirmPassword.trim()) {
-          showAlert('Chưa xác nhận mật khẩu', 'Vui lòng xác nhận mật khẩu của bạn.');
-          return;
-        }
-        if (password !== confirmPassword) {
-          showAlert('Mật khẩu không khớp', 'Hai mật khẩu không giống nhau. Vui lòng nhập lại.');
-          return;
-        }
-        await handleRegister();
-      return;
-      }
+    if (!state.fullName.trim()) {
+      dispatch({
+        type: 'setError',
+        value: 'Vui lòng nhập họ tên của bạn.',
+        field: 'fullName',
+      });
+      return false;
     }
-    if (step === 7) {
-      if (!password.trim()) {
-        showAlert('Chưa nhập mật khẩu', 'Vui lòng nhập mật khẩu của bạn.');
-        return;
-      }
-      if (password.length < 6) {
-        showAlert('Mật khẩu quá ngắn', 'Mật khẩu phải có ít nhất 6 ký tự.');
-        return;
-      }
-      if (password.length > 50) {
-        showAlert('Mật khẩu quá dài', 'Mật khẩu không được vượt quá 50 ký tự.');
-        return;
-      }
-      if (!confirmPassword.trim()) {
-        showAlert('Chưa xác nhận mật khẩu', 'Vui lòng xác nhận mật khẩu của bạn.');
-        return;
-      }
-      if (password !== confirmPassword) {
-        showAlert('Mật khẩu không khớp', 'Hai mật khẩu không giống nhau. Vui lòng nhập lại.');
-        return;
-      }
-      await handleRegister();
-      return;
+    if (state.fullName.trim().length < 2) {
+      dispatch({
+        type: 'setError',
+        value: 'Họ tên phải có ít nhất 2 ký tự.',
+        field: 'fullName',
+      });
+      return false;
     }
-    setStep(step + 1);
+    if (!is13(state.dateOfBirth)) {
+      dispatch({
+        type: 'setError',
+        value: 'Bạn phải ít nhất 13 tuổi để đăng ký tài khoản.',
+        field: 'date-of-birth',
+      });
+      return false;
+    }
+    return true;
   };
 
-  const handleRegister = async () => {
-    setLoading(true);
-    try {
+  const validateStepHandle = (): boolean => {
+    if (!state.handle.trim()) {
+      dispatch({
+        type: 'setError',
+        value: 'Vui lòng chọn tên người dùng của bạn.',
+        field: 'handle',
+      });
+      return false;
+    }
+    if (state.handle.length < 3) {
+      dispatch({
+        type: 'setError',
+        value: 'Tên người dùng phải có ít nhất 3 ký tự.',
+        field: 'handle',
+      });
+      return false;
+    }
+    if (state.handle.length > 20) {
+      dispatch({
+        type: 'setError',
+        value: 'Tên người dùng không được vượt quá 20 ký tự.',
+        field: 'handle',
+      });
+      return false;
+    }
+    if (!/^[a-z0-9_-]+$/.test(state.handle.toLowerCase())) {
+      dispatch({
+        type: 'setError',
+        value: 'Tên người dùng chỉ được chứa chữ cái, số, dấu gạch dưới và dấu gạch ngang.',
+        field: 'handle',
+      });
+      return false;
+    }
+    return true;
+  };
+
+  const handleNext = async () => {
+    dispatch({ type: 'clearError' });
+
+    if (state.activeStep === SignupStep.INFO) {
+      if (!validateStepInfo()) {
+        return;
+      }
       // Send verification code
-      if (registerMethod === 'email' && email) {
-        await authAPI.sendVerification({ email });
-        setResendCountdown(20);
-        setOtpStep(true);
-        setLoading(false);
-      } else if (registerMethod === 'phone' && phone) {
-        await authAPI.sendVerification({ phone });
-        setResendCountdown(20);
-        setOtpStep(true);
-        setLoading(false);
-      } else {
-        showAlert('Thiếu thông tin', 'Vui lòng điền đầy đủ thông tin.');
-        setLoading(false);
+      try {
+        dispatch({ type: 'setIsLoading', value: true });
+        await authAPI.sendVerification({ email: state.email });
+        dispatch({ type: 'setResendCountdown', value: 60 });
+        dispatch({ type: 'setOtpStep', value: true });
+        dispatch({ type: 'next' });
+      } catch (err: any) {
+        const errorMessage = err.response?.data?.message || '';
+        if (errorMessage.includes('email') || errorMessage.includes('Email')) {
+          dispatch({
+            type: 'setError',
+            value: 'Email này đã được sử dụng. Vui lòng dùng email khác.',
+            field: 'email',
+          });
+        } else {
+          dispatch({
+            type: 'setError',
+            value: errorMessage || 'Gửi mã xác thực thất bại. Vui lòng thử lại.',
+          });
+        }
+      } finally {
+        dispatch({ type: 'setIsLoading', value: false });
       }
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || '';
-      if (errorMessage.includes('email') || errorMessage.includes('Email')) {
-        showAlert('Email đã tồn tại', 'Email này đã được sử dụng. Vui lòng dùng email khác.');
-      } else if (errorMessage.includes('phone') || errorMessage.includes('số điện thoại')) {
-        showAlert('Số điện thoại đã tồn tại', 'Số điện thoại này đã được sử dụng. Vui lòng dùng số khác.');
-      } else if (errorMessage) {
-        showAlert('Đăng ký thất bại', errorMessage);
-      } else {
-        showAlert('Đăng ký thất bại', 'Gửi mã xác thực thất bại. Vui lòng thử lại.');
+    } else if (state.activeStep === SignupStep.HANDLE) {
+      if (!validateStepHandle()) {
+        return;
       }
-      setLoading(false);
+      // Move to OTP step
+      dispatch({ type: 'next' });
     }
   };
 
   const handleVerify = async () => {
-    if (!otp || otp.length !== 6) {
+    if (!state.otp || state.otp.length !== 6) {
+      dispatch({ type: 'setOtpError', value: 'Mã xác thực phải có đúng 6 số.' });
       showAlert('Mã xác thực không hợp lệ', 'Mã xác thực phải có đúng 6 số.');
       return;
     }
 
-    setLoading(true);
+    // Clear previous errors
+    dispatch({ type: 'clearOtpError' });
+    console.log('🔐 Starting OTP verification for:', state.email);
+    dispatch({ type: 'setIsLoading', value: true });
     try {
       // Verify OTP
-      await authAPI.verifyCode(
-        registerMethod === 'email' 
-          ? { email, code: otp }
-          : { phone, code: otp }
-      );
-      
+      console.log('📧 Verifying OTP code...');
+      await authAPI.verifyCode({ email: state.email, code: state.otp });
+      console.log('✅ OTP verified successfully');
+
       // Register after verification
+      console.log('📝 Registering user with data:', {
+        email: state.email,
+        handle: state.handle,
+        birthDate: state.dateOfBirth.toISOString().split('T')[0],
+        gender: state.gender,
+      });
+      
+      // Register with fullName (required by server)
       const response = await authAPI.register({
-        fullName: `${firstName} ${lastName}`,
-        email: registerMethod === 'email' ? email : '',
-        phone: registerMethod === 'phone' ? phone : '',
-        password,
-        birthDate: birthDate?.toISOString().split('T')[0] || '',
-        gender,
+        email: state.email,
+        password: state.password,
+        fullName: state.fullName,
+        handle: state.handle,
+        birthDate: state.dateOfBirth.toISOString().split('T')[0],
+        gender: state.gender,
       });
 
-      if (response.data?.token && response.data?.user) {
-        await login(response.data.user, response.data.token);
+      console.log('📦 Full registration response:', JSON.stringify(response, null, 2));
+      console.log('📦 Response status:', response.status);
+      console.log('📦 Response data:', response.data);
+      console.log('📦 Response data type:', typeof response.data);
+      console.log('📦 Has token?', !!response.data?.token);
+      console.log('📦 Has user?', !!response.data?.user);
+      console.log('📦 Token value:', response.data?.token);
+      console.log('📦 User value:', response.data?.user);
+
+      // Check different possible response structures
+      const token = response.data?.token || response.data?.accessToken || response.data?.access_token;
+      const user = response.data?.user || response.data?.data?.user || response.data?.data;
+      
+      if (token && user) {
+        console.log('✅ Registration successful, moving to avatar step');
+        // Save token and user data, but DON'T login yet (don't set isAuthenticated = true)
+        // We need to stay in AuthNavigator to show avatar and suggested users steps
+        // Only login after completing all onboarding steps
+        // However, we need to store token in storage so API calls (like upload avatar) can work
+        await storeToken(token);
+        
+        dispatch({
+          type: 'setIsRegistered',
+          value: true,
+          token: token,
+          userData: user, // Store user data for later use
+        });
+        // Store user data temporarily in state (we'll use it later)
+        // Don't call login() here - it will cause navigation to switch to MainNavigator
+        // Move to avatar step
+        dispatch({ type: 'next' });
+      } else {
+        console.error('❌ Registration failed: No token or user data');
+        console.error('Response structure:', {
+          hasData: !!response.data,
+          dataKeys: response.data ? Object.keys(response.data) : [],
+          token: token,
+          user: user,
+        });
+        
+        const errorMsg = `Không nhận được dữ liệu từ server. 
+        
+Response status: ${response.status}
+Has data: ${!!response.data}
+Token: ${token ? 'Có' : 'Không'}
+User: ${user ? 'Có' : 'Không'}
+
+Vui lòng kiểm tra console log để xem chi tiết.`;
+        
+        Toast.show({
+          type: 'error',
+          text1: 'Đăng ký thất bại',
+          text2: 'Không nhận được dữ liệu từ server. Vui lòng thử lại.',
+          visibilityTime: 5000,
+        });
+        showAlert('Đăng ký thất bại', 'Không nhận được dữ liệu từ server. Vui lòng thử lại.\n\nKiểm tra console log để xem chi tiết lỗi.');
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || '';
-      if (errorMessage.includes('code') || errorMessage.includes('mã')) {
-        showAlert('Mã không đúng', 'Mã xác thực không đúng. Vui lòng nhập lại.');
-      } else if (errorMessage.includes('expired') || errorMessage.includes('hết hạn')) {
-        showAlert('Mã đã hết hạn', 'Mã xác thực đã hết hạn. Vui lòng gửi lại mã.');
-      } else if (errorMessage.includes('email') || errorMessage.includes('Email')) {
-        showAlert('Email đã tồn tại', 'Email này đã được sử dụng. Vui lòng dùng email khác hoặc đăng nhập.');
-      } else if (errorMessage.includes('phone') || errorMessage.includes('số điện thoại')) {
-        showAlert('Số điện thoại đã tồn tại', 'Số điện thoại này đã được sử dụng. Vui lòng dùng số khác.');
-      } else if (errorMessage) {
-        showAlert('Đăng ký thất bại', errorMessage);
+      console.error('❌ Verification/Registration error:', err);
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        code: err.code,
+      });
+      
+      let errorMessage = '';
+      let errorTitle = 'Đăng ký thất bại';
+      
+      // Try to extract error message from different sources
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.message) {
+        errorMessage = err.message;
+      } else if (err.code === 'NETWORK_ERROR' || err.code === 'ECONNABORTED') {
+        errorMessage = 'Không thể kết nối đến server. Vui lòng kiểm tra kết nối internet và thử lại.';
+        errorTitle = 'Lỗi kết nối';
+      } else if (err.response?.status === 401) {
+        errorMessage = 'Mã xác thực không đúng hoặc đã hết hạn. Vui lòng nhập lại mã hoặc gửi lại mã mới.';
+        errorTitle = 'Xác thực thất bại';
+      } else if (err.response?.status === 400) {
+        errorMessage = 'Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin.';
+        errorTitle = 'Dữ liệu không hợp lệ';
+      } else if (err.response?.status === 500) {
+        errorMessage = 'Lỗi server. Vui lòng thử lại sau.';
+        errorTitle = 'Lỗi server';
       } else {
-        showAlert('Đăng ký thất bại', 'Xác thực thất bại. Vui lòng thử lại.');
+        errorMessage = 'Đã xảy ra lỗi không xác định. Vui lòng thử lại.';
+      }
+      
+      // Show both Toast and Alert for better visibility
+      Toast.show({
+        type: 'error',
+        text1: errorTitle,
+        text2: errorMessage,
+        visibilityTime: 4000,
+      });
+      
+      // Set error in state to display on screen
+      dispatch({ type: 'setOtpError', value: errorMessage });
+      
+      // Also show alert modal
+      if (errorMessage.toLowerCase().includes('code') || errorMessage.toLowerCase().includes('mã')) {
+        showAlert('Mã không đúng', 'Mã xác thực không đúng. Vui lòng nhập lại mã hoặc gửi lại mã mới.');
+      } else if (errorMessage.toLowerCase().includes('expired') || errorMessage.toLowerCase().includes('hết hạn')) {
+        showAlert('Mã đã hết hạn', 'Mã xác thực đã hết hạn. Vui lòng nhấn "Gửi lại mã" để nhận mã mới.');
+      } else if (errorMessage.toLowerCase().includes('handle') || errorMessage.toLowerCase().includes('username')) {
+        dispatch({
+          type: 'setError',
+          value: 'Tên người dùng này đã được sử dụng. Vui lòng chọn tên khác.',
+          field: 'handle',
+        });
+        dispatch({ type: 'prev' });
+      } else {
+        showAlert(errorTitle, errorMessage);
       }
     } finally {
-      setLoading(false);
+      dispatch({ type: 'setIsLoading', value: false });
+      setIsAutoVerifying(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (state.resendCountdown > 0) return;
+    try {
+      await authAPI.sendVerification({ email: state.email });
+      dispatch({ type: 'setResendCountdown', value: 60 });
+      Toast.show({ type: 'info', text1: 'Đã gửi lại mã' });
+    } catch (_) {
+      // Ignore error
+    }
+  };
+
+  // Avatar step handlers
+  const handlePickAvatar = async () => {
+    try {
+      const response = await launchImageLibrary({
+        mediaType: 'photo',
+        quality: 0.8,
+        maxWidth: 512,
+        maxHeight: 512,
+      });
+      if (response.assets?.[0]) {
+        dispatch({ type: 'setAvatarUri', value: response.assets[0].uri || null });
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+    }
+  };
+
+  const handleTakeAvatarPhoto = async () => {
+    try {
+      const response = await launchCamera({
+        mediaType: 'photo',
+        quality: 0.8,
+      });
+      if (response.assets?.[0]) {
+        dispatch({ type: 'setAvatarUri', value: response.assets[0].uri || null });
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+    }
+  };
+
+  const handleUploadAvatar = async () => {
+    if (!state.avatarUri) {
+      Toast.show({ type: 'error', text1: 'Vui lòng chọn ảnh đại diện' });
+      return;
+    }
+
+    dispatch({ type: 'setIsLoading', value: true });
+    try {
+      const formData = new FormData();
+      formData.append('avatar', {
+        uri: state.avatarUri,
+        type: 'image/jpeg',
+        name: 'avatar.jpg',
+      } as any);
+
+      await uploadAPI.uploadAvatar(formData);
+      Toast.show({ type: 'success', text1: 'Đã cập nhật ảnh đại diện' });
+      dispatch({ type: 'next' });
+    } catch (error: any) {
+      Toast.show({
+        type: 'error',
+        text1: error.response?.data?.message || 'Upload thất bại',
+      });
+    } finally {
+      dispatch({ type: 'setIsLoading', value: false });
+    }
+  };
+
+  const handleSkipAvatar = () => {
+    dispatch({ type: 'next' });
+  };
+
+  // Suggested users step handlers
+  useEffect(() => {
+    if (state.activeStep === SignupStep.SUGGESTED_USERS && state.suggestedUsers.length === 0) {
+      loadSuggestedUsers();
+    }
+  }, [state.activeStep]);
+
+  const loadSuggestedUsers = async () => {
+    try {
+      // Try to get suggested users - if API doesn't exist, use search with empty query or popular users
+      // For now, we'll use search with empty query to get some users
+      const response = await usersAPI.searchUsers('');
+      if (response.data && Array.isArray(response.data)) {
+        // Take first 10 users as suggested
+        dispatch({ type: 'setSuggestedUsers', value: response.data.slice(0, 10) });
+      }
+    } catch (error) {
+      console.error('Error loading suggested users:', error);
+      // If error, just continue with empty list
+    }
+  };
+
+  const handleFollowUser = async (userId: string) => {
+    try {
+      await friendsAPI.follow(userId);
+      dispatch({ type: 'addFollowedUser', userId });
+      Toast.show({ type: 'success', text1: 'Đã theo dõi' });
+    } catch (error: any) {
+      Toast.show({
+        type: 'error',
+        text1: error.response?.data?.message || 'Theo dõi thất bại',
+      });
+    }
+  };
+
+  const handleUnfollowUser = async (userId: string) => {
+    try {
+      await friendsAPI.unfollow(userId);
+      dispatch({ type: 'removeFollowedUser', userId });
+      Toast.show({ type: 'success', text1: 'Đã bỏ theo dõi' });
+    } catch (error: any) {
+      Toast.show({
+        type: 'error',
+        text1: error.response?.data?.message || 'Bỏ theo dõi thất bại',
+      });
+    }
+  };
+
+  const handleFinishOnboarding = async () => {
+    // Now login and navigate to main app after completing onboarding
+    if (state.token && state.isRegistered && state.userData) {
+      try {
+        console.log('🎉 Finishing onboarding, logging in user...');
+        // Use stored user data from registration
+        await login(state.userData, state.token);
+        
+        console.log('✅ User logged in, app will automatically show MainNavigator');
+        // Don't need to navigate manually - App.tsx will automatically switch to MainNavigator
+        // when isAuthenticated becomes true
+      } catch (error) {
+        console.error('❌ Error finishing onboarding:', error);
+        Toast.show({
+          type: 'error',
+          text1: 'Lỗi khi hoàn tất đăng ký',
+          text2: 'Vui lòng thử lại',
+        });
+      }
+    } else {
+      console.error('❌ Missing token or user data for onboarding completion');
+      // If no token, just navigate to login
+      navigation.navigate('Login');
     }
   };
 
   // Alert Modal Component
-  const AlertModal = () => (
+  const AlertModal = () =>
     alertData.show ? (
       <Modal
         visible={alertData.show}
@@ -308,10 +691,15 @@ const RegisterScreen = () => {
         onRequestClose={closeAlert}
       >
         <Pressable style={styles.modalOverlay} onPress={closeAlert}>
-          <Pressable style={styles.alertDialog} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.alertTitle}>{alertData.title}</Text>
-            <Text style={styles.alertMessage}>{alertData.message}</Text>
-            <View style={styles.alertButtonContainer}>
+          <Pressable
+            style={[styles.alertDialog, { backgroundColor: colors.surface }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={[styles.alertTitle, { color: colors.text }]}>{alertData.title}</Text>
+            <Text style={[styles.alertMessage, { color: colors.textSecondary }]}>
+              {alertData.message}
+            </Text>
+            <View style={[styles.alertButtonContainer, { borderTopColor: colors.border }]}>
               <Button
                 mode="text"
                 onPress={() => {
@@ -326,67 +714,16 @@ const RegisterScreen = () => {
           </Pressable>
         </Pressable>
       </Modal>
-    ) : null
-  );
+    ) : null;
 
-  // Step 1: Welcome
-  if (step === 1) {
+  // Step 1: Info (Email, Password, Date of Birth)
+  if (state.activeStep === SignupStep.INFO) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <AlertModal />
-        
-        <View style={styles.stepHeader}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-            <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.welcomeContent}>
-          <View style={styles.illustration}>
-            <View style={styles.photoFrame}>
-              <View style={styles.portraitIcon}>
-                <MaterialCommunityIcons name="account-group" size={50} color="#FFFFFF" />
-              </View>
-            </View>
-            <Text style={styles.heartIcon}>❤️</Text>
-            <Text style={styles.cakeIcon}>🎂</Text>
-            <Text style={styles.thumbsUpIcon}>👍</Text>
-            <Text style={styles.landscapeFrame}>🌅</Text>
-          </View>
-
-          <Text style={styles.welcomeTitle}>Tham gia Zyea+</Text>
-          <Text style={styles.welcomeDescription}>
-            Hãy tạo tài khoản để kết nối với bạn bè, người thân và cộng đồng có chung sở thích.
-          </Text>
-
-          <Button
-            mode="contained"
-            onPress={() => setStep(2)}
-            style={styles.primaryButton}
-            contentStyle={styles.buttonContent}
-          >
-            Tạo tài khoản mới
-          </Button>
-
-          <Button
-            mode="outlined"
-            onPress={() => navigation.navigate('Login')}
-            style={styles.secondaryButton}
-            contentStyle={styles.buttonContent}
-          >
-            Tìm tài khoản của tôi
-          </Button>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // Step 2: Name
-  if (step === 2) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
+        <StatusBar
+          barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.surface}
+        />
         <AlertModal />
         
         <KeyboardAvoidingView
@@ -394,163 +731,254 @@ const RegisterScreen = () => {
           style={styles.container}
         >
           <View style={styles.stepHeader}>
-            <TouchableOpacity onPress={() => setStep(1)} style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+              <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={styles.stepHeaderText}>Bạn tên gì?</Text>
+            <Text style={[styles.stepHeaderText, { color: colors.text }]}>Tài khoản của bạn</Text>
           </View>
 
           <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.description}>Nhập tên bạn sử dụng trong đời thực.</Text>
-            
-            <View style={styles.inputGroup}>
-              <View style={{ flex: 1, marginRight: 4 }}>
-                <TextInput
-                  label="Họ"
-                  value={firstName}
-                  onChangeText={setFirstName}
-                  mode="outlined"
-                  style={styles.input}
-                  autoCapitalize="words"
-                />
-              </View>
-              <View style={{ flex: 1, marginLeft: 4 }}>
-                <TextInput
-                  label="Tên"
-                  value={lastName}
-                  onChangeText={setLastName}
-                  mode="outlined"
-                  style={styles.input}
-                  autoCapitalize="words"
-                />
-              </View>
-            </View>
-
-            <Button
-              mode="contained"
-              onPress={handleNext}
-              style={styles.continueButton}
-              contentStyle={styles.buttonContent}
-              disabled={loading}
-            >
-              Tiếp
-            </Button>
-
-            <Text style={styles.footerNote}>
-              <Text style={styles.footerLink} onPress={() => navigation.navigate('Login')}>
-                Tìm tài khoản của tôi
-              </Text>
+            <Text style={[styles.description, { color: colors.textSecondary }]}>
+              Bước 1/3
             </Text>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
-  }
 
-  // Step 3: Birthdate
-  if (step === 3) {
-  return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <AlertModal />
-        
-    <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-          <View style={styles.stepHeader}>
-            <TouchableOpacity onPress={() => setStep(2)} style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
-            </TouchableOpacity>
-            <Text style={styles.stepHeaderText}>Ngày sinh của bạn là khi nào?</Text>
+            {state.error && state.errorField !== 'handle' && (
+              <View style={[styles.errorContainer, { backgroundColor: colors.error + '20' }]}>
+                <Text style={[styles.errorText, { color: colors.error }]}>{state.error}</Text>
+              </View>
+            )}
+
+            <View>
+                <TextInput
+                label="Email"
+                value={state.email}
+                onChangeText={(value) => {
+                  dispatch({ type: 'setEmail', value });
+                  if (state.errorField === 'email') {
+                    dispatch({ type: 'clearError' });
+                  }
+                }}
+                  mode="outlined"
+                  style={styles.input}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                error={state.errorField === 'email'}
+                placeholder="Nhập địa chỉ email của bạn"
+                left={<TextInput.Icon icon="email" />}
+                />
+              </View>
+
+            <View>
+                <TextInput
+                label="Họ tên"
+                value={state.fullName}
+                onChangeText={(value) => {
+                  dispatch({ type: 'setFullName', value });
+                  if (state.errorField === 'fullName') {
+                    dispatch({ type: 'clearError' });
+                  }
+                }}
+                  mode="outlined"
+                  style={styles.input}
+                autoCapitalize="words"
+                autoCorrect={false}
+                error={state.errorField === 'fullName'}
+                placeholder="Nhập họ tên của bạn"
+                left={<TextInput.Icon icon="account" />}
+                />
+              </View>
+
+            <View>
+                <TextInput
+                label="Mật khẩu"
+                value={state.password}
+                onChangeText={(value) => {
+                  dispatch({ type: 'setPassword', value });
+                  if (state.errorField === 'password') {
+                    dispatch({ type: 'clearError' });
+                  }
+                }}
+                  mode="outlined"
+                  style={styles.input}
+                secureTextEntry={!showPassword}
+                placeholder="Chọn mật khẩu của bạn"
+                left={<TextInput.Icon icon="lock" />}
+                right={
+                  <TextInput.Icon
+                    icon={showPassword ? 'eye-off' : 'eye'}
+                    onPress={() => setShowPassword(!showPassword)}
+                  />
+                }
+                error={state.errorField === 'password'}
+              />
           </View>
 
-          <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.description}>
-              Chọn ngày sinh của bạn. Bạn luôn có thể đặt thông tin này ở chế độ riêng tư vào lúc khác.{' '}
-              <Text style={styles.termsLink} onPress={() => navigation.navigate('Terms')}>
-                Tại sao tôi cần cung cấp ngày sinh của mình?
-          </Text>
-          </Text>
-
+            <View>
+              <Text style={[styles.label, { color: colors.text }]}>Ngày sinh của bạn</Text>
             <TouchableOpacity
-              onPress={() => setShowDatePicker(true)}
-              style={styles.dateInput}
+              onPress={() => {
+                  setTempBirthDate(state.dateOfBirth);
+                setShowDatePicker(true);
+              }}
+              style={[styles.dateInput, { borderColor: colors.border, backgroundColor: colors.surface }]}
             >
-              <Text style={styles.dateInputText}>
-                {birthDate ? birthDate.toLocaleDateString('vi-VN') : 'Chọn ngày sinh'}
+                <MaterialCommunityIcons name="calendar" size={24} color={colors.textSecondary} />
+              <Text style={[styles.dateInputText, { color: colors.text }]}>
+                  {state.dateOfBirth.toLocaleDateString('vi-VN')}
               </Text>
-              <MaterialCommunityIcons name="calendar" size={24} color="#666" />
             </TouchableOpacity>
+            </View>
 
             {showDatePicker && Platform.OS !== 'web' && (
               <>
                 {Platform.OS === 'ios' ? (
                   <Modal visible={showDatePicker} transparent animationType="slide">
                     <Pressable style={styles.modalOverlay} onPress={() => setShowDatePicker(false)}>
-                      <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-                        <View style={styles.datePickerHeader}>
+                      <Pressable
+                        style={[styles.modalContent, { backgroundColor: colors.surface }]}
+                        onPress={(e) => e.stopPropagation()}
+                      >
+                        <View style={[styles.datePickerHeader, { borderBottomColor: colors.border }]}>
                           <Button onPress={() => setShowDatePicker(false)}>Hủy</Button>
-                          <Text style={styles.datePickerTitle}>Chọn ngày sinh</Text>
-                          <Button onPress={() => setShowDatePicker(false)}>Xong</Button>
+                          <Text style={[styles.datePickerTitle, { color: colors.text }]}>
+                            Chọn ngày sinh
+                          </Text>
+                          <Button
+                            onPress={() => {
+                              dispatch({ type: 'setDateOfBirth', value: tempBirthDate });
+                            setShowDatePicker(false);
+                            }}
+                          >
+                            Xong
+                          </Button>
                         </View>
-                        {require('react-native').UIManager.hasViewManagerConfig?.('RNDateTimePicker') && (
-                          <View style={{ height: 200 }}>
-                            <Text style={{ padding: 20 }}>DatePicker component</Text>
-                          </View>
-                        )}
+                        <View style={styles.datePickerContainer}>
+                          <DateTimePicker
+                          value={tempBirthDate}
+                          mode="date"
+                          display="spinner"
+                          onChange={(event, selectedDate) => {
+                            if (selectedDate) {
+                              setTempBirthDate(selectedDate);
+                            }
+                          }}
+                          maximumDate={new Date()}
+                          minimumDate={new Date(1900, 0, 1)}
+                          locale="vi-VN"
+                        />
+                        </View>
                       </Pressable>
                     </Pressable>
                   </Modal>
                 ) : (
-                  <Text style={styles.datePickerNote}>
-                    Vui lòng sử dụng date picker native của thiết bị
-                  </Text>
+                  <>
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={state.dateOfBirth}
+                        mode="date"
+                        display="default"
+                        onChange={(event, selectedDate) => {
+                          setShowDatePicker(false);
+                          if (selectedDate) {
+                            dispatch({ type: 'setDateOfBirth', value: selectedDate });
+                          }
+                        }}
+                        maximumDate={new Date()}
+                        minimumDate={new Date(1900, 0, 1)}
+                      />
+                    )}
+                  </>
                 )}
               </>
             )}
             
-            {Platform.OS === 'web' && (
-          <TextInput
-                label="Ngày sinh"
-                value={birthDate ? birthDate.toISOString().split('T')[0] : ''}
-                onChangeText={(text) => {
-                  if (text) {
-                    setBirthDate(new Date(text));
-                  }
-                }}
-            mode="outlined"
-            style={styles.input}
-                placeholder="YYYY-MM-DD"
-              />
-            )}
+            {/* Terms and Privacy Policy Disclaimer */}
+            <Text style={[styles.termsText, { color: colors.textSecondary }]}>
+              Bằng việc tạo tài khoản, bạn đồng ý với{' '}
+              <Text
+                style={[styles.termsLink, { color: colors.primary }]}
+                onPress={() => navigation.navigate('Terms' as never)}
+              >
+                Điều khoản dịch vụ
+              </Text>
+              {' '}và{' '}
+              <Text
+                style={[styles.termsLink, { color: colors.primary }]}
+                onPress={() => navigation.navigate('Privacy' as never)}
+              >
+                Chính sách Bảo mật
+            </Text>
+              .
+                  </Text>
 
+            {/* Action Buttons */}
+            <View style={styles.actionButtonsContainer}>
+            <Button
+                mode="outlined"
+                onPress={() => navigation.goBack()}
+                style={[styles.backActionButton, { borderColor: colors.border }]}
+              contentStyle={styles.buttonContent}
+                labelStyle={{ color: colors.text }}
+            >
+                Trở lại
+            </Button>
             <Button
               mode="contained"
               onPress={handleNext}
-              style={styles.continueButton}
+                style={[styles.nextActionButton, { backgroundColor: colors.primary }]}
               contentStyle={styles.buttonContent}
-              disabled={loading}
+              labelStyle={{ color: isDarkMode ? '#000000' : '#FFFFFF' }}
+                loading={state.isLoading}
+                disabled={state.isLoading}
             >
-              Tiếp
+                Tiếp theo
             </Button>
+            </View>
 
-            <Text style={styles.footerNote}>
-              <Text style={styles.footerLink} onPress={() => navigation.navigate('Login')}>
-                Tìm tài khoản của tôi
+            {/* Language Selector and Support */}
+            <View style={styles.footerContainer}>
+              <TouchableOpacity
+                style={[styles.languageSelector, { borderColor: colors.border, backgroundColor: colors.surface }]}
+              onPress={() => {
+                  setLanguage(language === 'vi' ? 'en' : 'vi');
+                }}
+              >
+                <Text style={[styles.languageText, { color: colors.text }]}>
+                  {language === 'vi' ? 'Tiếng Việt - Vietnamese' : 'English - Tiếng Anh'}
               </Text>
+                <MaterialCommunityIcons
+                  name="chevron-down"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+              <Text style={[styles.supportText, { color: colors.textSecondary }]}>
+                Gặp trục trặc?{' '}
+                <Text
+                  style={[styles.supportLink, { color: colors.primary }]}
+                  onPress={() => {
+                    // Navigate to support
+                  }}
+                >
+                  Liên hệ hỗ trợ
             </Text>
+              </Text>
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
 
-  // Step 4: Gender
-  if (step === 4) {
+  // Step 2: Handle
+  if (state.activeStep === SignupStep.HANDLE) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
+        <StatusBar
+          barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.surface}
+        />
         <AlertModal />
         
         <KeyboardAvoidingView
@@ -558,76 +986,62 @@ const RegisterScreen = () => {
           style={styles.container}
         >
           <View style={styles.stepHeader}>
-            <TouchableOpacity onPress={() => setStep(3)} style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
+            <TouchableOpacity onPress={() => dispatch({ type: 'prev' })} style={styles.backButton}>
+              <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={styles.stepHeaderText}>Giới tính của bạn là gì?</Text>
+            <Text style={[styles.stepHeaderText, { color: colors.text }]}>Chọn tên người dùng</Text>
           </View>
 
           <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.description}>
-              Bạn có thể thay đổi người nhìn thấy giới tính của mình trên trang cá nhân vào lúc khác.
+            <Text style={[styles.description, { color: colors.textSecondary }]}>
+              Bước 2 của 3: Chọn tên người dùng của bạn
             </Text>
 
-            <View style={styles.radioGroup}>
-              <TouchableOpacity
-                style={[styles.radioOption, gender === 'female' && styles.radioOptionSelected]}
-                onPress={() => setGender('female')}
-              >
-                <RadioButton
-                  value="female"
-                  status={gender === 'female' ? 'checked' : 'unchecked'}
-                  onPress={() => setGender('female')}
-                  color="#0a66ff"
-                />
-                <Text style={styles.radioLabel}>Nữ</Text>
-              </TouchableOpacity>
+            {state.error && state.errorField === 'handle' && (
+              <View style={[styles.errorContainer, { backgroundColor: colors.error + '20' }]}>
+                <Text style={[styles.errorText, { color: colors.error }]}>{state.error}</Text>
+              </View>
+            )}
 
-              <TouchableOpacity
-                style={[styles.radioOption, gender === 'male' && styles.radioOptionSelected]}
-                onPress={() => setGender('male')}
-              >
-                <RadioButton
-                  value="male"
-                  status={gender === 'male' ? 'checked' : 'unchecked'}
-                  onPress={() => setGender('male')}
-                  color="#0a66ff"
-                />
-                <Text style={styles.radioLabel}>Nam</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.radioOption, gender === 'other' && styles.radioOptionSelected]}
-                onPress={() => setGender('other')}
-              >
-                <RadioButton
-                  value="other"
-                  status={gender === 'other' ? 'checked' : 'unchecked'}
-                  onPress={() => setGender('other')}
-                  color="#0a66ff"
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.radioLabel}>Lựa chọn khác</Text>
-                  <Text style={styles.radioSubtext}>
-                    Chọn Lựa chọn khác nếu bạn thuộc giới tính khác hoặc không muốn tiết lộ.
-                  </Text>
-                </View>
-              </TouchableOpacity>
+            <View>
+          <TextInput
+                label="Tên người dùng"
+                value={state.handle}
+                onChangeText={(value) => {
+                  dispatch({ type: 'setHandle', value: value.toLowerCase() });
+                  if (state.errorField === 'handle') {
+                    dispatch({ type: 'clearError' });
+                  }
+                }}
+            mode="outlined"
+            style={styles.input}
+            autoCapitalize="none"
+              autoCorrect={false}
+                error={state.errorField === 'handle'}
+                left={<TextInput.Icon icon="at" />}
+            />
+              <Text style={[styles.helperText, { color: colors.textSecondary }]}>
+                Tên người dùng chỉ được chứa chữ cái, số, dấu gạch dưới và dấu gạch ngang (3-20 ký tự)
+              </Text>
             </View>
 
             <Button
               mode="contained"
               onPress={handleNext}
-              style={styles.continueButton}
+              style={[styles.continueButton, { backgroundColor: colors.primary }]}
               contentStyle={styles.buttonContent}
-              disabled={loading}
+              labelStyle={{ color: isDarkMode ? '#000000' : '#FFFFFF' }}
+              disabled={state.isLoading}
             >
-              Tiếp
+              Tiếp theo
             </Button>
 
-            <Text style={styles.footerNote}>
-              <Text style={styles.footerLink} onPress={() => navigation.navigate('Login')}>
-                Tìm tài khoản của tôi
+            <Text style={[styles.footerNote, { color: colors.textSecondary }]}>
+              <Text
+                style={[styles.footerLink, { color: colors.primary }]}
+                onPress={() => navigation.navigate('Login')}
+              >
+                Đã có tài khoản? Đăng nhập
               </Text>
             </Text>
           </ScrollView>
@@ -636,11 +1050,14 @@ const RegisterScreen = () => {
     );
   }
 
-  // Step 5: Phone
-  if (step === 5 && registerMethod === 'phone') {
+  // Step 3: OTP Verification
+  if (state.activeStep === SignupStep.OTP) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
+        <StatusBar
+          barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.surface}
+        />
         <AlertModal />
         
         <KeyboardAvoidingView
@@ -648,341 +1065,351 @@ const RegisterScreen = () => {
           style={styles.container}
         >
           <View style={styles.stepHeader}>
-            <TouchableOpacity onPress={() => setStep(4)} style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
+            <TouchableOpacity onPress={() => dispatch({ type: 'prev' })} style={styles.backButton}>
+              <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
             </TouchableOpacity>
-            <Text style={styles.stepHeaderText}>Số di động của bạn là gì?</Text>
+            <Text style={[styles.stepHeaderText, { color: colors.text }]}>Xác thực mã</Text>
           </View>
 
           <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.description}>
-              Nhập số di động có thể dùng để liên hệ với bạn. Sẽ không ai nhìn thấy thông tin này trên trang cá nhân của bạn.
+            <Text style={[styles.description, { color: colors.textSecondary }]}>
+              Bước 3/5: Nhập mã xác thực
+            </Text>
+            <Text style={[styles.description, { color: colors.textSecondary, marginTop: spacing.xs, fontSize: typography.fontSize.sm }]}>
+              Mã đã được gửi tới: {state.email}
             </Text>
 
+            <View>
           <TextInput
-              label="Số di động"
-              value={phone}
-              onChangeText={setPhone}
-            mode="outlined"
-            style={styles.input}
-              keyboardType="phone-pad"
-              placeholder="0xxxxxxxxx hoặc +84xxxxxxxxx"
-            />
-
-            <Text style={[styles.description, { fontSize: 13, marginTop: 4 }]}>
-              Chúng tôi có thể gửi thông báo cho bạn qua WhatsApp và SMS.{' '}
-              <Text style={styles.termsLink} onPress={() => navigation.navigate('Terms')}>
-                Tìm hiểu thêm
-              </Text>
-            </Text>
-
-            <Button
-              mode="contained"
-              onPress={handleNext}
-              style={styles.continueButton}
-              contentStyle={styles.buttonContent}
-              disabled={loading}
-            >
-              Tiếp
-            </Button>
-
-            <Button
-              mode="outlined"
-              onPress={() => {
-                setRegisterMethod('email');
-                setStep(6);
-              }}
-              style={styles.secondaryButton}
-              contentStyle={styles.buttonContent}
-            >
-              Đăng ký bằng email
-            </Button>
-
-            <Text style={styles.footerNote}>
-              <Text style={styles.footerLink} onPress={() => navigation.navigate('Login')}>
-                Tìm tài khoản của tôi
-              </Text>
-            </Text>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
-  }
-
-  // Step 6: Email (if registerMethod === 'email')
-  if (step === 6 && registerMethod === 'email') {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <AlertModal />
-        
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.container}
-        >
-          <View style={styles.stepHeader}>
-            <TouchableOpacity onPress={() => setStep(4)} style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
-            </TouchableOpacity>
-            <Text style={styles.stepHeaderText}>Nhập email của bạn</Text>
-          </View>
-
-          <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.description}>
-              Nhập email để chúng tôi có thể liên hệ với bạn và xác thực tài khoản.
-            </Text>
-
-          <TextInput
-              label="Email"
-              value={email}
-              onChangeText={setEmail}
-            mode="outlined"
-            style={styles.input}
-            keyboardType="email-address"
-            autoCapitalize="none"
-              autoCorrect={false}
-            />
-
-            <Button
-              mode="contained"
-              onPress={handleNext}
-              style={styles.continueButton}
-              contentStyle={styles.buttonContent}
-              disabled={loading}
-            >
-              Tiếp
-            </Button>
-
-            <Text style={styles.footerNote}>
-              <Text style={styles.footerLink} onPress={() => navigation.navigate('Login')}>
-                Tìm tài khoản của tôi
-              </Text>
-            </Text>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
-  }
-
-  // Step 6: Password (if registerMethod === 'phone' && !otpStep)
-  if (step === 6 && registerMethod === 'phone' && !otpStep) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <AlertModal />
-        
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.container}
-        >
-          <View style={styles.stepHeader}>
-            <TouchableOpacity onPress={() => setStep(5)} style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
-            </TouchableOpacity>
-            <Text style={styles.stepHeaderText}>Tạo mật khẩu</Text>
-          </View>
-
-          <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.description}>
-              Mật khẩu phải có ít nhất 6 ký tự. Nên chọn mật khẩu khó đoán để bảo mật tài khoản của bạn.
-            </Text>
-
-          <TextInput
-            label="Mật khẩu"
-              value={password}
-              onChangeText={setPassword}
+                label="Nhập mã 6 số"
+                value={state.otp}
+                onChangeText={(text) => {
+                  const newOtp = text.replace(/\D/g, '').slice(0, 6);
+                  dispatch({ type: 'setOtp', value: newOtp });
+                  // Clear error when user starts typing
+                  if (state.otpError) {
+                    dispatch({ type: 'clearOtpError' });
+                  }
+                  
+                  // Auto-verify when 6 digits are entered (optional - can be disabled)
+                  // Uncomment below to enable auto-verify
+                  /*
+                  if (newOtp.length === 6 && !state.isLoading && !isAutoVerifying) {
+                    setIsAutoVerifying(true);
+                    // Small delay to show the complete input
+                    setTimeout(async () => {
+                      try {
+                        await handleVerify();
+                      } catch (error) {
+                        console.error('Auto-verify error:', error);
+                      } finally {
+                        setIsAutoVerifying(false);
+                      }
+                    }, 500);
+                  }
+                  */
+                }}
             mode="outlined"
               style={styles.input}
-            secureTextEntry={!showPassword}
+                keyboardType="number-pad"
+                maxLength={6}
             right={
+                  state.otp.length === 6 ? (
               <TextInput.Icon
-                icon={showPassword ? 'eye-off' : 'eye'}
-                onPress={() => setShowPassword(!showPassword)}
+                      icon="check-circle"
+                      color={colors.primary}
+                    />
+                  ) : undefined
+                }
+                error={state.otp.length > 0 && state.otp.length < 6}
               />
-            }
-          />
+            </View>
 
-          <TextInput
-              label="Nhập lại mật khẩu"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-            mode="outlined"
-              style={styles.input}
-            secureTextEntry={!showConfirmPassword}
-            right={
-              <TextInput.Icon
-                icon={showConfirmPassword ? 'eye-off' : 'eye'}
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-              />
-            }
-          />
-
-            <Button
-              mode="contained"
-              onPress={handleNext}
-              style={styles.continueButton}
-              contentStyle={styles.buttonContent}
-              disabled={loading}
-            >
-              Tiếp
-            </Button>
-
-            <Text style={styles.footerNote}>
-              <Text style={styles.footerLink} onPress={() => navigation.navigate('Login')}>
-                Tìm tài khoản của tôi
+            {state.otp.length > 0 && state.otp.length < 6 && (
+              <Text style={[styles.errorText, { color: colors.error }]}>
+                Mã xác thực phải có đúng 6 số
               </Text>
-            </Text>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
-  }
+            )}
 
-  // Step 7: Password (if from email step)
-  if (step === 7 && !otpStep) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <AlertModal />
-        
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.container}
-        >
-          <View style={styles.stepHeader}>
-            <TouchableOpacity onPress={() => setStep(6)} style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
-            </TouchableOpacity>
-            <Text style={styles.stepHeaderText}>Tạo mật khẩu</Text>
-          </View>
+            {state.otpError && (
+              <View style={[styles.errorContainer, { backgroundColor: colors.error + '20', flexDirection: 'row', alignItems: 'center', padding: spacing.sm, borderRadius: borderRadius.base, marginTop: spacing.sm }]}>
+                <MaterialCommunityIcons name="alert-circle" size={20} color={colors.error} />
+                <Text style={[styles.errorText, { color: colors.error, marginLeft: spacing.xs, flex: 1 }]}>
+                  {state.otpError}
+                </Text>
+              </View>
+            )}
 
-          <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.description}>
-              Mật khẩu phải có ít nhất 6 ký tự. Nên chọn mật khẩu khó đoán để bảo mật tài khoản của bạn.
-            </Text>
-
-            <TextInput
-              label="Mật khẩu"
-              value={password}
-              onChangeText={setPassword}
-              mode="outlined"
-              style={styles.input}
-              secureTextEntry={!showPassword}
-              right={
-                <TextInput.Icon
-                  icon={showPassword ? 'eye-off' : 'eye'}
-                  onPress={() => setShowPassword(!showPassword)}
-                />
-              }
-            />
-
-            <TextInput
-              label="Nhập lại mật khẩu"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              mode="outlined"
-              style={styles.input}
-              secureTextEntry={!showConfirmPassword}
-              right={
-                <TextInput.Icon
-                  icon={showConfirmPassword ? 'eye-off' : 'eye'}
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                />
-              }
-            />
-
-          <Button
-            mode="contained"
-              onPress={handleNext}
-              style={styles.continueButton}
-              contentStyle={styles.buttonContent}
-              disabled={loading}
-            >
-              Tiếp
-          </Button>
-
-            <Text style={styles.footerNote}>
-              <Text style={styles.footerLink} onPress={() => navigation.navigate('Login')}>
-                Tìm tài khoản của tôi
-              </Text>
-            </Text>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
-  }
-
-  // OTP Step
-  if (otpStep) {
-    return (
-      <SafeAreaView style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-        <AlertModal />
-        
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.container}
-        >
-          <View style={styles.stepHeader}>
-            <TouchableOpacity onPress={() => setOtpStep(false)} style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
-            </TouchableOpacity>
-            <Text style={styles.stepHeaderText}>Xác thực mã</Text>
-          </View>
-
-          <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
-            <Text style={styles.description}>
-              Nhập mã xác thực đã gửi tới {registerMethod === 'email' ? `email: ${email}` : `số điện thoại: ${phone}`}
-            </Text>
-
-            <TextInput
-              label="Nhập mã 6 số"
-              value={otp}
-              onChangeText={(text) => setOtp(text.replace(/\D/g, '').slice(0, 6))}
-              mode="outlined"
-              style={styles.input}
-              keyboardType="number-pad"
-              maxLength={6}
-            />
-
-            {otp.length > 0 && otp.length < 6 && (
-              <Text style={styles.errorText}>Mã xác thực phải có đúng 6 số</Text>
+            {state.otp.length === 6 && state.isLoading && (
+              <View style={[styles.successContainer, { backgroundColor: colors.primary + '15' }]}>
+                <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: spacing.xs }} />
+                <Text style={[styles.successText, { color: colors.primary }]}>
+                  Đang xác thực mã...
+                </Text>
+              </View>
+            )}
+            
+            {state.otp.length === 6 && !state.isLoading && (
+              <View style={[styles.successContainer, { backgroundColor: colors.primary + '15' }]}>
+                <MaterialCommunityIcons name="check-circle" size={20} color={colors.primary} />
+                <Text style={[styles.successText, { color: colors.primary }]}>
+                  Đã nhập đủ 6 số. Nhấn nút "Xác thực" bên dưới để tiếp tục
+                </Text>
+              </View>
             )}
 
             <Button
               mode="contained"
               onPress={handleVerify}
-              style={styles.continueButton}
+              style={[
+                styles.continueButton,
+                {
+                  backgroundColor: state.otp.length === 6 ? colors.primary : colors.border,
+                  opacity: state.otp.length === 6 ? 1 : 0.5,
+                },
+              ]}
               contentStyle={styles.buttonContent}
-              loading={loading}
-              disabled={loading || otp.length !== 6}
+              labelStyle={{ color: isDarkMode ? '#000000' : '#FFFFFF' }}
+              loading={state.isLoading}
+              disabled={state.isLoading || state.otp.length !== 6}
             >
-              {loading ? 'Đang xác thực...' : 'Xác thực'}
+              {state.isLoading ? 'Đang xác thực...' : state.otp.length === 6 ? 'Xác thực' : `Nhập mã (${state.otp.length}/6)`}
             </Button>
 
             <Text style={styles.footerNote}>
               <Text
-                style={[styles.footerLink, resendCountdown > 0 && styles.footerLinkDisabled]}
-                onPress={async () => {
-                  if (resendCountdown > 0) return;
-                  try {
-                    await authAPI.sendVerification(
-                      registerMethod === 'email' ? { email } : { phone }
-                    );
-                    setResendCountdown(20);
-                    Toast.show({ type: 'info', text1: 'Đã gửi lại mã' });
-                  } catch (_) {}
-                }}
+                style={[
+                  styles.footerLink,
+                  {
+                    color: state.resendCountdown > 0 ? colors.textSecondary : colors.primary,
+                  },
+                ]}
+                onPress={handleResendOtp}
               >
-                {resendCountdown > 0 ? `Gửi lại mã (${resendCountdown}s)` : 'Gửi lại mã'}
+                {state.resendCountdown > 0
+                  ? `Gửi lại mã (${state.resendCountdown}s)`
+                  : 'Gửi lại mã'}
               </Text>
             </Text>
 
-            <Text style={styles.footerNote}>
-              <Text style={styles.footerLink} onPress={() => navigation.navigate('Login')}>
-                Tìm tài khoản của tôi
+            <Text style={[styles.footerNote, { color: colors.textSecondary }]}>
+              <Text
+                style={[styles.footerLink, { color: colors.primary }]}
+                onPress={() => navigation.navigate('Login')}
+              >
+                Đã có tài khoản? Đăng nhập
               </Text>
             </Text>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  // Step 3: Avatar
+  if (state.activeStep === SignupStep.AVATAR) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
+        <StatusBar
+          barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.surface}
+        />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.container}
+        >
+          <View style={styles.stepHeader}>
+            <TouchableOpacity onPress={() => dispatch({ type: 'prev' })} style={styles.backButton}>
+              <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.stepHeaderText, { color: colors.text }]}>Ảnh đại diện</Text>
+          </View>
+
+          <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
+            <Text style={[styles.description, { color: colors.textSecondary }]}>
+              Bước 3/5: Thêm ảnh đại diện
+            </Text>
+            <Text style={[styles.description, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+              Thêm ảnh đại diện để bạn bè dễ dàng nhận ra bạn
+            </Text>
+
+            <View style={styles.avatarContainer}>
+              {state.avatarUri ? (
+                <Image source={{ uri: state.avatarUri }} style={styles.avatarPreview} />
+              ) : (
+                <View style={[styles.avatarPlaceholder, { backgroundColor: colors.border }]}>
+                  <MaterialCommunityIcons name="account" size={80} color={colors.textSecondary} />
+                </View>
+              )}
+            </View>
+
+            <View style={styles.avatarButtons}>
+              <Button
+              mode="outlined"
+                icon="image"
+                onPress={handlePickAvatar}
+                style={[styles.avatarButton, { borderColor: colors.border }]}
+                labelStyle={{ color: colors.text }}
+              >
+                Chọn từ thư viện
+              </Button>
+
+              <Button
+              mode="outlined"
+                icon="camera"
+                onPress={handleTakeAvatarPhoto}
+                style={[styles.avatarButton, { borderColor: colors.border }]}
+                labelStyle={{ color: colors.text }}
+              >
+                Chụp ảnh
+              </Button>
+            </View>
+
+            <View style={styles.actionButtonsContainer}>
+              <Button
+                mode="outlined"
+                onPress={handleSkipAvatar}
+                style={[styles.backActionButton, { borderColor: colors.border }]}
+                contentStyle={styles.buttonContent}
+                labelStyle={{ color: colors.text }}
+              >
+                Bỏ qua
+              </Button>
+          <Button
+            mode="contained"
+                onPress={handleUploadAvatar}
+                style={[styles.nextActionButton, { backgroundColor: colors.primary }]}
+              contentStyle={styles.buttonContent}
+              labelStyle={{ color: isDarkMode ? '#000000' : '#FFFFFF' }}
+                loading={state.isLoading}
+                disabled={state.isLoading || !state.avatarUri}
+            >
+                Tiếp theo
+          </Button>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  // Step 4: Suggested Users
+  if (state.activeStep === SignupStep.SUGGESTED_USERS) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
+        <StatusBar
+          barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          backgroundColor={colors.surface}
+        />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.container}
+        >
+          <View style={styles.stepHeader}>
+            <TouchableOpacity onPress={() => dispatch({ type: 'prev' })} style={styles.backButton}>
+              <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.stepHeaderText, { color: colors.text }]}>Người đề xuất</Text>
+          </View>
+
+          <ScrollView contentContainerStyle={styles.formContent} keyboardShouldPersistTaps="handled">
+            <Text style={[styles.description, { color: colors.textSecondary }]}>
+              Bước 4/5: Theo dõi người bạn quan tâm
+            </Text>
+            <Text style={[styles.description, { color: colors.textSecondary, marginTop: spacing.xs }]}>
+              Theo dõi những người bạn quan tâm để xem nội dung của họ
+            </Text>
+
+            {state.suggestedUsers.length === 0 ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+                  Đang tải người đề xuất...
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.suggestedUsersList}>
+                {state.suggestedUsers.map((user: any) => {
+                  const userId = user.id || user.user_id || user._id;
+                  const userName = user.name || user.username || user.handle || 'Người dùng';
+                  const userAvatar = user.avatar || user.profile_picture;
+                  const isFollowing = state.followedUserIds.includes(userId?.toString());
+
+                  return (
+                    <View
+                      key={userId}
+                      style={[styles.suggestedUserItem, { borderBottomColor: colors.border }]}
+                    >
+                      <View style={styles.suggestedUserInfo}>
+                        {userAvatar ? (
+                          <Avatar.Image
+                            size={50}
+                            source={{ uri: getAvatarURL(userAvatar) }}
+                          />
+                        ) : (
+                          <Avatar.Text
+                            size={50}
+                            label={getInitials(userName)}
+                            style={{ backgroundColor: colors.primary }}
+                          />
+                        )}
+                        <View style={styles.suggestedUserDetails}>
+                          <Text style={[styles.suggestedUserName, { color: colors.text }]}>
+                            {userName}
+                          </Text>
+                          {user.bio && (
+                            <Text
+                              style={[styles.suggestedUserBio, { color: colors.textSecondary }]}
+                              numberOfLines={1}
+                            >
+                              {user.bio}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                      <Button
+                        mode={isFollowing ? 'outlined' : 'contained'}
+                        onPress={() =>
+                          isFollowing ? handleUnfollowUser(userId) : handleFollowUser(userId)
+                        }
+                        style={[
+                          styles.followButton,
+                          isFollowing
+                            ? { borderColor: colors.border }
+                            : { backgroundColor: colors.primary },
+                        ]}
+                        labelStyle={{
+                          color: isFollowing ? colors.text : isDarkMode ? '#000000' : '#FFFFFF',
+                        }}
+                      >
+                        {isFollowing ? 'Đã theo dõi' : 'Theo dõi'}
+                      </Button>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            <View style={styles.actionButtonsContainer}>
+              <Button
+                mode="outlined"
+                onPress={handleFinishOnboarding}
+                style={[styles.backActionButton, { borderColor: colors.border }]}
+                contentStyle={styles.buttonContent}
+                labelStyle={{ color: colors.text }}
+              >
+                Bỏ qua
+              </Button>
+            <Button
+              mode="contained"
+                onPress={handleFinishOnboarding}
+                style={[styles.nextActionButton, { backgroundColor: colors.primary }]}
+              contentStyle={styles.buttonContent}
+              labelStyle={{ color: isDarkMode ? '#000000' : '#FFFFFF' }}
+            >
+                Hoàn tất
+            </Button>
+            </View>
       </ScrollView>
     </KeyboardAvoidingView>
       </SafeAreaView>
@@ -995,232 +1422,201 @@ const RegisterScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   stepHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
   },
   backButton: {
-    padding: 6,
+    padding: spacing.xs + 2,
   },
   stepHeaderText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#2b2b2b',
-    marginLeft: 8,
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.semibold,
+    marginLeft: spacing.sm,
   },
   formContent: {
-    padding: 16,
+    padding: spacing.base,
   },
   description: {
-    fontSize: 14,
-    color: '#65676b',
-    marginBottom: 24,
-    lineHeight: 20,
+    fontSize: typography.fontSize.base,
+    marginBottom: spacing.xl,
+    lineHeight: typography.fontSize.base * typography.lineHeight.normal,
     paddingHorizontal: 0,
   },
   input: {
-    marginBottom: 8,
-    backgroundColor: '#fff',
-  },
-  inputHalf: {
-    flex: 1,
-  },
-  inputGroup: {
-    flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   dateInput: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderWidth: 1,
-    borderColor: '#e6e6e6',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    backgroundColor: '#fff',
+    borderRadius: borderRadius.base,
+    padding: spacing.base - 2,
+    marginBottom: spacing.xs,
   },
   dateInputText: {
-    fontSize: 16,
-    color: '#000',
+    fontSize: typography.fontSize.md,
   },
-  checkboxContainer: {
+  dateLabel: {
+    fontSize: typography.fontSize.sm,
+    marginBottom: spacing.sm,
+  },
+  label: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+    marginBottom: spacing.xs,
+  },
+  genderInput: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: borderRadius.base,
+    padding: spacing.base - 2,
+    marginBottom: spacing.xs,
   },
-  checkboxLabel: {
-    fontSize: 14,
-    color: '#444',
-    flex: 1,
-    marginLeft: 8,
-    lineHeight: 20,
+  genderInputText: {
+    fontSize: typography.fontSize.md,
   },
-  termsLink: {
-    color: '#0a66ff',
+  genderModalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    width: '100%',
+    maxHeight: '70%',
+    position: 'absolute',
+    bottom: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.base,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.semibold,
+  },
+  genderOptionsList: {
+    padding: spacing.sm,
+  },
+  genderModalOption: {
+    borderRadius: borderRadius.base,
+    marginBottom: spacing.xs,
+    overflow: 'hidden',
+  },
+  genderModalOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.base,
+  },
+  genderModalOptionText: {
+    fontSize: typography.fontSize.base,
+  },
+  genderModalOptionSubtext: {
+    fontSize: typography.fontSize.sm,
+    marginTop: spacing.xs / 2,
+    lineHeight: typography.fontSize.sm * 1.4,
+  },
+  errorContainer: {
+    padding: spacing.sm,
+    borderRadius: borderRadius.base,
+    marginBottom: spacing.sm,
   },
   errorText: {
-    color: '#e53935',
-    fontSize: 12,
-    marginTop: 4,
-    marginBottom: 8,
+    fontSize: typography.fontSize.xs,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  successContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.sm,
+    borderRadius: borderRadius.base,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  successText: {
+    fontSize: typography.fontSize.sm,
+    fontWeight: typography.fontWeight.medium,
+  },
+  helperText: {
+    fontSize: typography.fontSize.xs,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.sm,
   },
   continueButton: {
-    backgroundColor: '#0a66ff',
-    borderRadius: 12,
-    marginTop: 8,
-  },
-  secondaryButton: {
-    backgroundColor: 'transparent',
-    borderColor: '#e6e6e6',
-    borderWidth: 1,
-    borderRadius: 12,
-    marginTop: 8,
+    borderRadius: borderRadius.base,
+    marginTop: spacing.sm,
   },
   buttonContent: {
-    paddingVertical: 10,
-  },
-  buttonLabel: {
-    fontSize: 16,
-    fontWeight: '600',
+    paddingVertical: spacing.sm + 2,
   },
   footerNote: {
     textAlign: 'center',
-    color: '#666',
     fontSize: 13,
     marginTop: 16,
   },
-  footerLink: {
-    color: '#0a66ff',
+  footerLink: {},
+  termsText: {
+    fontSize: typography.fontSize.sm,
+    textAlign: 'center',
+    marginTop: spacing.base,
+    marginBottom: spacing.base,
+    lineHeight: typography.fontSize.sm * 1.5,
+    paddingHorizontal: spacing.sm,
   },
-  footerLinkDisabled: {
-    color: '#999',
+  termsLink: {
+    fontWeight: '500',
   },
-  // Welcome screen styles
-  welcomeContent: {
+  actionButtonsContainer: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.base,
+    marginBottom: spacing.xl,
+  },
+  backActionButton: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    minHeight: '70%',
+    borderRadius: borderRadius.base,
+    borderWidth: 1,
   },
-  illustration: {
-    width: '100%',
-    maxWidth: 280,
-    height: 280,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-    position: 'relative',
-    overflow: 'visible',
+  nextActionButton: {
+    flex: 1,
+    borderRadius: borderRadius.base,
   },
-  photoFrame: {
-    width: 120,
-    height: 120,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    borderWidth: 3,
-    borderColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 4,
-    zIndex: 3,
+  footerContainer: {
+    marginTop: spacing.xl,
+    paddingTop: spacing.base,
+    borderTopWidth: 1,
+    borderTopColor: 'transparent',
   },
-  portraitIcon: {
-    width: 90,
-    height: 90,
-    borderRadius: 6,
-    backgroundColor: '#667eea',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  heartIcon: {
-    position: 'absolute',
-    left: 20,
-    top: 30,
-    fontSize: 28,
-    zIndex: 2,
-  },
-  cakeIcon: {
-    position: 'absolute',
-    top: 20,
-    right: 40,
-    fontSize: 36,
-    zIndex: 2,
-  },
-  thumbsUpIcon: {
-    position: 'absolute',
-    right: 20,
-    bottom: 30,
-    fontSize: 64,
-    color: '#1877f2',
-    zIndex: 2,
-  },
-  landscapeFrame: {
-    position: 'absolute',
-    left: 20,
-    bottom: 30,
-    fontSize: 40,
-    zIndex: 2,
-  },
-  welcomeTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1c1e21',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  welcomeDescription: {
-    fontSize: 14,
-    color: '#65676b',
-    marginBottom: 24,
-    lineHeight: 20,
-    textAlign: 'center',
-    paddingHorizontal: 16,
-  },
-  primaryButton: {
-    backgroundColor: '#0a66ff',
-    borderRadius: 12,
-    width: '100%',
-  },
-  // Radio group styles
-  radioGroup: {
-    flexDirection: 'column',
-    marginBottom: 8,
-  },
-  radioOption: {
+  languageSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    justifyContent: 'space-between',
+    padding: spacing.sm,
+    borderRadius: borderRadius.base,
     borderWidth: 1,
-    borderColor: '#e6e6e6',
-    borderRadius: 10,
-    backgroundColor: '#f8f9fa',
+    marginBottom: spacing.sm,
   },
-  radioOptionSelected: {
-    backgroundColor: '#e9ecef',
+  languageText: {
+    fontSize: typography.fontSize.sm,
   },
-  radioLabel: {
-    fontSize: 15,
-    color: '#1c1e21',
-    flex: 1,
-    marginLeft: 10,
+  supportText: {
+    fontSize: typography.fontSize.sm,
+    textAlign: 'center',
   },
-  radioSubtext: {
-    fontSize: 12,
-    color: '#65676b',
-    marginTop: 2,
-    lineHeight: 16,
+  supportLink: {
+    fontWeight: '500',
   },
   // Modal styles
   modalOverlay: {
@@ -1230,10 +1626,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    width: '90%',
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    width: '100%',
     maxWidth: 400,
+    alignSelf: 'center',
   },
   datePickerHeader: {
     flexDirection: 'row',
@@ -1241,55 +1638,115 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#c7c7cc',
   },
   datePickerTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#000',
   },
-  datePickerNote: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 8,
-    textAlign: 'center',
+  datePickerContainer: {
+    paddingVertical: 10,
+    alignItems: 'center',
   },
   // Alert styles
   alertDialog: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 12,
     width: 280,
     alignSelf: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 32,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 4,
   },
   alertTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
-    padding: 22,
-    paddingBottom: 8,
-    color: '#000',
+    padding: 16,
+    paddingBottom: 6,
   },
   alertMessage: {
-    fontSize: 14,
+    fontSize: 13,
     textAlign: 'center',
-    padding: 4,
-    paddingHorizontal: 22,
-    color: '#6b6b6b',
-    lineHeight: 20,
+    padding: 2,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    lineHeight: 18,
   },
   alertButtonContainer: {
     borderTopWidth: 0.5,
-    borderTopColor: '#c7c7cc',
     flexDirection: 'column',
   },
   alertButton: {
-    fontSize: 17,
-    padding: 13,
+    fontSize: 15,
+    padding: 10,
+  },
+  // Avatar step styles
+  avatarContainer: {
+    alignItems: 'center',
+    marginVertical: spacing.xl,
+  },
+  avatarPreview: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: '#f0f0f0',
+  },
+  avatarPlaceholder: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarButtons: {
+    gap: spacing.sm,
+    marginBottom: spacing.base,
+  },
+  avatarButton: {
+    marginBottom: spacing.sm,
+  },
+  // Suggested users step styles
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xl * 2,
+  },
+  loadingText: {
+    marginTop: spacing.base,
+    fontSize: typography.fontSize.sm,
+  },
+  suggestedUsersList: {
+    marginTop: spacing.base,
+  },
+  suggestedUserItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.base,
+    borderBottomWidth: 1,
+  },
+  suggestedUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  suggestedUserDetails: {
+    marginLeft: spacing.sm,
+    flex: 1,
+  },
+  suggestedUserName: {
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.medium,
+    marginBottom: spacing.xs / 2,
+  },
+  suggestedUserBio: {
+    fontSize: typography.fontSize.sm,
+  },
+  followButton: {
+    borderRadius: borderRadius.base,
+    minWidth: 100,
   },
 });
 

@@ -4,6 +4,7 @@ import { FiUser, FiMessageCircle, FiSearch, FiX } from 'react-icons/fi';
 import api from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
+import { useActivityStatus } from '../../hooks/useActivityStatus';
 
 const FriendsContainer = styled.div`
   flex: 1;
@@ -249,6 +250,7 @@ const FriendsListComponent = ({ onClose, onStartChat }) => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isDarkMode] = useState(false);
+  const activityStatusEnabled = useActivityStatus();
 
   useEffect(() => {
     fetchFriends();
@@ -329,14 +331,14 @@ const FriendsListComponent = ({ onClose, onStartChat }) => {
                 ) : (
                   getInitials(friend.full_name || friend.username)
                 )}
-                {friend.status === 'online' && <OnlineIndicator />}
+                {activityStatusEnabled && friend.status === 'online' && <OnlineIndicator />}
               </Avatar>
               <FriendInfo>
                 <FriendName>
                   {friend.full_name || friend.username}
                 </FriendName>
                 <FriendStatus>
-                  {friend.status === 'online' ? 'Đang hoạt động' : 'Không hoạt động'}
+                  {activityStatusEnabled && friend.status === 'online' ? 'Đang hoạt động' : 'Không hoạt động'}
                 </FriendStatus>
               </FriendInfo>
               <ActionButton onClick={(e) => {

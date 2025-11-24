@@ -7,6 +7,7 @@ interface AlertState {
   message: string;
   onConfirm?: () => void;
   confirmText?: string;
+  type?: 'error' | 'success' | 'info' | 'warning';
 }
 
 export const useAlert = () => {
@@ -20,7 +21,8 @@ export const useAlert = () => {
     title: string,
     message: string,
     onConfirm?: () => void,
-    confirmText: string = 'OK'
+    confirmText: string = 'OK',
+    type: 'error' | 'success' | 'info' | 'warning' = 'info'
   ) => {
     setAlertState({
       visible: true,
@@ -28,6 +30,7 @@ export const useAlert = () => {
       message,
       onConfirm,
       confirmText,
+      type,
     });
   }, []);
 
@@ -52,6 +55,7 @@ export const useAlert = () => {
       message={alertState.message}
       onConfirm={handleConfirm}
       confirmText={alertState.confirmText}
+      type={alertState.type}
     />
   );
 

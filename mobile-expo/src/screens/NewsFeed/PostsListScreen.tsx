@@ -6,7 +6,6 @@ import {
   Image,
   TouchableOpacity,
   Pressable,
-  Dimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
   Animated,
@@ -15,16 +14,14 @@ import {
   RefreshControl,
   InteractionManager,
   Platform,
-  TouchableWithoutFeedback,
   ViewToken,
-  LayoutAnimation,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, Avatar, Searchbar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { newsfeedAPI, friendsAPI, chatAPI, usersAPI } from '../../utils/api';
-import { getInitials, getImageURL, getAvatarURL, getVideoURL } from '../../utils/imageUtils';
+import { getInitials, getAvatarURL, getVideoURL } from '../../utils/imageUtils';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
 import { PWATheme } from '../../config/PWATheme';
@@ -33,398 +30,35 @@ import Toast from 'react-native-toast-message';
 import { useTabBar } from '../../contexts/TabBarContext';
 import PostImagesCarousel from '../../components/NewsFeed/PostImagesCarousel';
 import PostVideoPlayer from '../../components/NewsFeed/PostVideoPlayer';
-import ExpandableText from '../../components/Common/ExpandableText';
+import PostContent from '../../components/NewsFeed/PostContent';
 import FullScreenImageViewer from '../../components/Common/FullScreenImageViewer';
-import { Video, ResizeMode } from 'expo-av';
+import { Lightbox } from '../../components/Common/Lightbox';
 import SplashScreen from '../../components/Splash/SplashScreen';
 import ReactionPicker from '../../components/NewsFeed/ReactionPicker';
 import StoriesSection from '../../components/NewsFeed/StoriesSection';
-import { ShowMoreTextButton, MAX_POST_LINES } from '../../components/NewsFeed/ShowMoreTextButton';
+import FriendsSuggestions from '../../components/NewsFeed/FriendsSuggestions';
 import { Image as RNImage, Linking } from 'react-native';
-import { parseTextWithUrls, TextPart } from '../../utils/textUtils';
-
-// PostContent component - Social-app-main style
-const PostContent = React.memo(({ 
-  content, 
-  styles, 
-  colors,
-  countLines,
-  postId,
-  onCollapse
-}: { 
-  content: string;
-  styles: ReturnType<typeof createStyles>;
-  colors: any;
-  countLines: (text: string | undefined) => number;
-  postId?: string | number;
-  onCollapse?: (postId: string | number) => void;
-}) => {
-  // Always truncate initially if text is potentially long
-  // Use heuristic: text > 100 chars OR has newlines (>= 1)
-  // Threshold để detect text dài một cách chính xác hơn
-  const shouldLimitInitially = React.useMemo(() => {
-    if (!content || content.trim().length === 0) return false;
-    // Count explicit newlines
-    const newlineCount = countLines(content);
-    // Text dài nếu có trên 100 ký tự hoặc có ít nhất 1 newline
-    // ~20-25 chars per line on mobile, nên 100 chars ≈ 4-5 lines
-    const isLongText = content.length > 100;
-    // Nếu có newline, text chắc chắn dài
-    return newlineCount >= 1 || isLongText;
-  }, [content, countLines]);
-  
-  const [isExpanded, setIsExpanded] = React.useState(false);
-  const [actualLineCount, setActualLineCount] = React.useState<number | null>(null);
-  const [fullLineCount, setFullLineCount] = React.useState<number | null>(null);
-  const [hasMeasured, setHasMeasured] = React.useState(false);
-  
-  // Reset when content changes
-  React.useEffect(() => {
-    setIsExpanded(false);
-    setActualLineCount(null);
-    setFullLineCount(null);
-    setHasMeasured(false);
-  }, [content]);
-  
-  // Measure actual line count when text is rendered
-  const onTextLayout = React.useCallback((event: any) => {
-    const { lines } = event.nativeEvent;
-    if (lines && lines.length > 0) {
-      const lineCount = lines.length;
-      
-      if (!isExpanded) {
-        // When collapsed, measure truncated text
-        // Chỉ đo lại nếu chưa đo hoặc đã reset
-        if (!hasMeasured) {
-          setActualLineCount(lineCount);
-          setHasMeasured(true);
-          
-          // Chỉ auto-expand nếu text thực sự ngắn (không cần truncate)
-          // Nếu shouldLimitInitially = false, nghĩa là text ngắn, không cần truncate
-          if (!shouldLimitInitially) {
-            setIsExpanded(true);
-          }
-        }
-        // Nếu shouldLimitInitially = true, không auto-expand vì text dài
-        // Chỉ hiển thị nút "Xem thêm" khi lineCount >= MAX_POST_LINES
-      } else {
-        // When expanded, measure full text
-        setFullLineCount(lineCount);
-      }
-    }
-  }, [isExpanded, shouldLimitInitially, hasMeasured]);
-  
-  const onPressToggle = React.useCallback(() => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsExpanded(prev => {
-      const newValue = !prev;
-      // Khi collapse lại, reset hasMeasured để đo lại text
-      if (!newValue) {
-        setHasMeasured(false);
-        // Reset actualLineCount để đảm bảo nút "Xem thêm" hiển thị lại
-        setActualLineCount(null);
-        // Gọi callback để scroll đến post khi thu gọn
-        if (postId && onCollapse) {
-          // Delay một chút để đảm bảo animation hoàn tất
-          setTimeout(() => {
-            onCollapse(postId);
-          }, 100);
-        }
-      }
-      return newValue;
-    });
-  }, [postId, onCollapse]);
-  
-  // Always truncate initially if text is potentially long and not expanded
-  const shouldLimitLines = !isExpanded && shouldLimitInitially;
-  
-  // Show "Xem thêm" button if we're limiting lines AND text is actually long
-  // Use fullLineCount if available (from previous expansion) to know if text is long
-  // Otherwise use actualLineCount or assume it's long if shouldLimitInitially
-  const isTextLong = fullLineCount !== null 
-    ? fullLineCount > MAX_POST_LINES 
-    : (actualLineCount !== null ? actualLineCount >= MAX_POST_LINES : shouldLimitInitially);
-  
-  const shouldShowMore = shouldLimitLines && isTextLong;
-  
-  // Show "Thu gọn" button if expanded and text was actually truncated
-  // Use fullLineCount if available, otherwise use actualLineCount
-  const totalLineCount = isExpanded ? (fullLineCount || actualLineCount) : actualLineCount;
-  const shouldShowLess = isExpanded && shouldLimitInitially && (
-    totalLineCount === null || totalLineCount > MAX_POST_LINES
-  );
-  
-  // Chỉ cho phép toggle khi text thực sự dài (có nút "Xem thêm" hoặc "Thu gọn")
-  const canToggle = shouldShowMore || shouldShowLess;
-  
-  // Render text với links và hashtags, hỗ trợ numberOfLines
-  const renderTextWithLinks = React.useCallback(() => {
-    const parts = parseTextWithUrls(content);
-
-    const handleLinkPress = async (url: string) => {
-      try {
-        let formattedUrl = url.trim();
-        if (!formattedUrl.match(/^https?:\/\//i)) {
-          formattedUrl = 'https://' + formattedUrl;
-        }
-        await Linking.openURL(formattedUrl);
-      } catch (error) {
-        // Silently handle errors
-      }
-    };
-
-    // Parse hashtags và mentions
-    const parseHashtagsAndMentions = (text: string): Array<{text: string, type: 'text' | 'hashtag' | 'mention', start: number, end: number}> => {
-      const result: Array<{text: string, type: 'text' | 'hashtag' | 'mention', start: number, end: number}> = [];
-      let lastIndex = 0;
-      
-      // Hashtag pattern: #word (không có khoảng trắng, có thể có dấu)
-      const hashtagRegex = /#[\w\u00C0-\u1EF9]+/g;
-      // Mention pattern: @username
-      const mentionRegex = /@[\w\u00C0-\u1EF9]+/g;
-      
-      // Combine all matches
-      const allMatches: Array<{match: RegExpMatchArray, type: 'hashtag' | 'mention'}> = [];
-      
-      let match;
-      while ((match = hashtagRegex.exec(text)) !== null) {
-        allMatches.push({ match, type: 'hashtag' });
-      }
-      while ((match = mentionRegex.exec(text)) !== null) {
-        allMatches.push({ match, type: 'mention' });
-      }
-      
-      // Sort by position
-      allMatches.sort((a, b) => a.match.index! - b.match.index!);
-      
-      allMatches.forEach(({ match, type }) => {
-        const start = match.index!;
-        const end = start + match[0].length;
-        
-        // Add text before match
-        if (start > lastIndex) {
-          result.push({
-            text: text.substring(lastIndex, start),
-            type: 'text',
-            start: lastIndex,
-            end: start,
-          });
-        }
-        
-        // Add match
-        result.push({
-          text: match[0],
-          type,
-          start,
-          end,
-        });
-        
-        lastIndex = end;
-      });
-      
-      // Add remaining text
-      if (lastIndex < text.length) {
-        result.push({
-          text: text.substring(lastIndex),
-          type: 'text',
-          start: lastIndex,
-          end: text.length,
-        });
-      }
-      
-      return result.length > 0 ? result : [{ text, type: 'text', start: 0, end: text.length }];
-    };
-
-    // Merge URL parts with hashtag/mention parts
-    const renderRichText = () => {
-      if (parts.length === 1 && parts[0].type === 'text') {
-        // No URLs, but check for hashtags/mentions
-        const richParts = parseHashtagsAndMentions(content);
-        
-        if (richParts.length === 1 && richParts[0].type === 'text') {
-          // Plain text only
-          return (
-            <Text
-              style={[styles.postContent, { color: colors.text }]}
-              numberOfLines={shouldLimitLines ? MAX_POST_LINES : undefined}
-              ellipsizeMode="tail"
-              onTextLayout={onTextLayout}
-            >
-              {content}
-            </Text>
-          );
-        }
-        
-        // Has hashtags or mentions
-        return (
-          <Text
-            style={[styles.postContent, { color: colors.text }]}
-            numberOfLines={shouldLimitLines ? MAX_POST_LINES : undefined}
-            ellipsizeMode="tail"
-            onTextLayout={onTextLayout}
-          >
-            {richParts.map((part, index) => {
-              if (part.type === 'hashtag') {
-                return (
-                  <Text
-                    key={index}
-                    style={[
-                      styles.postContent,
-                      {
-                        color: '#1877F2', // Facebook blue
-                        fontWeight: '600', // Bold like Facebook
-                      }
-                    ]}
-                    suppressHighlighting={true}
-                  >
-                    {part.text}
-                  </Text>
-                );
-              }
-              if (part.type === 'mention') {
-                return (
-                  <Text
-                    key={index}
-                    style={[
-                      styles.postContent,
-                      {
-                        color: '#1877F2', // Facebook blue
-                        fontWeight: '600', // Bold like Facebook
-                      }
-                    ]}
-                    suppressHighlighting={true}
-                  >
-                    {part.text}
-                  </Text>
-                );
-              }
-              return <Text key={index}>{part.text}</Text>;
-            })}
-          </Text>
-        );
-      }
-
-      // Has URLs - merge with hashtags/mentions
-      const mergedParts: Array<{text: string, type: 'text' | 'url' | 'hashtag' | 'mention', url?: string}> = [];
-      
-      parts.forEach(part => {
-        if (part.type === 'url') {
-          mergedParts.push(part);
-        } else {
-          // Parse text for hashtags/mentions
-          const richParts = parseHashtagsAndMentions(part.text);
-          richParts.forEach(rp => {
-            if (rp.type === 'text') {
-              mergedParts.push({ text: rp.text, type: 'text' });
-            } else {
-              mergedParts.push({ text: rp.text, type: rp.type });
-            }
-          });
-        }
-      });
-
-      return (
-        <Text
-          style={[styles.postContent, { color: colors.text }]}
-          numberOfLines={shouldLimitLines ? MAX_POST_LINES : undefined}
-          ellipsizeMode="tail"
-          onTextLayout={onTextLayout}
-        >
-          {mergedParts.map((part, index) => {
-            if (part.type === 'url' && part.url) {
-              return (
-                <Text
-                  key={index}
-                  style={[
-                    styles.postContent,
-                    {
-                      color: '#1877F2', // Facebook blue
-                      fontWeight: '600', // Bold like Facebook title
-                      textDecorationLine: 'none', // No underline for cleaner look
-                    }
-                  ]}
-                  onPress={() => handleLinkPress(part.url!)}
-                  suppressHighlighting={true}
-                >
-                  {part.text}
-                </Text>
-              );
-            }
-            if (part.type === 'hashtag' || part.type === 'mention') {
-              return (
-                <Text
-                  key={index}
-                  style={[
-                    styles.postContent,
-                    {
-                      color: '#1877F2', // Facebook blue
-                      fontWeight: '600', // Bold like Facebook
-                    }
-                  ]}
-                  suppressHighlighting={true}
-                >
-                  {part.text}
-                </Text>
-              );
-            }
-            return <Text key={index}>{part.text}</Text>;
-          })}
-        </Text>
-      );
-    };
-
-    return renderRichText();
-  }, [content, colors.text, shouldLimitLines, onTextLayout]);
-
-  return (
-    <View style={styles.postContentWrapper}>
-      <Pressable
-        onPress={canToggle ? onPressToggle : undefined}
-        disabled={!canToggle}
-        style={{ flex: 1 }}
-        hitSlop={{ top: 5, bottom: 5, left: 0, right: 0 }} // Tăng vùng chạm
-      >
-        {renderTextWithLinks()}
-      </Pressable>
-      {shouldShowMore && (
-        <View style={{ marginTop: 4 }}>
-          <ShowMoreTextButton
-            onPress={onPressToggle}
-            style={styles.postContent}
-            isExpanded={false}
-          />
-        </View>
-      )}
-      {shouldShowLess && (
-        <View style={{ marginTop: 4 }}>
-          <ShowMoreTextButton
-            onPress={onPressToggle}
-            style={styles.postContent}
-            isExpanded={true}
-          />
-        </View>
-      )}
-    </View>
-  );
-});
+import { HomeHeader } from '../../components/NewsFeed/HomeHeader';
+import { useSharedValue } from 'react-native-reanimated';
+import { Button } from '../../components/UI';
+import { spacing, typography, borderRadius, shadows, touchTargets, borderWidth } from '../../config/designTokens';
+import { PostControls } from '../../components/PostControls/PostControls';
 
 const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: isDarkMode 
-      ? (colors.background || '#000000')
-      : (colors.background || '#F2F2F7'), // iOS system background color
+    backgroundColor: colors.background || (isDarkMode ? '#000000' : '#f8f9fa'), // Đồng màu với background
   },
   // iOS-style minimal header - giống social-app-main
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12, // Giống social-app-main
-    paddingTop: Platform.OS === 'ios' ? 12 : 12,
-    paddingBottom: Platform.OS === 'ios' ? 8 : 12, // iOS: 8, Android: 12
-    minHeight: Platform.OS === 'ios' ? 48 : 56, // Giống social-app-main
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    paddingTop: Platform.OS === 'ios' ? spacing.md : spacing.md,
+    paddingBottom: Platform.OS === 'ios' ? spacing.sm : spacing.md,
+    minHeight: Platform.OS === 'ios' ? touchTargets.lg : touchTargets.xl,
     // Không có border bottom - giống social-app-main noBottomBorder
   },
   headerLeft: {
@@ -437,19 +71,19 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
   headerLeftWithText: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing.sm,
     minWidth: 100,
     zIndex: 10,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: Math.max(40, touchTargets.md),
+    height: Math.max(40, touchTargets.md),
     alignItems: 'center',
     justifyContent: 'center',
   },
   backButtonText: {
-    fontSize: 16,
-    fontWeight: '400',
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.regular,
   },
   logoSection: {
     flexDirection: 'row',
@@ -461,20 +95,20 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     minHeight: 34, // Giống social-app-main HEADER_SLOT_SIZE
   },
   headerTitle: {
-    fontSize: 18, // iOS standard large title size
-    fontWeight: '700', // Bold for iOS
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
     textAlign: 'center',
-    letterSpacing: -0.3, // Tighter spacing for iOS
+    letterSpacing: typography.letterSpacing.tight,
   },
   logoImage: {
-    width: 30, // Giống social-app-main Logo width={30}
+    width: 30,
     height: 30,
-    borderRadius: 8,
+    borderRadius: borderRadius.md,
   },
   logoText: {
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.5,
+    fontSize: typography.fontSize.xl,
+    fontWeight: typography.fontWeight.bold,
+    letterSpacing: typography.letterSpacing.tight,
   },
   headerRight: {
     flexDirection: 'row',
@@ -484,7 +118,7 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     justifyContent: 'flex-end',
   },
   headerIconButton: {
-    width: 34, // Giống social-app-main HEADER_SLOT_SIZE
+    width: 34,
     height: 34,
     alignItems: 'center',
     justifyContent: 'center',
@@ -497,79 +131,83 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
   },
   messageBadge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
+    top: -spacing.xs,
+    right: -spacing.xs,
     backgroundColor: '#FF3B30', // iOS red
-    borderRadius: 10,
-    paddingHorizontal: 5,
+    borderRadius: borderRadius.badge,
+    paddingHorizontal: spacing.xs + 1,
     paddingVertical: 2,
-    minWidth: 20, // Slightly larger
+    minWidth: 20,
     height: 20,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.3,
-        shadowRadius: 2,
-      },
-      android: {
-        elevation: 3,
-      },
-    }),
+    ...shadows.getShadow('md'),
   },
   messageBadgeText: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.bold,
   },
   listContent: {
     paddingTop: 0,
-    paddingBottom: 20,
+    paddingBottom: spacing.lg,
+    backgroundColor: colors.background || (isDarkMode ? '#000000' : '#f8f9fa'),
   },
   refreshIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 8,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.base,
+    gap: spacing.sm,
   },
   refreshIndicatorText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: typography.fontSize.base,
+    fontWeight: typography.fontWeight.medium,
   },
   // Facebook style: Nội dung bắt đầu từ bên trái
   postContainer: {
-    paddingTop: 12,
-    paddingRight: 16,
-    paddingBottom: 8,
-    paddingLeft: 0, // Bắt đầu từ bên trái giống Facebook
-    backgroundColor: 'transparent',
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingTop: spacing.md,
+    paddingRight: spacing.base,
+    paddingBottom: spacing.sm,
+    paddingLeft: 0,
+    backgroundColor: colors.background || (isDarkMode ? '#000000' : '#f8f9fa'),
+    borderBottomWidth: borderWidth.hairline,
     borderBottomColor: colors.border || (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)'),
   },
   // Layout: row with avatar left, content right (Facebook style)
   postLayout: {
     flexDirection: 'row',
-    gap: 12, // Tăng gap giữa avatar và content
-    paddingLeft: 16, // Padding chỉ cho layout, không cho container
-    paddingRight: 0,
+    gap: 10, // Giống social-app-main
+    marginTop: 1, // Giống social-app-main
   },
   layoutAvi: {
-    // Avatar container - không có padding
+    paddingLeft: 8, // Giống social-app-main
+    paddingRight: 10, // Giống social-app-main
+    position: 'relative',
+    zIndex: 999, // Giống social-app-main
   },
   layoutContent: {
-    flex: 1,
-    paddingRight: 0, // Nội dung bắt đầu từ bên trái
+    flex: 1, // Giống social-app-main
+    position: 'relative',
+    zIndex: 0, // Giống social-app-main
   },
   postHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8, // Tăng spacing giống Facebook
+    marginBottom: spacing.sm,
+  },
+  postMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingBottom: 4,
+    gap: 4,
+  },
+  authorHandle: {
+    fontSize: 16,
+    color: colors.textSecondary || (isDarkMode ? '#B0B3B8' : '#65676B'),
   },
   authorSection: {
     flexDirection: 'row',
@@ -594,21 +232,21 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     gap: 2,
   },
   authorName: {
-    fontSize: 16, // social-app-main post text size
-    fontWeight: '600',
-    letterSpacing: -0.2,
-    lineHeight: 22,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
+    letterSpacing: typography.letterSpacing.tight,
+    lineHeight: typography.fontSize.md * typography.lineHeight.relaxed,
   },
   postTimeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing.xs,
   },
   postTime: {
-    fontSize: 14, // Slightly larger for better readability
+    fontSize: typography.fontSize.base,
     marginLeft: 0,
-    lineHeight: 20,
-    fontWeight: '400',
+    lineHeight: typography.fontSize.base * typography.lineHeight.normal,
+    fontWeight: typography.fontWeight.regular,
   },
   onlineIndicator: {
     position: 'absolute',
@@ -625,8 +263,8 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     marginLeft: 4,
   },
   postMoreButton: {
-    width: 36, // iOS minimum touch target
-    height: 36,
+    width: Math.max(36, touchTargets.sm),
+    height: Math.max(36, touchTargets.sm),
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 18,
@@ -643,11 +281,11 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: colors.surface || (isDarkMode ? '#1C1C1E' : '#FFFFFF'),
+    backgroundColor: isDarkMode ? colors.background || '#000000' : colors.background || '#FFFFFF', // Đồng màu với background
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: colors.surface || (isDarkMode ? '#1C1C1E' : '#FFFFFF'),
+    borderColor: colors.border || (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)'),
     shadowColor: isDarkMode ? '#000' : 'rgba(0, 0, 0, 0.1)',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: isDarkMode ? 0.3 : 0.1,
@@ -720,37 +358,6 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     overflow: 'hidden',
     backgroundColor: 'transparent', // Xóa nền để đồng bộ
   },
-  // Social-app-main style: Reactions count
-  reactionsCountContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 10,
-    paddingBottom: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border || (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)'),
-  },
-  reactionsCountLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flex: 1,
-  },
-  reactionsCountRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 'auto',
-  },
-  reactionIconsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: -4, // Overlap icons slightly like Facebook
-  },
-  reactionsCountText: {
-    fontSize: 15, // iOS standard size
-    fontWeight: '500', // Medium weight for better readability
-    letterSpacing: -0.1,
-  },
   postActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -758,18 +365,15 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     paddingTop: 6,
     paddingBottom: 6,
     marginTop: 0,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border || (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)'),
   },
   // Social-app-main PostControlButton style
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8, // gap_xs
+    gap: 4, // gap_xs (giống social-app-main)
     backgroundColor: 'transparent',
-    padding: 5,
-    flex: 1,
-    justifyContent: 'center',
+    padding: 5, // Giống social-app-main
+    borderRadius: 20, // Giống social-app-main (shape="round")
   },
   actionText: {
     fontSize: 15, // iOS standard size
@@ -793,31 +397,19 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
   },
   // iOS-style "Có gì mới?" section
   newPostSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginHorizontal: 12,
-    marginTop: 8,
-    marginBottom: 8,
-    backgroundColor: colors.surface, // Giữ lại nền cho phần "Bạn đang nghĩ gì?"
-    borderRadius: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: isDarkMode ? '#000' : 'rgba(0, 0, 0, 0.1)',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: isDarkMode ? 0.15 : 0.06,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 1,
-      },
-    }),
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border || (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)'),
+    marginTop: 0, // Sẽ được set động trong component
+    marginBottom: 0,
+    paddingHorizontal: 12,
+    paddingTop: 12, // Padding top cho phần "Bạn đang nghĩ gì?"
+    paddingBottom: 10,
+    backgroundColor: isDarkMode ? colors.background || '#1a1a1a' : colors.background || '#f8f9fa', // Đồng màu với background chính
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border || (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)'),
   },
   newPostContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10, // Tăng khoảng cách giữa avatar và input
   },
   newPostAvatarContainer: {
     position: 'relative',
@@ -833,23 +425,24 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     flex: 1,
     backgroundColor: isDarkMode 
       ? (colors.border || 'rgba(255, 255, 255, 0.1)')
-      : (colors.border || '#F0F2F5'), // iOS system gray
-    borderRadius: 22, // iOS standard rounded input
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    minHeight: 44, // iOS minimum touch target
+      : (colors.border || '#E4E6EB'),
+    borderRadius: borderRadius.xl,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: touchTargets.md,
     justifyContent: 'center',
   },
   newPostPrompt: {
-    fontSize: 16, // iOS standard body text
-    letterSpacing: -0.2,
-    lineHeight: 22,
+    fontSize: typography.fontSize.md,
+    letterSpacing: typography.letterSpacing.tight,
+    lineHeight: typography.fontSize.md * typography.lineHeight.relaxed,
   },
   newPostIconButton: {
-    width: 40,
-    height: 40,
+    width: Math.max(36, touchTargets.sm),
+    height: Math.max(36, touchTargets.sm),
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: spacing.xs,
   },
   // Menu Modal
   modalOverlay: {
@@ -858,10 +451,10 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     backgroundColor: isDarkMode ? 'rgba(0, 0, 0, 0.7)' : 'rgba(0, 0, 0, 0.5)',
   },
   menuContainer: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 8,
-    paddingBottom: 20,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.lg,
     maxHeight: 300,
   },
   menuHandle: {
@@ -972,7 +565,11 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
   },
 });
 
-const PostsListScreen = () => {
+interface PostsListScreenProps {
+  feedType?: 'discover' | 'following' | 'video';
+}
+
+const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) => {
   const { user } = useAuth();
   const { colors, isDarkMode } = useAppTheme();
   const navigation = useNavigation();
@@ -1018,10 +615,14 @@ const PostsListScreen = () => {
       );
     });
   }, [imageDimensions]);
-  const [activeTab, setActiveTab] = useState<'all' | 'following'>('all');
+  // Use feedType prop if provided, otherwise use local state for standalone mode
+  const [localActiveTab, setLocalActiveTab] = useState<'all' | 'following'>('all');
+  const activeTab = feedType || localActiveTab;
+  const setActiveTab = feedType ? undefined : setLocalActiveTab;
   const [showMenu, setShowMenu] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [imageViewerImages, setImageViewerImages] = useState<string[]>([]);
   const [imageViewerIndex, setImageViewerIndex] = useState(0);
@@ -1030,7 +631,12 @@ const PostsListScreen = () => {
   const lastScrollY = useRef(0);
   const flatListRef = useRef<FlatList>(null);
   const [headerHeight, setHeaderHeight] = useState(72); // Default header height
+  const [followingHeaderHeight, setFollowingHeaderHeight] = useState(56); // Default following header height
   const [isChangingTab, setIsChangingTab] = useState(false); // Prevent multiple tab changes
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true); // Track header visibility
+  const headerOpacity = useRef(new Animated.Value(1)).current;
+  const headerTranslateY = useRef(new Animated.Value(0)).current;
+  const headerHeightShared = useSharedValue(72); // For HomeHeader
   
   // Track visible items để tự động pause video khi scroll ra khỏi view
   const [visiblePostIds, setVisiblePostIds] = useState<Set<string>>(new Set());
@@ -1106,14 +712,12 @@ const PostsListScreen = () => {
   
   // Animation values cho hiệu ứng chuyển app (từ NewsFeed -> Chat)
   const fadeAnim = useRef(new Animated.Value(1)).current;
-  const overlayOpacity = useRef(new Animated.Value(0)).current;
   const [isNavigatingToChat, setIsNavigatingToChat] = useState(false);
   const [showSplashScreen, setShowSplashScreen] = useState(false);
   const splashOpacity = useRef(new Animated.Value(0)).current;
   const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
   const [reactionPickerPosition, setReactionPickerPosition] = useState({ x: 0, y: 0 });
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const likeButtonRefs = useRef<{ [key: string]: any }>({});
 
   // Reset tab bar visibility when screen comes into focus
   useFocusEffect(
@@ -1183,15 +787,87 @@ const PostsListScreen = () => {
   );
 
   // Fetch conversations to get unread count
+  // Socket will handle real-time updates, no polling needed
   const { data: conversations = [] } = useQuery({
     queryKey: ['conversations'],
     queryFn: async () => {
       const res = await chatAPI.getConversations();
       return Array.isArray(res.data) ? res.data : (res.data?.conversations || []);
     },
-    staleTime: 30000, // 30 seconds
-    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 0, // Always fetch fresh data on mount
+    gcTime: 10 * 60 * 1000, // 10 minutes cache for instant display
+    refetchInterval: false, // No polling - use socket for real-time updates
+    refetchOnMount: true, // Always refetch on mount for fresh data
   });
+
+  // Fetch friend suggestions (chỉ hiển thị ở discover tab)
+  // Lấy suggestions từ các users đã đăng bài trong feed
+  const { data: friendSuggestions = [], refetch: refetchSuggestions } = useQuery({
+    queryKey: ['friendSuggestions', (posts?.length || 0), followingIds.size],
+    queryFn: async () => {
+      try {
+        // Kiểm tra posts có tồn tại và là array
+        if (!posts || !Array.isArray(posts) || posts.length === 0) {
+          return [];
+        }
+
+        // Lấy danh sách users từ các posts trong feed
+        const usersFromPosts = new Map<string | number, any>();
+        
+        posts.forEach((post: any) => {
+          const userId = post.user_id || post.user?.id;
+          const userName = post.full_name || post.username;
+          const userAvatar = post.avatar_url || post.user?.avatar_url;
+          
+          if (userId && userId !== user?.id && !followingIds.has(userId)) {
+            // Chỉ thêm nếu chưa có trong map
+            if (!usersFromPosts.has(userId)) {
+              usersFromPosts.set(userId, {
+                id: userId,
+                user_id: userId,
+                full_name: userName,
+                username: post.username || post.user?.username,
+                avatar_url: userAvatar,
+              });
+            }
+          }
+        });
+        
+        // Chuyển map thành array và lấy 5 suggestions đầu tiên
+        const suggestions = Array.from(usersFromPosts.values()).slice(0, 5);
+        console.log('🔍 Friend suggestions fetched:', {
+          totalPosts: posts.length,
+          uniqueUsers: usersFromPosts.size,
+          suggestionsCount: suggestions.length,
+          suggestions: suggestions.map((s: any) => ({ id: s.id, name: s.full_name || s.username })),
+        });
+        return suggestions;
+      } catch (error) {
+        console.error('Error fetching suggestions:', error);
+        return [];
+      }
+    },
+    enabled: (activeTab === 'discover' || activeTab === 'all') && !!user?.id && !!posts && Array.isArray(posts) && posts.length > 0 && (followingList?.length ?? 0) >= 0,
+    staleTime: 0, // Always fetch fresh suggestions
+  });
+
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string | number>>(new Set());
+  const visibleSuggestions = useMemo(() => {
+    if (!friendSuggestions || !Array.isArray(friendSuggestions)) {
+      console.log('🔍 Suggestions: friendSuggestions is empty or not array');
+      return [];
+    }
+    const filtered = friendSuggestions.filter(
+      (s: any) => !dismissedSuggestions.has(s.id || s.user_id)
+    );
+    console.log('🔍 Suggestions:', {
+      total: friendSuggestions.length,
+      visible: filtered.length,
+      dismissed: dismissedSuggestions.size,
+      activeTab,
+    });
+    return filtered;
+  }, [friendSuggestions, dismissedSuggestions, activeTab]);
 
   // Calculate unread count from conversations
   const unreadCount = useMemo(() => {
@@ -1200,16 +876,26 @@ const PostsListScreen = () => {
     }, 0);
   }, [conversations]);
 
-  // Search users query
+  // Debounce search query để tránh quá nhiều API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms debounce delay
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Search users query với debounced query
   const { data: searchResults = [], isLoading: isSearching } = useQuery({
-    queryKey: ['searchUsers', searchQuery],
+    queryKey: ['searchUsers', debouncedSearchQuery],
     queryFn: async () => {
-      if (!searchQuery.trim()) return [];
-      const res = await usersAPI.searchUsers(searchQuery);
+      if (!debouncedSearchQuery.trim()) return [];
+      const res = await usersAPI.searchUsers(debouncedSearchQuery);
       return Array.isArray(res.data) ? res.data : (res.data?.users || res.data?.data || []);
     },
-    enabled: searchQuery.trim().length > 0,
-    staleTime: 30000,
+    enabled: debouncedSearchQuery.trim().length > 0,
+    staleTime: 60000, // 1 minute - tăng cache time
+    gcTime: 5 * 60 * 1000, // 5 minutes cache
   });
 
   const {
@@ -1221,8 +907,15 @@ const PostsListScreen = () => {
   } = useQuery({
     queryKey: ['posts', activeTab],
     queryFn: async () => {
-      // Pass type to API: 'all' for all public posts, 'following' for following posts
-      const type = activeTab === 'following' ? 'following' : 'all';
+      // Pass type to API: 'discover' for all public posts, 'following' for following posts, 'video' for video posts
+      let type: 'all' | 'following' | 'video';
+      if (activeTab === 'following') {
+        type = 'following';
+      } else if (activeTab === 'video') {
+        type = 'video';
+      } else {
+        type = 'all'; // 'discover' maps to 'all' in API
+      }
       console.log('📱 Fetching posts with type:', type, 'activeTab:', activeTab);
       const res = await newsfeedAPI.getPosts(1, type);
       // Include all posts (including videos) in news feed
@@ -1245,12 +938,25 @@ const PostsListScreen = () => {
       }
       
       // Return all posts (including videos) - videos will be displayed in news feed
-      console.log('📱 Posts with videos:', allPosts.filter((p: any) => p.videoUrl || p.video_url || p.videos).length);
+      const postsWithVideos = allPosts.filter((p: any) => p.videoUrl || p.video_url || p.videos || p.video || (p.media_type === 'video' && p.media_url));
+      console.log('📱 Posts with videos:', postsWithVideos.length);
+      if (postsWithVideos.length > 0) {
+        console.log('📱 Sample video post data:', {
+          id: postsWithVideos[0].id,
+          videoUrl: postsWithVideos[0].videoUrl,
+          video_url: postsWithVideos[0].video_url,
+          videos: postsWithVideos[0].videos,
+          video: postsWithVideos[0].video,
+          media_type: postsWithVideos[0].media_type,
+          media_url: postsWithVideos[0].media_url,
+          allKeys: Object.keys(postsWithVideos[0]),
+        });
+      }
       return allPosts;
     },
-    enabled: activeTab === 'all' || (activeTab === 'following' && !isLoadingFollowing),
-    staleTime: 30 * 1000, // 30 seconds - data fresh (optimized for better performance)
-    gcTime: 5 * 60 * 1000, // Keep in cache for 5 minutes
+    enabled: activeTab === 'discover' || activeTab === 'video' || (activeTab === 'following' && !isLoadingFollowing),
+    staleTime: 0, // Always fetch fresh data on mount for instant updates
+    gcTime: 5 * 60 * 1000, // Keep in cache for instant display while fetching
     refetchOnWindowFocus: false, // Don't refetch on focus
   });
 
@@ -1359,11 +1065,28 @@ const PostsListScreen = () => {
       await friendsAPI.follow(userId.toString());
       // Refresh following list to update UI
       await refetchFollowing();
+      // Refresh suggestions để loại bỏ user đã follow
+      await refetchSuggestions();
+      Toast.show({
+        type: 'success',
+        text1: 'Đã theo dõi',
+      });
     } catch (error: any) {
       console.error('Error following user:', error);
-      // Show error message if needed
+      Toast.show({
+        type: 'error',
+        text1: error?.response?.data?.message || 'Không thể theo dõi',
+      });
     }
   };
+
+  const handleDismissSuggestion = useCallback((userId: string | number) => {
+    setDismissedSuggestions(prev => new Set([...prev, userId]));
+  }, []);
+
+  const handlePressSuggestionUser = useCallback((userId: string | number) => {
+    navigation.navigate('OtherUserProfile' as never, { userId: userId.toString() } as never);
+  }, [navigation]);
 
   const handleUnfollow = async (userId: string | number) => {
     try {
@@ -1519,40 +1242,6 @@ const PostsListScreen = () => {
     likePostMutation.mutate({ postId, reactionType: 'like' });
   }, [likePostMutation]);
 
-  // Hàm format số (1K, 2.3K, etc.)
-  const formatCount = useCallback((count: number) => {
-    if (count < 1000) return count.toString();
-    if (count < 1000000) {
-      const k = (count / 1000).toFixed(1);
-      return k.endsWith('.0') ? `${Math.floor(count / 1000)}K` : `${k}K`;
-    }
-    const m = (count / 1000000).toFixed(1);
-    return m.endsWith('.0') ? `${Math.floor(count / 1000000)}M` : `${m}M`;
-  }, []);
-
-  // Hàm lấy icon và color dựa trên reaction type (Facebook-style)
-  const getReactionIcon = useCallback((reactionType: string | null | undefined, isLiked: boolean) => {
-    // Nếu chưa like, hiển thị icon thumb-up-outline (Facebook style)
-    if (!isLiked) {
-      return { icon: 'thumb-up-outline', color: colors.textSecondary };
-    }
-    
-    // Nếu đã like nhưng không có reactionType, mặc định là 'like' (thumb-up)
-    const type = reactionType || 'like';
-    
-    const reactionMap: { [key: string]: { icon: string; color: string } } = {
-      like: { icon: 'thumb-up', color: '#1877F2' }, // Facebook blue
-      love: { icon: 'heart', color: '#F62D5A' },
-      care: { icon: 'emoticon-kiss', color: '#FFD700' },
-      haha: { icon: 'emoticon-lol', color: '#FFD700' },
-      wow: { icon: 'emoticon-excited', color: '#FFD700' },
-      sad: { icon: 'emoticon-sad', color: '#FFD700' },
-      angry: { icon: 'emoticon-angry', color: '#E74C3C' },
-    };
-    
-    return reactionMap[type] || { icon: 'thumb-up', color: '#1877F2' };
-  }, [colors.textSecondary]);
-
   // Mutation for creating conversation
   const createConversationMutation = useMutation({
     mutationFn: (userId: string) => chatAPI.createConversation(userId),
@@ -1622,19 +1311,49 @@ const PostsListScreen = () => {
     return date.toLocaleDateString('vi-VN');
   };
 
-  // Xử lý scroll - chỉ xử lý tab bar, header luôn cố định
+  // Xử lý scroll - ẩn/hiện header và tab bar khi cuộn
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const currentScrollY = Math.max(0, event.nativeEvent.contentOffset.y);
     const scrollDifference = currentScrollY - lastScrollY.current;
     
-    // Chỉ xử lý ẩn/hiện tab bar khi cuộn
+    // Xử lý ẩn/hiện header và tab bar khi cuộn
     if (Math.abs(scrollDifference) > 10) {
       if (scrollDifference > 0 && currentScrollY > 100) {
-        // Cuộn xuống - ẩn tab bar
-        setIsVisible(false);
+        // Cuộn xuống - ẩn header và tab bar
+        if (isHeaderVisible) {
+          setIsHeaderVisible(false);
+          setIsVisible(false);
+          Animated.parallel([
+            Animated.timing(headerOpacity, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(headerTranslateY, {
+              toValue: -headerHeight,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+          ]).start();
+        }
       } else if (scrollDifference < 0) {
-        // Cuộn lên - hiện tab bar
-        setIsVisible(true);
+        // Cuộn lên - hiện header và tab bar
+        if (!isHeaderVisible) {
+          setIsHeaderVisible(true);
+          setIsVisible(true);
+          Animated.parallel([
+            Animated.timing(headerOpacity, {
+              toValue: 1,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(headerTranslateY, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true,
+            }),
+          ]).start();
+        }
       }
     }
     
@@ -1647,6 +1366,46 @@ const PostsListScreen = () => {
 
   // PostVideoPlayer tự quản lý playback dựa trên isPlaying prop
   // Không cần useEffect này nữa vì PostVideoPlayer đã xử lý
+
+  // Tạo data array với suggestions chèn vào giữa (sau 2-3 posts đầu tiên)
+  const postsWithSuggestions = useMemo(() => {
+    // Kiểm tra posts có tồn tại và là array
+    if (!posts || !Array.isArray(posts)) {
+      console.log('🔍 postsWithSuggestions: posts is empty or not array');
+      return [];
+    }
+
+    console.log('🔍 postsWithSuggestions check:', {
+      activeTab,
+      visibleSuggestionsLength: visibleSuggestions?.length || 0,
+      postsLength: posts.length,
+    });
+
+    // Hiển thị suggestions cho cả 'discover' và 'all' (nếu activeTab là 'all' thì cũng là discover tab)
+    const isDiscoverTab = activeTab === 'discover' || activeTab === 'all';
+    
+    if (!isDiscoverTab || !visibleSuggestions || visibleSuggestions.length === 0) {
+      console.log('🔍 postsWithSuggestions: Not inserting suggestions (conditions not met)', {
+        isDiscoverTab,
+        hasVisibleSuggestions: !!visibleSuggestions,
+        visibleSuggestionsLength: visibleSuggestions?.length || 0,
+      });
+      return posts;
+    }
+    
+    const suggestionsInsertIndex = Math.min(2, posts.length); // Chèn sau 2 posts đầu tiên
+    const result = [...posts];
+    
+    // Chèn suggestions vào vị trí cụ thể
+    result.splice(suggestionsInsertIndex, 0, {
+      id: 'suggestions',
+      type: 'suggestions',
+      suggestions: visibleSuggestions,
+    });
+    
+    console.log('🔍 postsWithSuggestions: Inserted suggestions at index', suggestionsInsertIndex, 'Total items:', result.length);
+    return result;
+  }, [posts, visibleSuggestions, activeTab]);
 
   // Callback để scroll đến post khi thu gọn
   const handlePostCollapse = useCallback((postId: string | number) => {
@@ -1675,7 +1434,21 @@ const PostsListScreen = () => {
     }
   }, [posts]);
 
-  const renderPost = ({ item, index }: { item: any, index: number }) => {
+  // Memoize renderPost để tránh re-render không cần thiết
+  const renderPost = useCallback(({ item, index }: { item: any, index: number }) => {
+    // Kiểm tra nếu item là suggestions thì render component FriendsSuggestions
+    if (item.type === 'suggestions' && item.suggestions) {
+      console.log('🔍 Rendering FriendsSuggestions with', item.suggestions.length, 'suggestions');
+      return (
+        <FriendsSuggestions
+          suggestions={item.suggestions}
+          onFollow={handleFollow}
+          onDismiss={handleDismissSuggestion}
+          onPressUser={handlePressSuggestionUser}
+        />
+      );
+    }
+
     // Get author info - API returns user fields directly on post object
     const authorName = item.full_name || item.username || 'Unknown';
     const authorAvatar = item.avatar_url || '';
@@ -1701,13 +1474,10 @@ const PostsListScreen = () => {
     // Get privacy setting - default to 'public' if not specified
     const privacy = item.privacy || item.visibility || 'public';
 
-    // Get views count - check multiple possible field names
-    const viewsCount = item.views_count || item.view_count || item.views || item.post_views || 0;
-
     // Check if user is following this author
     const isFollowing = authorId && followingIds.has(authorId);
     const isOwnPost = authorId === user?.id;
-    const showFollowButton = !isOwnPost && !isFollowing && activeTab === 'all';
+    const showFollowButton = !isOwnPost && !isFollowing && (activeTab === 'discover' || activeTab === 'video');
     
     // Get privacy icon based on privacy setting
     const getPrivacyIcon = () => {
@@ -1731,31 +1501,40 @@ const PostsListScreen = () => {
     // First, check for video - if video exists, don't show images
     // Get video URL - check for videoUrl, video_url, or videos field
     let postVideoUrl: string | undefined = undefined;
+    let rawVideoPath: string | undefined = undefined;
+    
     // Check multiple possible field names for video
-    if (item.videoUrl) {
+    if (item.videoUrl && item.videoUrl.trim() !== '') {
+      rawVideoPath = item.videoUrl;
       postVideoUrl = getVideoURL(item.videoUrl);
-      hasVideo = !!postVideoUrl;
-    } else if (item.video_url) {
+      hasVideo = !!(postVideoUrl && postVideoUrl.trim() !== '');
+    } else if (item.video_url && item.video_url.trim() !== '') {
+      rawVideoPath = item.video_url;
       postVideoUrl = getVideoURL(item.video_url);
-      hasVideo = !!postVideoUrl;
+      hasVideo = !!(postVideoUrl && postVideoUrl.trim() !== '');
     } else if (item.videos) {
       const videos = Array.isArray(item.videos) ? item.videos : [item.videos];
-      if (videos.length > 0 && videos[0]) {
+      if (videos.length > 0 && videos[0] && videos[0].trim() !== '') {
+        rawVideoPath = videos[0];
         postVideoUrl = getVideoURL(videos[0]);
-        hasVideo = !!postVideoUrl;
+        hasVideo = !!(postVideoUrl && postVideoUrl.trim() !== '');
       }
-    } else if (item.video) {
+    } else if (item.video && item.video.trim() !== '') {
+      rawVideoPath = item.video;
       postVideoUrl = getVideoURL(item.video);
-      hasVideo = !!postVideoUrl;
-    } else if (item.media_type === 'video' && item.media_url) {
+      hasVideo = !!(postVideoUrl && postVideoUrl.trim() !== '');
+    } else if (item.media_type === 'video' && item.media_url && item.media_url.trim() !== '') {
+      rawVideoPath = item.media_url;
       postVideoUrl = getVideoURL(item.media_url);
-      hasVideo = !!postVideoUrl;
+      hasVideo = !!(postVideoUrl && postVideoUrl.trim() !== '');
     }
     
     // Debug: Log video detection with more details
-    if (postVideoUrl) {
+    if (postVideoUrl && postVideoUrl.trim() !== '') {
       console.log('🎥 Video detected for post:', item.id, 'URL:', postVideoUrl);
       console.log('🎥 Video fields:', {
+        rawVideoPath,
+        processedUrl: postVideoUrl,
         videoUrl: item.videoUrl,
         video_url: item.video_url,
         videos: item.videos,
@@ -1766,13 +1545,16 @@ const PostsListScreen = () => {
     } else {
       // Debug: Log when video is NOT detected to help troubleshoot
       if (item.videoUrl || item.video_url || item.videos || item.video || item.media_type === 'video') {
-        console.log('⚠️ Video field exists but URL is empty for post:', item.id, {
+        console.log('⚠️ Video field exists but URL is empty or invalid for post:', item.id, {
+          rawVideoPath,
+          processedUrl: postVideoUrl,
           videoUrl: item.videoUrl,
           video_url: item.video_url,
           videos: item.videos,
           video: item.video,
           media_type: item.media_type,
           media_url: item.media_url,
+          hasVideo,
         });
       }
     }
@@ -1850,10 +1632,15 @@ const PostsListScreen = () => {
             </TouchableOpacity>
           </View>
           <View style={dynamicStyles.layoutContent}>
-            {/* Post Meta: Author name, time, privacy */}
-            <View style={dynamicStyles.postHeader}>
+            {/* Post Meta: Author name, handle, time (giống social-app-main) */}
+            <View style={[dynamicStyles.postMeta, { 
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingBottom: 4, // Giống social-app-main (pb_xs)
+              gap: 4, // Giống social-app-main (gap_xs)
+            }]}>
               <TouchableOpacity
-                style={dynamicStyles.authorSection}
+                style={[dynamicStyles.authorSection, { flexDirection: 'row', alignItems: 'center', flexShrink: 1 }]}
                 onPress={() => {
                   if (authorId && authorId !== user?.id) {
                     navigation.navigate('OtherUserProfile' as never, { userId: authorId.toString() } as never);
@@ -1861,52 +1648,56 @@ const PostsListScreen = () => {
                 }}
                 activeOpacity={0.7}
               >
-                <Text style={[dynamicStyles.authorName, { color: colors.text }]}>{authorName}</Text>
+                <Text style={[dynamicStyles.authorName, { color: colors.text, maxWidth: '70%' }]} numberOfLines={1}>
+                  {authorName}
+                </Text>
+                <Text style={[dynamicStyles.authorHandle, { 
+                  color: colors.textSecondary || (isDarkMode ? '#B0B3B8' : '#65676B'),
+                  fontSize: 16,
+                  marginLeft: 4,
+                  flexShrink: 10,
+                }]} numberOfLines={1}>
+                  {' @' + (item.username || item.handle || 'user')}
+                </Text>
                 {postTime && (
-                  <View style={dynamicStyles.postTimeRow}>
-                    <Text style={[dynamicStyles.postTime, { color: colors.textSecondary }]}>· {postTime}</Text>
-                    <MaterialCommunityIcons
-                      name={getPrivacyIcon()}
-                      size={12}
-                      color={colors.textSecondary}
-                      style={dynamicStyles.privacyIcon}
-                    />
-                  </View>
+                  <Text style={[dynamicStyles.postTime, { 
+                    color: colors.textSecondary || (isDarkMode ? '#B0B3B8' : '#65676B'),
+                    fontSize: 16,
+                    marginLeft: 4,
+                  }]}>
+                    · {postTime}
+                  </Text>
                 )}
-              </TouchableOpacity>
-              <TouchableOpacity style={dynamicStyles.postMoreButton}>
-                <MaterialCommunityIcons name="dots-horizontal" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
             {/* Post Content - Social-app-main style */}
             {item.content && <PostContent 
               content={item.content}
-              styles={dynamicStyles}
-              colors={colors}
-              countLines={countLines}
               postId={item.id || item._id || item.post_id || item.postId}
               onCollapse={handlePostCollapse}
             />}
 
             {/* Post Video - Render BEFORE images */}
-            {postVideoUrl ? (
+            {postVideoUrl && postVideoUrl.trim() !== '' ? (
               <View style={dynamicStyles.videoContainer}>
                 {(() => {
                   // Debug: Log before rendering video
+                  const postIdString = String(item.id || item._id || item.post_id || item.postId || 'unknown');
                   console.log('🎬 Rendering PostVideoPlayer for post:', item.id, {
                     postVideoUrl,
                     videoThumbnail,
                     videoAspectRatio,
-                    postId: String(item.id || item._id || item.post_id || item.postId || 'unknown'),
-                    isPlaying: playingVideoId === String(item.id || item._id || item.post_id || item.postId),
+                    postId: postIdString,
+                    isPlaying: playingVideoId === postIdString,
+                    hasVideo,
                   });
                   return (
                     <PostVideoPlayer
                       videoUrl={postVideoUrl}
                       thumbnailUrl={videoThumbnail}
-                      postId={String(item.id || item._id || item.post_id || item.postId || 'unknown')}
-                      isPlaying={playingVideoId === String(item.id || item._id || item.post_id || item.postId)}
+                      postId={postIdString}
+                      isPlaying={playingVideoId === postIdString}
                       onPress={() => {
                         const postId = String(item.id || item._id || item.post_id || item.postId);
                         if (postId && postVideoUrl) {
@@ -1932,10 +1723,24 @@ const PostsListScreen = () => {
                   );
                 })()}
               </View>
-            ) : (
-              // Debug: Log when video should render but doesn't
-              postVideoUrl ? console.log('⚠️ postVideoUrl exists but not rendering:', postVideoUrl) : null
-            )}
+            ) : hasVideo ? (
+              // Debug: Log when video should render but URL is invalid
+              (() => {
+                console.warn('⚠️ Video detected but URL is invalid for post:', item.id, {
+                  postVideoUrl,
+                  hasVideo,
+                  videoFields: {
+                    videoUrl: item.videoUrl,
+                    video_url: item.video_url,
+                    videos: item.videos,
+                    video: item.video,
+                    media_type: item.media_type,
+                    media_url: item.media_url,
+                  },
+                });
+                return null;
+              })()
+            ) : null}
 
             {/* Post Images */}
             {postImages.length > 0 && (
@@ -1991,215 +1796,136 @@ const PostsListScreen = () => {
               </View>
             )}
 
-            {/* Reactions Count và Views - Hiển thị trên cùng một hàng */}
-            {(() => {
-              const likesCount = item.likes_count || 0;
-              const commentsCount = item.comments_count || 0;
-              // Kiểm tra nhiều tên field có thể cho views count
-              const viewsCount = item.views_count || item.view_count || item.views || item.post_views || 0;
-              
-              // Hiển thị nếu có ít nhất một trong: likes, comments, hoặc views
-              return (likesCount > 0 || commentsCount > 0 || viewsCount > 0) ? (
-                <View style={[dynamicStyles.reactionsCountContainer, { borderTopColor: colors.border }]}>
-              {/* Bên trái: Icon reactions và số likes/comments */}
-              <View style={dynamicStyles.reactionsCountLeft}>
-                {likesCount > 0 && (
-                  <TouchableOpacity 
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={dynamicStyles.reactionIconsContainer}>
-                      {(() => {
-                        // Lấy reactions breakdown từ API (từ tất cả người dùng)
-                        const reactionsBreakdown = item.reactions_breakdown || {};
-                        const reactionOrder = ['like', 'love', 'haha', 'wow', 'sad', 'angry', 'care'];
-                        const displayedReactions: Array<{ type: string; icon: string; color: string; count: number }> = [];
-                        
-                        // Thêm tất cả các reactions có count > 0 với số lượng
-                        reactionOrder.forEach((reactionType) => {
-                          const count = reactionsBreakdown[reactionType] || 0;
-                          if (count > 0) {
-                            const reactionInfo = getReactionIcon(reactionType, true);
-                            displayedReactions.push({
-                              type: reactionType,
-                              icon: reactionInfo.icon,
-                              color: reactionInfo.color,
-                              count: count,
-                            });
-                          }
-                        });
-                        
-                        // Sắp xếp theo số lượng (count cao nhất trước) để hiển thị reactions phổ biến nhất
-                        displayedReactions.sort((a, b) => b.count - a.count);
-                        
-                        // Hiển thị tất cả các reactions có count > 0 (giống Facebook) - tối đa 4 icon để không quá dài
-                        return displayedReactions.slice(0, 4).map((reaction, index) => (
-                          <MaterialCommunityIcons
-                            key={reaction.type}
-                            name={reaction.icon as any}
-                            size={18}
-                            color={reaction.color}
-                            style={{ 
-                              marginLeft: index > 0 ? -4 : 0, // Overlap icons
-                              zIndex: 3 - index, // Stack order
-                            }}
-                          />
-                        ));
-                      })()}
-                    </View>
-                    <Text style={[dynamicStyles.reactionsCountText, { color: colors.textSecondary }]}>
-                      {formatCount(likesCount)}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                {/* Hiển thị số bình luận */}
-                {commentsCount > 0 && (
-                  <TouchableOpacity 
-                    style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 16 }}
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      const pid = item?.id || item?._id || item?.post_id || item?.postId || null;
-                      if (pid) {
-                        navigation.navigate('Comments' as never, {
-                          postId: pid,
-                          postData: item,
-                        } as never);
-                      }
-                    }}
-                  >
-                    <Text style={[dynamicStyles.reactionsCountText, { color: colors.textSecondary }]}>
-                      {formatCount(commentsCount)} bình luận
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              {/* Bên phải: Số người đã xem */}
-              {viewsCount > 0 && (
-                <TouchableOpacity 
-                  style={dynamicStyles.reactionsCountRight}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[dynamicStyles.reactionsCountText, { color: colors.textSecondary }]}>
-                    {formatCount(viewsCount)} người đã xem
-                  </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ) : null;
-          })()}
 
-            {/* Post Actions */}
-            <View style={[dynamicStyles.postActions, { borderTopColor: colors.border }]}>
-          <Pressable
-            ref={(ref) => {
-              const postId = item.id || item._id || item.post_id || item.postId;
-              if (ref && postId) {
-                likeButtonRefs.current[String(postId)] = ref;
-              }
-            }}
-            style={dynamicStyles.actionButton}
-            onLayout={(event) => {
-              // Lưu layout để có thể tính toán vị trí sau
-              const postId = item.id || item._id || item.post_id || item.postId;
-              if (postId) {
-                const { x, y, width, height } = event.nativeEvent.layout;
-                (likeButtonRefs.current[String(postId)] as any)._layout = { x, y, width, height };
-              }
-            }}
-            onPress={() => {
-              const postId = item.id || item._id || item.post_id || item.postId;
-              if (postId) {
-                // Nếu reaction picker đang hiện, đóng nó
-                if (showReactionPicker === String(postId)) {
-                  setShowReactionPicker(null);
-                } else {
-                  // Like/unlike nhanh
-                  handleQuickLike(postId);
-                }
-              }
-            }}
-            onLongPress={(event) => {
-              const postId = item.id || item._id || item.post_id || item.postId;
-              if (postId) {
-                // Lấy vị trí từ ref
-                const ref = likeButtonRefs.current[String(postId)];
-                if (ref && ref.measure) {
-                  ref.measure((x: number, y: number, width: number, height: number, pageX: number, pageY: number) => {
-                    setReactionPickerPosition({ 
-                      x: pageX + width / 2, // Center của nút like
-                      y: pageY 
-                    });
-                    // Hiển thị reaction picker sau khi có vị trí
-                    setTimeout(() => {
-                      setShowReactionPicker(String(postId));
-                    }, 50);
-                  });
-                } else {
-                  handleLongPressStart(postId, event);
-                }
-              }
-            }}
-            onPressOut={handleLongPressEnd}
-            disabled={likePostMutation.isPending}
-          >
-            {(() => {
-              const reactionInfo = getReactionIcon(item.reactionType, item.isLiked);
-              const likeColor = item.isLiked ? '#1877F2' : colors.textSecondary;
-              return (
-                <>
-                  <MaterialCommunityIcons
-                    name={reactionInfo.icon as any}
-                    size={18}
-                    color={likeColor}
-                  />
-                  <Text style={[dynamicStyles.actionText, { color: likeColor }]}>
-                    Thích
-                  </Text>
-                </>
-              );
-            })()}
-          </Pressable>
-          
-
-          <TouchableOpacity
-            style={dynamicStyles.actionButton}
-            onPress={() => {
-              const pid = item?.id || item?._id || item?.post_id || item?.postId || null;
-              if (pid) {
-                navigation.navigate('Comments' as never, {
-                  postId: pid,
-                  postData: item,
-                } as never);
-              }
-            }}
-          >
-            <MaterialCommunityIcons name="message-outline" size={18} color={colors.textSecondary} />
-            <Text style={[dynamicStyles.actionText, { color: colors.textSecondary }]}>
-              Bình luận
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={dynamicStyles.actionButton}>
-            <MaterialCommunityIcons name="share-outline" size={18} color={colors.textSecondary} />
-            <Text style={[dynamicStyles.actionText, { color: colors.textSecondary }]}>
-              Chia sẻ
-            </Text>
-          </TouchableOpacity>
+            {/* Post Controls (giống social-app-main) */}
+            <View style={dynamicStyles.postActions}>
+              <PostControls
+                post={{
+                  id: item.id || item._id || item.post_id || item.postId,
+                  isLiked: item.isLiked,
+                  likes_count: item.likes_count || 0,
+                  comments_count: item.comments_count || 0,
+                  reposts_count: item.reposts_count || 0,
+                  isReposted: item.isReposted,
+                }}
+                onPressLike={() => {
+                  const postId = item.id || item._id || item.post_id || item.postId;
+                  if (postId) {
+                    handleQuickLike(postId);
+                  }
+                }}
+                onPressReply={() => {
+                  const pid = item?.id || item?._id || item?.post_id || item?.postId || null;
+                  if (pid) {
+                    navigation.navigate('Comments' as never, {
+                      postId: pid,
+                      postData: item,
+                    } as never);
+                  }
+                }}
+                onPressRepost={() => {
+                  // Handle repost
+                  console.log('Repost post:', item.id);
+                }}
+                onPressShare={() => {
+                  // Handle share
+                  console.log('Share post:', item.id);
+                }}
+              />
             </View>
           </View>
         </View>
       </View>
     );
-  };
+  }, [
+    user,
+    followingList,
+    followingIds,
+    activeTab,
+    navigation,
+    handleFollow,
+    handleDismissSuggestion,
+    handlePressSuggestionUser,
+    colors,
+    isDarkMode,
+    handleQuickLike,
+    likePostMutation,
+    handleReactionSelect,
+    setShowImageViewer,
+    setImageViewerImages,
+    setImageViewerIndex,
+    setImageViewerPostData,
+    dynamicStyles,
+    playingVideoId,
+    handleVideoPress,
+    setPlayingVideoId,
+    handlePostCollapse,
+  ]);
 
-  // Render header component - Fixed position, không cuộn theo nội dung
-  const renderHeader = () => (
-    <View style={dynamicStyles.headerBar}>
-      {activeTab === 'following' ? (
-        <>
+  // Handle logo press - scroll to top
+  const handleLogoPress = useCallback(() => {
+    if (flatListRef.current) {
+      flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+    }
+  }, []);
+
+  // Handle menu press
+  const handleMenuPress = useCallback(() => {
+    if (activeTab === 'following') {
+      if (setActiveTab) setActiveTab('all');
+    } else {
+      setShowMenu(true);
+    }
+  }, [activeTab, setActiveTab]);
+
+  // Handle search press
+  const handleSearchPress = useCallback(() => {
+    setShowSearchModal(true);
+  }, []);
+
+  // Debug: Log active tab
+  React.useEffect(() => {
+    console.log('PostsListScreen - activeTab:', activeTab);
+  }, [activeTab]);
+
+  return (
+    <View style={dynamicStyles.container}>
+        {/* Fixed Header - Social-app-main style */}
+        {/* Only show header when used standalone (no feedType prop) */}
+        {!feedType && (
+          <>
+            {(activeTab === 'discover' || activeTab === 'video') ? (
+              <HomeHeader
+                onMenuPress={handleMenuPress}
+                onLogoPress={handleLogoPress}
+                onSearchPress={handleSearchPress}
+                unreadCount={unreadCount}
+                headerHeight={headerHeightShared}
+                onHeaderHeightChange={(height) => {
+                  setHeaderHeight(height);
+                  headerHeightShared.value = height;
+                }}
+              />
+            ) : (
+          <View 
+            style={[dynamicStyles.headerBar, { 
+              paddingTop: insets.top, 
+              position: 'absolute', 
+              top: 48, // Thêm 48px để hiển thị dưới tabs
+              left: 0, 
+              right: 0, 
+              zIndex: 1000,
+              elevation: Platform.OS === 'android' ? 4 : 0,
+              backgroundColor: isDarkMode ? colors.background || '#000000' : colors.surface || '#FFFFFF' 
+            }]}
+            onLayout={(e) => {
+              const height = e.nativeEvent.layout.height;
+              setFollowingHeaderHeight(height);
+            }}
+          >
           <TouchableOpacity 
             style={dynamicStyles.headerLeftWithText}
-            onPress={() => setActiveTab('all')}
+            onPress={() => setActiveTab && setActiveTab('all')}
             activeOpacity={0.7}
           >
             <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
@@ -2209,62 +1935,15 @@ const PostsListScreen = () => {
             <Text style={[dynamicStyles.headerTitle, { color: colors.text }]}>Đang theo dõi</Text>
           </View>
           <View style={dynamicStyles.headerRight} />
-        </>
-      ) : (
-        <>
-          <TouchableOpacity 
-            style={dynamicStyles.headerLeft}
-            onPress={() => {
-              setShowMenu(true);
-            }}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <MaterialCommunityIcons name="menu" size={28} color={colors.text} />
-          </TouchableOpacity>
-          <View style={dynamicStyles.logoSection}>
-            <Image
-              source={require('../../../assets/icon.png')}
-              style={dynamicStyles.logoImage}
-            />
-          </View>
-          <View style={dynamicStyles.headerRight}>
-            <TouchableOpacity 
-              style={dynamicStyles.headerIconButton} 
-              activeOpacity={0.7}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              onPress={() => setShowSearchModal(true)}
-            >
-              <MaterialCommunityIcons name="magnify" size={26} color={colors.text} />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={dynamicStyles.headerIconButton}
-              onPress={handleNavigateToChat}
-              activeOpacity={0.7}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <View style={dynamicStyles.messageIconContainer}>
-                <MaterialCommunityIcons name="facebook-messenger" size={26} color={colors.text} />
-                {unreadCount > 0 && (
-                  <View style={dynamicStyles.messageBadge}>
-                    <Text style={dynamicStyles.messageBadgeText}>
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </Text>
-                  </View>
-                )}
               </View>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
-    </View>
-  );
-
-  return (
-    <SafeAreaView style={dynamicStyles.container} edges={['top']}>
+            )}
+          </>
+        )}
+        
+        <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
         <Animated.View
           style={[
-            { flex: 1 },
+              { flex: 1, backgroundColor: colors.background || (isDarkMode ? '#000000' : '#f8f9fa') },
             {
               opacity: fadeAnim,
             }
@@ -2287,38 +1966,67 @@ const PostsListScreen = () => {
           <Text style={[dynamicStyles.emptyText, { color: colors.textSecondary, marginTop: 8, fontSize: 13 }]}>
             {error instanceof Error ? error.message : 'Đã xảy ra lỗi'}
           </Text>
-          <TouchableOpacity
+          <Button
+            title="Thử lại"
             onPress={() => refetch()}
-            style={{
-              marginTop: 16,
-              paddingHorizontal: 24,
-              paddingVertical: 12,
-              backgroundColor: colors.primary || '#0084ff',
-              borderRadius: 8,
-            }}
-          >
-            <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>Thử lại</Text>
-          </TouchableOpacity>
+            variant="primary"
+            style={{ marginTop: 16 }}
+          />
         </View>
       ) : (
         <FlatList
           ref={flatListRef}
-          data={posts}
-          keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+          data={postsWithSuggestions}
+          keyExtractor={(item) => {
+            if (item.type === 'suggestions') {
+              return 'suggestions';
+            }
+            return item.id?.toString() || Math.random().toString();
+          }}
           renderItem={renderPost}
           ItemSeparatorComponent={() => null}
           showsVerticalScrollIndicator={false}
+          style={{ backgroundColor: colors.background || (isDarkMode ? '#000000' : '#f8f9fa') }}
           {...(Platform.OS === 'ios' && {
             contentInsetAdjustmentBehavior: 'automatic',
           })}
+          nestedScrollEnabled={true}
+          scrollEnabled={true}
+          // Performance optimizations - tối ưu để giảm delay và tăng smooth scrolling
+          removeClippedSubviews={Platform.OS === 'android'} // Better on Android, can cause issues on iOS
+          maxToRenderPerBatch={8} // Reduced for faster initial render
+          updateCellsBatchingPeriod={100} // Increased to reduce render frequency
+          initialNumToRender={8} // Reduced for faster initial load
+          windowSize={5} // Reduced window size for better memory management
+          getItemLayout={undefined} // Can't use with dynamic heights
+          maintainVisibleContentPosition={null} // Disable to improve performance
+          legacyImplementation={false} // Use new implementation
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor={colors.primary || '#0084ff'}
-              colors={[colors.primary || '#0084ff']}
-              progressBackgroundColor={colors.surface || '#FFFFFF'}
-              progressViewOffset={0} // Header giờ cuộn theo nội dung, không cần offset
+              {...(Platform.OS === 'ios' 
+                ? {
+                    tintColor: colors.primary || '#0084ff',
+                    titleColor: colors.text || '#000000',
+                    progressViewOffset: 
+                      (activeTab === 'discover' || activeTab === 'video')
+                        ? Math.max(insets.top + 20, 0) // iOS: Dùng safe area insets + offset nhỏ để icon hiển thị rõ
+                        : activeTab === 'following'
+                        ? Math.max(insets.top + 20, 0) // iOS: Following tab
+                        : 0
+                  }
+                : {
+                    colors: [colors.primary || '#0084ff'],
+                    progressBackgroundColor: colors.surface || '#FFFFFF',
+                    progressViewOffset: 
+                      (activeTab === 'discover' || activeTab === 'video')
+                        ? Math.max(insets.top + 10, 0) // Android: Dùng safe area insets + offset nhỏ để icon hiển thị rõ
+                        : activeTab === 'following'
+                        ? Math.max(insets.top + 10, 0) // Android: Following tab
+                        : 0
+                  }
+              )}
             />
           }
           onScroll={handleScroll}
@@ -2336,24 +2044,25 @@ const PostsListScreen = () => {
               });
             });
           }}
-          contentContainerStyle={dynamicStyles.listContent}
+          contentContainerStyle={[
+            dynamicStyles.listContent,
+            { 
+              paddingTop: activeTab === 'following' 
+                ? Math.max(followingHeaderHeight + 48, 0) // Following: header + tabs height
+                : 0 // Discover/Video: ListHeaderComponent sẽ tự xử lý spacing
+            }
+          ]}
           ListHeaderComponent={
-            <View>
-              {/* Header - Cuộn theo nội dung */}
-              <View 
-                onLayout={(event) => {
-                  const { height } = event.nativeEvent.layout;
-                  if (height > 0) {
-                    setHeaderHeight(height);
-                  }
-                }}
-              >
-                {renderHeader()}
-              </View>
-              {activeTab === 'all' ? (
+            <View style={{ marginTop: 0, paddingTop: 0, marginBottom: 0 }}>
+              {(activeTab === 'discover' || activeTab === 'video') ? (
                 <>
                 <TouchableOpacity
-                  style={dynamicStyles.newPostSection}
+                  style={[
+                    dynamicStyles.newPostSection,
+                    {
+                      marginTop: Math.max(headerHeight + 48, 0), // Thêm marginTop để hiển thị dưới header + tabs (header ~72px + tabs ~48px)
+                    }
+                  ]}
                   onPress={() => navigation.navigate('CreatePost' as never)}
                   activeOpacity={0.7}
                 >
@@ -2423,95 +2132,131 @@ const PostsListScreen = () => {
         />
       )}
 
-      {/* Menu Modal */}
-      <Modal
-        visible={showMenu}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowMenu(false)}
-        statusBarTranslucent={true}
-      >
-        <Pressable
-          style={dynamicStyles.modalOverlay}
-          onPress={() => setShowMenu(false)}
+      {/* Menu Modal - Chỉ hiển thị khi dùng standalone (không có feedType prop) */}
+      {!feedType && (
+        <Modal
+          visible={showMenu}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowMenu(false)}
+          statusBarTranslucent={true}
         >
-          <Pressable 
-            style={[dynamicStyles.menuContainer, { backgroundColor: colors.surface }]}
-            onPress={() => {}} // Prevent closing when pressing on menu content
+          <Pressable
+            style={dynamicStyles.modalOverlay}
+            onPress={() => setShowMenu(false)}
           >
-            <View style={[dynamicStyles.menuHandle, { backgroundColor: colors.border }]} />
-            <View style={dynamicStyles.menuContent}>
-              <TouchableOpacity
-                style={[
-                  dynamicStyles.menuItem,
-                  activeTab === 'all' && { backgroundColor: colors.primary + '20' },
-                  { borderBottomColor: colors.border },
-                  isChangingTab && { opacity: 0.6 }
-                ]}
-                onPress={() => {
-                  if (isChangingTab) return;
-                  if (activeTab === 'all') {
+            <Pressable 
+              style={[dynamicStyles.menuContainer, { backgroundColor: colors.surface }]}
+              onPress={() => {}} // Prevent closing when pressing on menu content
+            >
+              <View style={[dynamicStyles.menuHandle, { backgroundColor: colors.border }]} />
+              <View style={dynamicStyles.menuContent}>
+                <TouchableOpacity
+                  style={[
+                    dynamicStyles.menuItem,
+                    activeTab === 'discover' && { backgroundColor: colors.primary + '20' },
+                    { borderBottomColor: colors.border },
+                    isChangingTab && { opacity: 0.6 }
+                  ]}
+                  onPress={() => {
+                    if (isChangingTab) return;
+                    if (activeTab === 'discover') {
+                      setShowMenu(false);
+                      return;
+                    }
+                    setIsChangingTab(true);
+                    if (setActiveTab) setActiveTab('discover');
                     setShowMenu(false);
-                    return;
-                  }
-                  setIsChangingTab(true);
-                  setActiveTab('all');
-                  setShowMenu(false);
-                  // Reset flag after a short delay
-                  setTimeout(() => {
-                    setIsChangingTab(false);
-                  }, 300);
-                }}
-                activeOpacity={0.7}
-                disabled={isChangingTab}
-              >
-                <Text style={[dynamicStyles.menuItemText, { 
-                  color: activeTab === 'all' ? colors.primary : colors.text,
-                  fontWeight: activeTab === 'all' ? '600' : '400'
-                }]}>
-                  Tất cả
-                </Text>
-                {activeTab === 'all' && (
-                  <MaterialCommunityIcons name="check" size={20} color={colors.primary} />
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  dynamicStyles.menuItem,
-                  activeTab === 'following' && { backgroundColor: colors.primary + '20' },
-                  isChangingTab && { opacity: 0.6 }
-                ]}
-                onPress={() => {
-                  if (isChangingTab) return;
-                  if (activeTab === 'following') {
+                    // Reset flag after a short delay
+                    setTimeout(() => {
+                      setIsChangingTab(false);
+                    }, 300);
+                  }}
+                  activeOpacity={0.7}
+                  disabled={isChangingTab}
+                >
+                  <Text style={[dynamicStyles.menuItemText, { 
+                    color: activeTab === 'discover' ? colors.primary : colors.text,
+                    fontWeight: activeTab === 'discover' ? '600' : '400'
+                  }]}>
+                    Dành cho bạn
+                  </Text>
+                  {activeTab === 'discover' && (
+                    <MaterialCommunityIcons name="check" size={20} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    dynamicStyles.menuItem,
+                    activeTab === 'following' && { backgroundColor: colors.primary + '20' },
+                    { borderBottomColor: colors.border },
+                    isChangingTab && { opacity: 0.6 }
+                  ]}
+                  onPress={() => {
+                    if (isChangingTab) return;
+                    if (activeTab === 'following') {
+                      setShowMenu(false);
+                      return;
+                    }
+                    setIsChangingTab(true);
+                    if (setActiveTab) setActiveTab('following');
                     setShowMenu(false);
-                    return;
-                  }
-                  setIsChangingTab(true);
-                  setActiveTab('following');
-                  setShowMenu(false);
-                  // Reset flag after a short delay
-                  setTimeout(() => {
-                    setIsChangingTab(false);
-                  }, 300);
-                }}
-                activeOpacity={0.7}
-                disabled={isChangingTab}
-              >
-                <Text style={[dynamicStyles.menuItemText, { 
-                  color: activeTab === 'following' ? colors.primary : colors.text,
-                  fontWeight: activeTab === 'following' ? '600' : '400'
-                }]}>
-                  Đang theo dõi
-                </Text>
-                {activeTab === 'following' && (
-                  <MaterialCommunityIcons name="check" size={20} color={colors.primary} />
-                )}
-              </TouchableOpacity>
-            </View>
+                    // Reset flag after a short delay
+                    setTimeout(() => {
+                      setIsChangingTab(false);
+                    }, 300);
+                  }}
+                  activeOpacity={0.7}
+                  disabled={isChangingTab}
+                >
+                  <Text style={[dynamicStyles.menuItemText, { 
+                    color: activeTab === 'following' ? colors.primary : colors.text,
+                    fontWeight: activeTab === 'following' ? '600' : '400'
+                  }]}>
+                    Đang theo dõi
+                  </Text>
+                  {activeTab === 'following' && (
+                    <MaterialCommunityIcons name="check" size={20} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    dynamicStyles.menuItem,
+                    activeTab === 'video' && { backgroundColor: colors.primary + '20' },
+                    isChangingTab && { opacity: 0.6 }
+                  ]}
+                  onPress={() => {
+                    if (isChangingTab) return;
+                    if (activeTab === 'video') {
+                      setShowMenu(false);
+                      return;
+                    }
+                    setIsChangingTab(true);
+                    if (setActiveTab) setActiveTab('video');
+                    setShowMenu(false);
+                    // Reset flag after a short delay
+                    setTimeout(() => {
+                      setIsChangingTab(false);
+                    }, 300);
+                  }}
+                  activeOpacity={0.7}
+                  disabled={isChangingTab}
+                >
+                  <Text style={[dynamicStyles.menuItemText, { 
+                    color: activeTab === 'video' ? colors.primary : colors.text,
+                    fontWeight: activeTab === 'video' ? '600' : '400'
+                  }]}>
+                    Video
+                  </Text>
+                  {activeTab === 'video' && (
+                    <MaterialCommunityIcons name="check" size={20} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
+        </Modal>
+      )}
 
       {/* Search Modal */}
       <Modal
@@ -2605,6 +2350,12 @@ const PostsListScreen = () => {
                 <FlatList
                   data={searchResults}
                   keyExtractor={(item) => item.id?.toString() || item.user_id?.toString() || Math.random().toString()}
+                  // Performance optimizations
+                  removeClippedSubviews={Platform.OS === 'android'}
+                  initialNumToRender={10}
+                  maxToRenderPerBatch={10}
+                  windowSize={5}
+                  updateCellsBatchingPeriod={50}
                   renderItem={({ item }) => {
                     const userId = item.id || item.user_id;
                     const userIdString = userId?.toString();
@@ -2677,47 +2428,23 @@ const PostsListScreen = () => {
                         {!isCurrentUser && (
                           <View style={dynamicStyles.searchResultActions}>
                             {/* Message Button */}
-                            <TouchableOpacity
-                              style={[
-                                dynamicStyles.searchResultButton,
-                                {
-                                  backgroundColor: '#0084ff',
-                                  borderColor: '#0084ff',
-                                  borderWidth: 0,
-                                }
-                              ]}
+                            <Button
+                              title="Nhắn tin"
                               onPress={() => {
                                 if (userIdString) {
                                   createConversationMutation.mutate(userIdString);
                                 }
                               }}
+                              variant="primary"
+                              size="small"
+                              loading={createConversationMutation.isPending}
                               disabled={createConversationMutation.isPending}
-                              activeOpacity={0.8}
-                            >
-                              <Text style={[
-                                dynamicStyles.searchResultButtonText,
-                                { 
-                                  color: '#FFFFFF'
-                                }
-                              ]}>
-                                Nhắn tin
-                              </Text>
-                            </TouchableOpacity>
+                              style={{ minWidth: 90 }}
+                            />
                             
                             {/* Follow/Unfollow Button */}
-                            <TouchableOpacity
-                              style={[
-                                dynamicStyles.searchResultButton,
-                                {
-                                  backgroundColor: isFollowingUser
-                                    ? (isDarkMode ? '#1a1a1a' : '#f0f0f0')
-                                    : '#0084ff',
-                                  borderColor: isFollowingUser
-                                    ? (colors.border || (isDarkMode ? '#333333' : '#E0E0E0'))
-                                    : '#0084ff',
-                                  borderWidth: 1,
-                                }
-                              ]}
+                            <Button
+                              title={isFollowingUser ? 'Đang theo dõi' : 'Theo dõi'}
                               onPress={() => {
                                 if (!userIdString) return;
                                 if (isFollowingUser) {
@@ -2726,20 +2453,12 @@ const PostsListScreen = () => {
                                   followMutation.mutate(userIdString);
                                 }
                               }}
+                              variant={isFollowingUser ? 'secondary' : 'primary'}
+                              size="small"
+                              loading={followMutation.isPending || unfollowMutation.isPending}
                               disabled={followMutation.isPending || unfollowMutation.isPending}
-                              activeOpacity={0.8}
-                            >
-                              <Text style={[
-                                dynamicStyles.searchResultButtonText,
-                                {
-                                  color: isFollowingUser
-                                    ? (colors.text || (isDarkMode ? '#FFFFFF' : '#333333'))
-                                    : '#FFFFFF'
-                                }
-                              ]}>
-                                {isFollowingUser ? 'Đang theo dõi' : 'Theo dõi'}
-                              </Text>
-                            </TouchableOpacity>
+                              style={{ minWidth: 90 }}
+                            />
                           </View>
                         )}
                       </View>
@@ -2753,7 +2472,7 @@ const PostsListScreen = () => {
         </Pressable>
       </Modal>
 
-      {/* Full Screen Image Viewer */}
+      {/* Full Screen Image Viewer - Legacy (backward compatible) */}
       <FullScreenImageViewer
         visible={showImageViewer}
         images={imageViewerImages}
@@ -2761,7 +2480,11 @@ const PostsListScreen = () => {
         onClose={() => setShowImageViewer(false)}
         postData={imageViewerPostData}
       />
+
+      {/* Lightbox - New implementation with animation */}
+      <Lightbox />
       </Animated.View>
+        </SafeAreaView>
       
       {/* Splash Screen khi chuyển sang Chat (giống Messenger) */}
       {showSplashScreen && (
@@ -2777,7 +2500,7 @@ const PostsListScreen = () => {
               opacity: splashOpacity,
             }}
           >
-            <SplashScreen />rr
+            <SplashScreen />
           </Animated.View>
         </Modal>
       )}
@@ -2793,7 +2516,7 @@ const PostsListScreen = () => {
         onClose={() => setShowReactionPicker(null)}
         position={reactionPickerPosition}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 

@@ -341,7 +341,7 @@ const Register = () => {
     <Container $isDark={isDarkMode}>
       <FormContainer $isDark={isDarkMode}>
         <Logo $isDark={isDarkMode}>
-          <div className="logo-icon"><img src={`${process.env.PUBLIC_URL || ''}/Zyea.jpg?v=2`} alt="Zyea+" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} /></div>
+          <div className="logo-icon"><img src={`${process.env.PUBLIC_URL || ''}/Zyea.jpg?v=3`} alt="Zyea+" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} /></div>
           <h1>Zyea+</h1>
           <p>Tạo tài khoản mới</p>
         </Logo>

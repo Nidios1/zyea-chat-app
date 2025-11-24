@@ -1,6 +1,7 @@
 const express = require('express');
 const { getConnection } = require('../config/database');
 const { createNotification } = require('./notifications');
+const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -131,9 +132,30 @@ router.get('/search/phone', async (req, res) => {
 });
 
 // Get user profile (must be before /:id route)
-router.get('/profile', (req, res) => {
-  console.log('Users profile endpoint - req.user:', req.user);
-  res.json(req.user);
+router.get('/profile', authenticateToken, async (req, res) => {
+  try {
+    console.log('Users profile endpoint - req.user:', req.user);
+    
+    // Fetch fresh user data from database to ensure role is included
+    const connection = getConnection();
+    const [users] = await connection.execute(
+      'SELECT id, username, email, full_name, avatar_url, cover_url, status, role FROM users WHERE id = ?',
+      [req.user.id]
+    );
+    
+    if (users.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    const userData = users[0];
+    console.log('Users profile - userData from DB:', userData);
+    console.log('Users profile - role:', userData.role);
+    
+    res.json(userData);
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
 // Get friends list (must be before /:id route to avoid conflict)

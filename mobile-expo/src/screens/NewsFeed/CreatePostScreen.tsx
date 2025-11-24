@@ -1,721 +1,550 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
-  ScrollView,
-  KeyboardAvoidingView,
-  Image,
   TextInput,
   TouchableOpacity,
+  ScrollView,
+  Image,
   Platform,
-  Dimensions,
   ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Text, Avatar } from 'react-native-paper';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Video, ResizeMode } from 'expo-av';
-import { launchImageLibrary, launchCamera } from '../../utils/imagePicker';
-import { newsfeedAPI, uploadAPI } from '../../utils/api';
 import { useNavigation } from '@react-navigation/native';
-import { useAlert } from '../../hooks/useAlert';
 import { useAuth } from '../../contexts/AuthContext';
-import { getInitials, getAvatarURL } from '../../utils/imageUtils';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
-import { PWATheme } from '../../config/PWATheme';
-
-const screenWidth = Dimensions.get('window').width;
+import { useTabBar } from '../../contexts/TabBarContext';
+import { newsfeedAPI, uploadAPI } from '../../utils/api';
+import { getAvatarURL, getInitials } from '../../utils/imageUtils';
+import { Avatar } from 'react-native-paper';
+import Toast from 'react-native-toast-message';
+import { useFocusEffect } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 
 const CreatePostScreen = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
   const { colors, isDarkMode } = useAppTheme();
-  const { showAlert, AlertComponent } = useAlert();
-  const [content, setContent] = useState('');
-  const [images, setImages] = useState<string[]>([]);
-  const [video, setVideo] = useState<{ uri: string; duration?: number } | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [uploadingVideo, setUploadingVideo] = useState(false);
-  const [privacy, setPrivacy] = useState<'public' | 'friends'>('public');
+  const { setIsVisible } = useTabBar();
+  const insets = useSafeAreaInsets();
   
-  // Giới hạn video ngắn: 60 giây
-  const MAX_VIDEO_DURATION = 60; // seconds
+  const [content, setContent] = useState('');
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Ẩn bottom tab bar khi vào màn hình CreatePost
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsVisible(false);
+      return () => {
+        setIsVisible(true);
+      };
+    }, [setIsVisible])
+  );
 
   const handlePickImage = async () => {
-    // Nếu đã có video, không cho chọn ảnh
-    if (video) {
-      showAlert('Thông báo', 'Vui lòng xóa video trước khi chọn ảnh');
-      return;
-    }
-    
     try {
-      const response = await launchImageLibrary({
-        mediaType: 'photo',
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Toast.show({
+          type: 'error',
+          text1: 'Cần cấp quyền truy cập thư viện ảnh',
+        });
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
         quality: 0.8,
-        selectionLimit: 5,
       });
-      if (response.assets) {
-        const newImages = response.assets.map((asset) => asset.uri!);
-        setImages([...images, ...newImages]);
+
+      if (!result.canceled && result.assets) {
+        const newImages = result.assets.map(asset => asset.uri);
+        setSelectedImages(prev => [...prev, ...newImages].slice(0, 4)); // Max 4 images like social-app-main
+        setSelectedVideo(null); // Clear video if images selected
       }
     } catch (error) {
-      console.log('Error picking image:', error);
+      console.error('Error picking image:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Không thể chọn ảnh',
+      });
     }
   };
 
   const handlePickVideo = async () => {
-    // Nếu đã có ảnh, không cho chọn video
-    if (images.length > 0) {
-      showAlert('Thông báo', 'Vui lòng xóa ảnh trước khi chọn video');
-      return;
-    }
-    
     try {
-      const response = await launchImageLibrary({
-        mediaType: 'video',
-        quality: 0.8,
-        selectionLimit: 1,
-      });
-      
-      if (response.assets && response.assets.length > 0) {
-        const videoAsset = response.assets[0];
-        const videoUri = videoAsset.uri;
-        
-        if (!videoUri) {
-          showAlert('Lỗi', 'Không thể lấy video');
-          return;
-        }
-        
-        // Lưu video - duration sẽ được check sau khi load vào preview
-        setVideo({ uri: videoUri });
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Toast.show({
+          type: 'error',
+          text1: 'Cần cấp quyền truy cập thư viện video',
+        });
+        return;
       }
-    } catch (error: any) {
-      console.log('Error picking video:', error);
-      if (error.message?.includes('Permission')) {
-        showAlert('Lỗi', 'Cần cấp quyền truy cập video');
-      }
-    }
-  };
 
-  const handleRecordVideo = async () => {
-    // Nếu đã có ảnh, không cho quay video
-    if (images.length > 0) {
-      showAlert('Thông báo', 'Vui lòng xóa ảnh trước khi quay video');
-      return;
-    }
-    
-    try {
-      const response = await launchCamera({
-        mediaType: 'video',
-        quality: 0.8,
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: false,
+        quality: 1,
       });
-      
-      if (response.assets && response.assets.length > 0) {
-        const videoAsset = response.assets[0];
-        const videoUri = videoAsset.uri;
-        
-        if (!videoUri) {
-          showAlert('Lỗi', 'Không thể lấy video');
-          return;
-        }
-        
-        // Lưu video - duration sẽ được check sau khi load vào preview
-        setVideo({ uri: videoUri });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setSelectedVideo(result.assets[0].uri);
+        setSelectedImages([]); // Clear images if video is selected
       }
-    } catch (error: any) {
-      console.log('Error recording video:', error);
-      if (error.message?.includes('Permission')) {
-        showAlert('Lỗi', 'Cần cấp quyền camera');
-      }
+    } catch (error) {
+      console.error('Error picking video:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Không thể chọn video',
+      });
     }
   };
 
   const handleRemoveImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleRemoveVideo = () => {
-    setVideo(null);
+    setSelectedVideo(null);
   };
 
-  // Ref để check video duration khi load
-  const videoRef = React.useRef<Video>(null);
+  const handleCancel = useCallback(() => {
+    navigation.goBack();
+  }, [navigation]);
 
-  const handleVideoLoad = async () => {
-    if (videoRef.current && video) {
-      try {
-        const status = await videoRef.current.getStatusAsync();
-        if (status.isLoaded && status.durationMillis) {
-          const durationSeconds = status.durationMillis / 1000;
-          
-          if (durationSeconds > MAX_VIDEO_DURATION) {
-            showAlert(
-              'Video quá dài',
-              `Video không được vượt quá ${MAX_VIDEO_DURATION} giây. Video của bạn dài ${Math.round(durationSeconds)} giây.`
-            );
-            setVideo(null);
-            return;
-          }
-          
-          setVideo({ ...video, duration: durationSeconds });
-        }
-      } catch (error) {
-        console.log('Could not check video duration:', error);
-      }
-    }
-  };
-
-  const handlePost = async () => {
-    if (!content.trim() && images.length === 0 && !video) {
-      showAlert('Đăng bài thất bại', 'Vui lòng nhập nội dung, chọn ảnh hoặc video');
+  const handleSubmit = async () => {
+    if (!content.trim() && selectedImages.length === 0 && !selectedVideo) {
+      Toast.show({
+        type: 'error',
+        text1: 'Vui lòng nhập nội dung hoặc chọn ảnh/video',
+      });
       return;
     }
 
-    setLoading(true);
-
+    setIsSubmitting(true);
     try {
-      // Upload images first (nếu có)
       let uploadedImageUrls: string[] = [];
       let uploadedVideoUrl: string | null = null;
 
-      if (images.length > 0) {
+      // Upload images first
+      if (selectedImages.length > 0) {
         try {
-          for (const imageUri of images) {
+          for (const imageUri of selectedImages) {
             const formData = new FormData();
+            const imageName = imageUri.split('/').pop() || 'image.jpg';
+            const imageType = imageUri.includes('.png') ? 'image/png' : 'image/jpeg';
+            
             formData.append('image', {
               uri: imageUri,
-              type: 'image/jpeg',
-              name: 'image.jpg',
+              type: imageType,
+              name: imageName,
             } as any);
 
             const uploadRes = await uploadAPI.uploadPostImage(formData);
-            console.log('Upload response:', uploadRes?.data);
-            
             if (uploadRes?.data?.url) {
               uploadedImageUrls.push(uploadRes.data.url);
             } else {
-              console.error('No URL in upload response:', uploadRes?.data);
               throw new Error('Không nhận được URL ảnh từ server');
             }
           }
         } catch (uploadError: any) {
-          console.error('Upload error details:', {
-            message: uploadError.message,
-            response: uploadError.response?.data,
-            status: uploadError.response?.status,
-          });
-          setLoading(false);
+          setIsSubmitting(false);
           const errorMsg = uploadError.response?.data?.message || uploadError.message || 'Không thể tải ảnh lên. Vui lòng thử lại.';
-          showAlert('Tải ảnh thất bại', errorMsg);
+          Toast.show({
+            type: 'error',
+            text1: 'Tải ảnh thất bại',
+            text2: errorMsg,
+          });
           return;
         }
       }
 
-      // Upload video (nếu có)
-      if (video) {
-        setUploadingVideo(true);
+      // Upload video if exists
+      if (selectedVideo) {
         try {
           const formData = new FormData();
-          const videoType = video.uri.includes('.mp4') ? 'video/mp4' : 'video/quicktime';
-          const videoName = video.uri.split('/').pop() || 'video.mp4';
+          const videoType = selectedVideo.includes('.mp4') ? 'video/mp4' : 'video/quicktime';
+          const videoName = selectedVideo.split('/').pop() || 'video.mp4';
           
           formData.append('video', {
-            uri: video.uri,
+            uri: selectedVideo,
             type: videoType,
             name: videoName,
           } as any);
 
           const uploadRes = await uploadAPI.uploadVideo(formData);
-          console.log('Video upload response:', uploadRes?.data);
           
           if (uploadRes?.data?.url) {
             uploadedVideoUrl = uploadRes.data.url;
           } else {
-            console.error('No URL in video upload response:', uploadRes?.data);
             throw new Error('Không nhận được URL video từ server');
           }
         } catch (uploadError: any) {
-          console.error('Video upload error details:', {
-            message: uploadError.message,
-            response: uploadError.response?.data,
-            status: uploadError.response?.status,
-          });
-          setLoading(false);
-          setUploadingVideo(false);
+          setIsSubmitting(false);
           const errorMsg = uploadError.response?.data?.message || uploadError.message || 'Không thể tải video lên. Vui lòng thử lại.';
-          showAlert('Tải video thất bại', errorMsg);
+          Toast.show({
+            type: 'error',
+            text1: 'Tải video thất bại',
+            text2: errorMsg,
+          });
           return;
-        } finally {
-          setUploadingVideo(false);
         }
       }
 
-      // Create post
-      console.log('Creating post with content:', content?.substring(0, 50), 'images count:', uploadedImageUrls.length, 'video:', !!uploadedVideoUrl);
-      const createRes = await newsfeedAPI.createPost(content, uploadedImageUrls, uploadedVideoUrl);
-      console.log('Post created successfully:', createRes?.data);
+      // Create post with uploaded URLs
+      await newsfeedAPI.createPost(
+        content.trim(),
+        uploadedImageUrls.length > 0 ? uploadedImageUrls : undefined,
+        uploadedVideoUrl || undefined
+      );
 
-      showAlert('Đăng bài thành công', 'Đã đăng bài viết của bạn', () => {
-        navigation.goBack();
+      Toast.show({
+        type: 'success',
+        text1: 'Đăng bài thành công!',
       });
+
+      setContent('');
+      setSelectedImages([]);
+      setSelectedVideo(null);
+      navigation.goBack();
     } catch (error: any) {
-      console.error('Create post error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
+      console.error('Error creating post:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Không thể đăng bài',
+        text2: error?.response?.data?.message || error?.message || 'Vui lòng thử lại',
       });
-      const errorMessage = error.response?.data?.message || error.message || 'Đăng bài thất bại';
-      showAlert('Đăng bài thất bại', errorMessage);
     } finally {
-      setLoading(false);
-      setUploadingVideo(false);
+      setIsSubmitting(false);
     }
   };
 
-  const canPost = content.trim().length > 0 || images.length > 0 || !!video;
-  const userName = user?.full_name || user?.username || 'User';
+  const canPost = content.trim().length > 0 || selectedImages.length > 0 || !!selectedVideo;
+  const isMaxImages = selectedImages.length >= 4;
+  const isMaxVideos = !!selectedVideo;
+  const isMediaSelectionDisabled = isMaxImages || isMaxVideos;
+  
+  const styles = createStyles(colors, isDarkMode, insets);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      {/* Header */}
-      <View style={[styles.header, { 
-        borderBottomColor: colors.border,
-        backgroundColor: colors.surface,
-      }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.cancelButton}>
-          <Text style={[styles.cancelText, { color: colors.primary }]}>Hủy</Text>
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Zyea+ mới</Text>
-        <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.headerIcon}>
-            <MaterialCommunityIcons name="file-document-outline" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIcon}>
-            <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.text} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
+    <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 10 : 20}
       >
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {/* User Info Section */}
-          <View style={styles.userSection}>
-            {user?.avatar_url ? (
-              <Image
-                source={{ uri: getAvatarURL(user.avatar_url) }}
-                style={styles.userAvatar}
-              />
-            ) : (
-              <Avatar.Text
-                size={40}
-                label={getInitials(userName)}
-                style={styles.userAvatar}
-              />
-            )}
-            <View style={styles.userInfo}>
-              <Text style={[styles.userName, { color: colors.text }]}>{userName}</Text>
-              <TouchableOpacity style={styles.topicButton}>
-                <Text style={[styles.topicText, { color: colors.textSecondary }]}>Thêm chủ đề</Text>
-                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Content Input */}
-          <View style={styles.contentSection}>
-            <TextInput
-              placeholder="Có gì mới?"
-              placeholderTextColor={colors.textSecondary}
-              value={content}
-              onChangeText={setContent}
-              multiline
-              style={[styles.textInput, { color: colors.text }]}
-              textAlignVertical="top"
-              autoFocus
-            />
-
-            {/* Thread Line */}
-            <View style={styles.threadLine}>
-              <View style={[styles.threadVerticalLine, { backgroundColor: colors.border }]} />
-              <View style={styles.threadAvatar}>
-                <Avatar.Text
-                  size={24}
-                  label={getInitials(userName)}
-                  style={{ backgroundColor: colors.border }}
-                  color={colors.text}
-                />
-                <Text style={[styles.threadText, { color: colors.textSecondary }]}>Thêm vào thread</Text>
+        {/* Header - Giống y hệt social-app-main */}
+        <View style={styles.topbarInner}>
+          <TouchableOpacity
+            onPress={handleCancel}
+            style={styles.cancelButton}
+            accessibilityLabel="Hủy"
+          >
+            <Text style={styles.cancelButtonText}>Hủy</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.headerSpacer} />
+          
+          {isSubmitting ? (
+            <>
+              <Text style={styles.publishingStage}>Đang đăng...</Text>
+              <View style={styles.postBtn}>
+                <ActivityIndicator size="small" color={colors.primary || '#0084ff'} />
               </View>
+            </>
+          ) : (
+            <TouchableOpacity
+              onPress={handleSubmit}
+              style={[styles.postBtn, !canPost && styles.postBtnDisabled]}
+              disabled={!canPost}
+              accessibilityLabel="Đăng bài"
+            >
+              <Text style={[styles.postBtnText, !canPost && styles.postBtnTextDisabled]}>
+                Đăng
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Post Container - Giống y hệt social-app-main */}
+          <View style={styles.postContainer}>
+            <View style={styles.avatarWrapper}>
+              {user?.avatar_url ? (
+                <Image
+                  source={{ uri: getAvatarURL(user.avatar_url) }}
+                  style={styles.avatar}
+                />
+              ) : (
+                <Avatar.Text
+                  size={42}
+                  label={getInitials(user?.full_name || user?.username || 'U')}
+                  style={styles.avatar}
+                />
+              )}
+            </View>
+            
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Bạn đang nghĩ gì?"
+                placeholderTextColor={colors.textSecondary || '#999'}
+                value={content}
+                onChangeText={setContent}
+                multiline
+                textAlignVertical="top"
+                autoFocus
+              />
             </View>
           </View>
 
-          {/* Images Preview */}
-          {images.length > 0 && (
-            <View style={styles.imagesPreview}>
-              {images.map((uri, index) => (
-                <View key={index} style={styles.imagePreviewContainer}>
-                  <Image source={{ uri }} style={styles.previewImage} resizeMode="cover" />
+          {/* Gallery - Giống social-app-main */}
+          {selectedImages.length > 0 && (
+            <View style={styles.gallery}>
+              {selectedImages.map((uri, index) => (
+                <View key={index} style={styles.galleryItem}>
+                  <Image source={{ uri }} style={styles.galleryImage} />
                   <TouchableOpacity
-                    style={styles.removeImageButton}
+                    style={styles.removeImageBtn}
                     onPress={() => handleRemoveImage(index)}
+                    accessibilityLabel="Xóa ảnh"
                   >
-                    <MaterialCommunityIcons name="close-circle" size={28} color="#FFFFFF" />
+                    <MaterialCommunityIcons name="close-circle" size={24} color="#FFFFFF" />
                   </TouchableOpacity>
                 </View>
               ))}
             </View>
           )}
 
-          {/* Video Preview */}
-          {video && (
-            <View style={styles.videoPreviewContainer}>
-              <Video
-                ref={videoRef}
-                source={{ uri: video.uri }}
-                style={styles.previewVideo}
-                resizeMode={ResizeMode.COVER}
-                shouldPlay={false}
-                useNativeControls
-                isMuted={false}
-                onLoad={handleVideoLoad}
-              />
+          {/* Video Preview - Giống social-app-main */}
+          {selectedVideo && (
+            <View style={styles.videoContainer}>
+              <Image source={{ uri: selectedVideo }} style={styles.videoThumbnail} />
               <TouchableOpacity
-                style={styles.removeVideoButton}
+                style={styles.removeVideoBtn}
                 onPress={handleRemoveVideo}
+                accessibilityLabel="Xóa video"
               >
                 <MaterialCommunityIcons name="close-circle" size={28} color="#FFFFFF" />
               </TouchableOpacity>
-              {video.duration && (
-                <View style={styles.videoDurationBadge}>
-                  <Text style={styles.videoDurationText}>
-                    {Math.round(video.duration)}s
-                  </Text>
-                </View>
-              )}
-              {uploadingVideo && (
-                <View style={styles.uploadingOverlay}>
-                  <ActivityIndicator size="large" color="#FFFFFF" />
-                  <Text style={styles.uploadingText}>Đang tải video...</Text>
-                </View>
-              )}
             </View>
           )}
 
-          {/* Attachment Icons */}
-          <View style={styles.attachmentBar}>
-            <TouchableOpacity 
-              style={[styles.attachmentButton, video && styles.attachmentButtonDisabled]} 
-              onPress={handlePickImage}
-              disabled={!!video}
-            >
-              <MaterialCommunityIcons 
-                name="image-outline" 
-                size={24} 
-                color={video ? colors.border : colors.textSecondary} 
-              />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.attachmentButton, images.length > 0 && styles.attachmentButtonDisabled]} 
-              onPress={handlePickVideo}
-              disabled={images.length > 0}
-            >
-              <MaterialCommunityIcons 
-                name="video-outline" 
-                size={24} 
-                color={images.length > 0 ? colors.border : colors.textSecondary} 
-              />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.attachmentButton, images.length > 0 && styles.attachmentButtonDisabled]} 
-              onPress={handleRecordVideo}
-              disabled={images.length > 0}
-            >
-              <MaterialCommunityIcons 
-                name="video-plus-outline" 
-                size={24} 
-                color={images.length > 0 ? colors.border : colors.textSecondary} 
-              />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.attachmentButton}>
-              <MaterialCommunityIcons name="animation-outline" size={24} color={colors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.attachmentButton}>
-              <MaterialCommunityIcons name="file-document-outline" size={24} color={colors.textSecondary} />
-            </TouchableOpacity>
+          {/* Footer - Giống y hệt social-app-main */}
+          <View style={styles.footer}>
+            <View style={styles.footerLeft}>
+              <TouchableOpacity
+                style={[styles.footerButton, isMediaSelectionDisabled && styles.footerButtonDisabled]}
+                onPress={handlePickImage}
+                disabled={isMediaSelectionDisabled}
+                accessibilityLabel="Chọn ảnh"
+              >
+                <MaterialCommunityIcons 
+                  name="image-multiple" 
+                  size={24} 
+                  color={isMediaSelectionDisabled ? (colors.textSecondary || '#999') : (colors.primary || '#0084ff')} 
+                />
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.footerButton, isMediaSelectionDisabled && styles.footerButtonDisabled]}
+                onPress={handlePickVideo}
+                disabled={isMediaSelectionDisabled}
+                accessibilityLabel="Chọn video"
+              >
+                <MaterialCommunityIcons 
+                  name="video" 
+                  size={24} 
+                  color={isMediaSelectionDisabled ? (colors.textSecondary || '#999') : (colors.primary || '#0084ff')} 
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
-
-        {/* Bottom Action Bar */}
-        <View style={[styles.bottomBar, { 
-          borderTopColor: colors.border, 
-          backgroundColor: colors.surface 
-        }]}>
-          <Text style={[styles.privacyText, { color: colors.textSecondary }]}>
-            {privacy === 'public'
-              ? 'Bất kỳ ai cũng có thể trả lời và trích dẫn'
-              : 'Chỉ bạn bè có thể trả lời'}
-          </Text>
-          <TouchableOpacity
-            style={[styles.privacyToggle, { backgroundColor: colors.border }]}
-            onPress={() => setPrivacy(privacy === 'public' ? 'friends' : 'public')}
-          >
-            <View style={[
-              styles.toggleCircle,
-              {
-                backgroundColor: privacy === 'public' ? colors.surface : colors.text,
-                alignSelf: privacy === 'public' ? 'flex-start' : 'flex-end',
-              }
-            ]} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.postButton, 
-              { 
-                backgroundColor: canPost && !loading ? colors.primary : colors.border,
-                opacity: canPost && !loading ? 1 : 0.5 
-              }
-            ]}
-            onPress={handlePost}
-            disabled={!canPost || loading}
-          >
-            <Text style={[styles.postButtonText, { 
-              color: canPost && !loading ? '#FFFFFF' : colors.textSecondary 
-            }]}>
-              {loading ? (uploadingVideo ? 'Đang tải video...' : 'Đang đăng...') : 'Đăng'}
-            </Text>
-          </TouchableOpacity>
-        </View>
       </KeyboardAvoidingView>
-      <AlertComponent />
     </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: any, isDarkMode: boolean, insets: any) => StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  cancelButton: {
-    paddingVertical: 4,
-  },
-  cancelText: {
-    fontSize: 16,
-    fontWeight: '400',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  headerIcon: {
-    padding: 4,
+    backgroundColor: colors.background || (isDarkMode ? '#000000' : '#FFFFFF'),
   },
   keyboardView: {
     flex: 1,
   },
+  // Header styles - Giống y hệt social-app-main
+  topbarInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    height: 54,
+    gap: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border || (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'),
+  },
+  cancelButton: {
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingLeft: 7,
+    paddingRight: 7,
+  },
+  cancelButtonText: {
+    fontSize: 17,
+    color: colors.primary || '#0084ff',
+    fontWeight: '400',
+  },
+  headerSpacer: {
+    flex: 1,
+  },
+  publishingStage: {
+    fontSize: 15,
+    color: colors.textSecondary || '#999',
+    marginRight: 12,
+  },
+  postBtn: {
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 6,
+    marginLeft: 12,
+    backgroundColor: colors.primary || '#0084ff',
+    minWidth: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postBtnDisabled: {
+    backgroundColor: isDarkMode 
+      ? 'rgba(255, 255, 255, 0.2)' // Tăng opacity để rõ hơn trong dark mode
+      : 'rgba(0, 0, 0, 0.1)',
+  },
+  postBtnText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  postBtnTextDisabled: {
+    color: isDarkMode 
+      ? 'rgba(255, 255, 255, 0.6)' // Tăng opacity text để rõ hơn
+      : (colors.textSecondary || '#999'),
+  },
   scrollView: {
     flex: 1,
   },
-  userSection: {
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  // Post container - Giống y hệt social-app-main (mx_lg = 16, mb_sm = 8)
+  postContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
+    marginHorizontal: 16, // mx_lg
+    marginBottom: 8, // mb_sm
+    gap: 12,
   },
-  userAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
+  avatarWrapper: {
+    marginTop: 4, // mt_xs
   },
-  userInfo: {
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+  },
+  inputWrapper: {
     flex: 1,
-  },
-  userName: {
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  topicButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  topicText: {
-    fontSize: 14,
-  },
-  contentSection: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingTop: 4, // pt_xs
   },
   textInput: {
-    fontSize: 16,
+    fontSize: 17,
     lineHeight: 24,
-    minHeight: 120,
+    color: colors.text || (isDarkMode ? '#FFFFFF' : '#000000'),
+    minHeight: 100,
     padding: 0,
   },
-  threadLine: {
-    marginTop: 24,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  threadVerticalLine: {
-    width: 2,
-    height: 40,
-    marginLeft: 19,
-    marginRight: 12,
-  },
-  threadAvatar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  threadText: {
-    fontSize: 14,
-  },
-  imagesPreview: {
+  // Gallery - Giống social-app-main
+  gallery: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    marginTop: 12,
     gap: 8,
   },
-  imagePreviewContainer: {
+  galleryItem: {
     position: 'relative',
-    width: (screenWidth - 40) / 3,
+    width: '31%',
     aspectRatio: 1,
     borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: '#000000', // Preview background should be dark for images
   },
-  previewImage: {
+  galleryImage: {
     width: '100%',
     height: '100%',
   },
-  removeImageButton: {
+  removeImageBtn: {
     position: 'absolute',
     top: 4,
     right: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 14,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 12,
+    padding: 2,
   },
-  attachmentBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 16,
-  },
-  attachmentButton: {
-    padding: 4,
-  },
-  attachmentButtonDisabled: {
-    opacity: 0.5,
-  },
-  videoPreviewContainer: {
+  // Video - Giống social-app-main
+  videoContainer: {
     position: 'relative',
-    width: screenWidth - 32,
-    height: 300,
+    width: '100%',
     marginHorizontal: 16,
-    marginBottom: 16,
+    marginTop: 12,
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#000000',
+    aspectRatio: 16 / 9,
+    backgroundColor: '#000',
   },
-  previewVideo: {
+  videoThumbnail: {
     width: '100%',
     height: '100%',
   },
-  removeVideoButton: {
+  removeVideoBtn: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     borderRadius: 14,
-    zIndex: 10,
+    padding: 4,
   },
-  videoDurationBadge: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  videoDurationText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  uploadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 20,
-  },
-  uploadingText: {
-    color: '#FFFFFF',
-    marginTop: 12,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  bottomBar: {
+  // Footer - Giống y hệt social-app-main
+  footer: {
     flexDirection: 'row',
+    paddingVertical: 4,
+    paddingLeft: 7,
+    paddingRight: 16,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border || (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'),
+    marginTop: 16,
+    backgroundColor: colors.background || (isDarkMode ? '#000000' : '#FFFFFF'),
   },
-  privacyText: {
-    flex: 1,
-    fontSize: 13,
-    marginRight: 12,
-  },
-  privacyToggle: {
-    width: 50,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    paddingHorizontal: 2,
-    marginRight: 12,
-  },
-  toggleCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-  },
-  postButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-    minWidth: 80,
+  footerLeft: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
   },
-  postButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
+  footerButton: {
+    padding: 12, // p_sm
+    borderRadius: 20, // rounded-full
+  },
+  footerButtonDisabled: {
+    opacity: 0.5,
   },
 });
 

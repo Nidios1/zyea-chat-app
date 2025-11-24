@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,12 +6,20 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
   Text,
+  Animated,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import ReactionBar from './ReactionBar';
 import { formatMessageTime } from '../../utils/dateUtils';
+// Haptics is optional
+let Haptics: any = null;
+try {
+  Haptics = require('expo-haptics');
+} catch {
+  // Haptics not available
+}
 
 interface MessageContextMenuProps {
   visible: boolean;
@@ -22,6 +30,8 @@ interface MessageContextMenuProps {
     full_name?: string;
     username?: string;
     reactions?: any;
+    message_type?: string;
+    type?: string;
   } | null;
   position?: { x: number; y: number };
   isOwn?: boolean;
@@ -37,6 +47,8 @@ interface MessageContextMenuProps {
   onDelete?: () => void;
   onEdit?: () => void;
   onDeleteRequest?: () => void; // Trigger delete dialog instead of direct delete
+  onDeleteSticker?: () => void; // Admin: Delete sticker from pack
+  isAdmin?: boolean; // Check if user is admin
 }
 
 interface MenuItemData {
@@ -63,8 +75,52 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
   onDelete,
   onEdit,
   onDeleteRequest,
+  onDeleteSticker,
+  isAdmin = false,
 }) => {
   const { isDarkMode, colors } = useTheme();
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMountedRef.current) return;
+
+    if (visible) {
+      // Haptic feedback khi mở menu
+      if (Haptics) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      
+      // Animation khi mở - mượt mà hơn với spring animation
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 65,
+          friction: 8,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      // Reset animation khi đóng
+      if (isMountedRef.current) {
+        scaleAnim.setValue(0);
+        opacityAnim.setValue(0);
+      }
+    }
+  }, [visible]);
 
   if (!visible || !message) return null;
 
@@ -85,25 +141,15 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
   const reactionCount = getReactionCount();
 
   const menuItems: MenuItemData[] = [];
+  const messageType = message?.message_type || message?.type;
+  const isSticker = messageType === 'sticker';
 
   if (isOwn) {
-    // Menu cho tin nhắn của mình
-    // Chỉnh sửa
-    if (onEdit) {
-      menuItems.push({
-        label: 'Chỉnh sửa',
-        icon: 'pencil',
-        onPress: () => {
-          onEdit();
-          onClose();
-        },
-      });
-    }
-
-    // Phản hồi
+    // Menu cho tin nhắn của mình - giống Telegram
+    // Trả lời
     if (onReply) {
       menuItems.push({
-        label: 'Phản hồi',
+        label: 'Trả lời',
         icon: 'reply',
         onPress: () => {
           onReply();
@@ -112,13 +158,49 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
       });
     }
 
-    // Sao chép
-    if (onCopy) {
+    // Sao chép - không hiển thị cho sticker
+    if (onCopy && messageType !== 'sticker') {
       menuItems.push({
         label: 'Sao chép',
         icon: 'content-copy',
         onPress: () => {
           onCopy();
+          onClose();
+        },
+      });
+    }
+
+    // Sửa
+    if (onEdit) {
+      menuItems.push({
+        label: 'Sửa',
+        icon: 'pencil',
+        onPress: () => {
+          onEdit();
+          onClose();
+        },
+      });
+    }
+
+    // Ghim
+    if (onPin) {
+      menuItems.push({
+        label: 'Ghim',
+        icon: 'pin',
+        onPress: () => {
+          onPin();
+          onClose();
+        },
+      });
+    }
+
+    // Chuyển tiếp
+    if (onForward) {
+      menuItems.push({
+        label: 'Chuyển tiếp',
+        icon: 'share',
+        onPress: () => {
+          onForward();
           onClose();
         },
       });
@@ -130,6 +212,19 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
       icon: '',
       onPress: () => {},
     });
+
+    // Admin: Xóa sticker (chỉ hiển thị cho sticker messages và admin)
+    if (isSticker && isAdmin && onDeleteSticker) {
+      menuItems.push({
+        label: 'Xóa sticker',
+        icon: 'delete-outline',
+        danger: true,
+        onPress: () => {
+          onDeleteSticker();
+          onClose();
+        },
+      });
+    }
 
     // Xóa - trigger dialog
     if (onDeleteRequest) {
@@ -143,12 +238,24 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
         },
       });
     }
+
+    // Chọn
+    if (onSelect) {
+      menuItems.push({
+        label: 'Chọn',
+        icon: 'check-circle',
+        onPress: () => {
+          onSelect();
+          onClose();
+        },
+      });
+    }
   } else {
-    // Menu cho tin nhắn của người khác
-    // Phản hồi
+    // Menu cho tin nhắn của người khác - giống Telegram
+    // Trả lời
     if (onReply) {
       menuItems.push({
-        label: 'Phản hồi',
+        label: 'Trả lời',
         icon: 'reply',
         onPress: () => {
           onReply();
@@ -157,8 +264,8 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
       });
     }
 
-    // Sao chép
-    if (onCopy) {
+    // Sao chép - không hiển thị cho sticker
+    if (onCopy && messageType !== 'sticker') {
       menuItems.push({
         label: 'Sao chép',
         icon: 'content-copy',
@@ -169,16 +276,29 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
       });
     }
 
-    // Dịch (Translate) - giống Facebook
-    menuItems.push({
-      label: 'Dịch',
-      icon: 'translate',
-      onPress: () => {
-        // TODO: Implement translate functionality
-        console.log('Translate message:', message.content);
-        onClose();
-      },
-    });
+    // Ghim
+    if (onPin) {
+      menuItems.push({
+        label: 'Ghim',
+        icon: 'pin',
+        onPress: () => {
+          onPin();
+          onClose();
+        },
+      });
+    }
+
+    // Chuyển tiếp
+    if (onForward) {
+      menuItems.push({
+        label: 'Chuyển tiếp',
+        icon: 'share',
+        onPress: () => {
+          onForward();
+          onClose();
+        },
+      });
+    }
 
     // Separator
     menuItems.push({
@@ -187,22 +307,62 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
       onPress: () => {},
     });
 
-    // Khác (Other) - giống Facebook
-    menuItems.push({
-      label: 'Khác',
-      icon: 'dots-horizontal-circle-outline',
-      onPress: () => {
-        // TODO: Show more options
-        onClose();
-      },
-    });
+    // Admin: Xóa sticker (chỉ hiển thị cho sticker messages và admin)
+    if (isSticker && isAdmin && onDeleteSticker) {
+      menuItems.push({
+        label: 'Xóa sticker',
+        icon: 'delete-outline',
+        danger: true,
+        onPress: () => {
+          onDeleteSticker();
+          onClose();
+        },
+      });
+    }
+
+    // Xóa (chỉ cho admin hoặc owner)
+    if (onDeleteRequest) {
+      menuItems.push({
+        label: 'Xóa',
+        icon: 'delete',
+        danger: true,
+        onPress: () => {
+          onDeleteRequest();
+          onClose();
+        },
+      });
+    }
+
+    // Chọn
+    if (onSelect) {
+      menuItems.push({
+        label: 'Chọn',
+        icon: 'check-circle',
+        onPress: () => {
+          onSelect();
+          onClose();
+        },
+      });
+    }
   }
 
   const handleReactionSelect = (emoji: string) => {
+    // Haptic feedback khi chọn reaction
+    if (Haptics) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
     if (onReaction) {
       onReaction(emoji);
     }
     onClose();
+  };
+
+  const handleMenuItemPress = (onPress: () => void) => {
+    // Haptic feedback khi chọn menu item
+    if (Haptics) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    onPress();
   };
 
   return (
@@ -210,10 +370,25 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={() => {
+        if (isMountedRef.current) {
+          onClose();
+        }
+      }}
     >
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.overlay}>
+      <TouchableWithoutFeedback onPress={() => {
+        if (isMountedRef.current) {
+          onClose();
+        }
+      }}>
+        <Animated.View 
+          style={[
+            styles.overlay,
+            {
+              opacity: opacityAnim,
+            }
+          ]}
+        >
           {/* Blur Background - tạo hiệu ứng mờ cho nền */}
           <BlurView
             intensity={80}
@@ -228,7 +403,14 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
             ]} 
           />
           <TouchableWithoutFeedback>
-            <View style={styles.container}>
+            <Animated.View 
+              style={[
+                styles.container,
+                {
+                  transform: [{ scale: scaleAnim }],
+                }
+              ]}
+            >
               {/* Reaction Bar - phần riêng bo tròn ở trên */}
               {!isOwn && onReaction && (
                 <View
@@ -246,41 +428,73 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
                 </View>
               )}
 
-              {/* Message Preview - phần riêng ở giữa */}
-              <View
-                style={[
-                  styles.messageSection,
-                  {
-                    backgroundColor: isDarkMode ? '#2a2a2b' : '#ffffff',
-                  },
-                ]}
-              >
+              {/* Message Preview - hiển thị nội dung tin nhắn */}
+              {(message.content && (message.message_type !== 'sticker' && message.type !== 'sticker')) && (
                 <View
                   style={[
-                    styles.messageBubble,
-                    { 
-                      backgroundColor: isDarkMode ? '#3a3a3b' : '#e9ecef',
+                    styles.messageSection,
+                    {
+                      backgroundColor: isDarkMode ? 'rgba(58, 58, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)',
                     },
                   ]}
                 >
-                  <Text
+                  <View
                     style={[
-                      styles.messageContent,
-                      { color: colors.text },
+                      styles.messageBubble,
+                      { 
+                        backgroundColor: isDarkMode ? 'rgba(78, 78, 79, 0.8)' : 'rgba(240, 242, 245, 0.9)',
+                      },
                     ]}
-                    numberOfLines={3}
                   >
-                    {message.content}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.messageContent,
+                        { color: isDarkMode ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.8)' },
+                      ]}
+                      numberOfLines={3}
+                    >
+                      {message.content}
+                    </Text>
+                  </View>
                 </View>
-              </View>
+              )}
+              
+              {/* Hiển thị "Sticker" nếu là sticker */}
+              {((message.message_type === 'sticker' || message.type === 'sticker')) && (
+                <View
+                  style={[
+                    styles.messageSection,
+                    {
+                      backgroundColor: isDarkMode ? 'rgba(58, 58, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.messageBubble,
+                      { 
+                        backgroundColor: isDarkMode ? 'rgba(78, 78, 79, 0.8)' : 'rgba(240, 242, 245, 0.9)',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.messageContent,
+                        { color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)' },
+                      ]}
+                    >
+                      Sticker
+                    </Text>
+                  </View>
+                </View>
+              )}
 
               {/* Menu Items - bảng riêng bo tròn ở dưới */}
               <View
                 style={[
                   styles.menuItemsSection,
                   {
-                    backgroundColor: isDarkMode ? '#2a2a2b' : '#ffffff',
+                    backgroundColor: isDarkMode ? 'rgba(58, 58, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)',
                   },
                 ]}
               >
@@ -292,7 +506,7 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
                         key={index}
                         style={[
                           styles.separator,
-                          { backgroundColor: colors.border },
+                          { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' },
                         ]}
                       />
                     );
@@ -305,34 +519,35 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
                         styles.menuItem,
                         index < menuItems.length - 1 &&
                           menuItems[index + 1].label !== '' && {
-                            borderBottomColor: colors.border,
-                            borderBottomWidth: 1,
+                            borderBottomColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                            borderBottomWidth: 0.5,
                           },
                         item.danger && { opacity: 1 },
                       ]}
-                      onPress={item.onPress}
+                      onPress={() => handleMenuItemPress(item.onPress)}
                       activeOpacity={0.7}
                     >
+                      <MaterialCommunityIcons
+                        name={item.icon as any}
+                        size={22}
+                        color={item.danger ? '#ff3b30' : (isDarkMode ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.8)')}
+                        style={styles.menuItemIcon}
+                      />
                       <Text
                         style={[
                           styles.menuItemText,
-                          { color: item.danger ? '#e74c3c' : colors.text },
+                          { color: item.danger ? '#ff3b30' : (isDarkMode ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.9)') },
                         ]}
                       >
                         {item.label}
                       </Text>
-                      <MaterialCommunityIcons
-                        name={item.icon as any}
-                        size={20}
-                        color={item.danger ? '#e74c3c' : colors.textSecondary}
-                      />
                     </TouchableOpacity>
                   );
                 })}
               </View>
-            </View>
+            </Animated.View>
           </TouchableWithoutFeedback>
-        </View>
+        </Animated.View>
       </TouchableWithoutFeedback>
     </Modal>
   );
@@ -348,7 +563,7 @@ const styles = StyleSheet.create({
     width: '85%',
     maxWidth: 320,
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   reactionBarSection: {
     width: '100%',
@@ -365,9 +580,9 @@ const styles = StyleSheet.create({
   },
   messageSection: {
     width: '100%',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -386,37 +601,41 @@ const styles = StyleSheet.create({
   },
   menuItemsSection: {
     width: '100%',
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   separator: {
-    height: 1,
-    marginVertical: 4,
-    marginHorizontal: 16,
+    height: 0.5,
+    marginVertical: 0,
+    marginHorizontal: 0,
   },
   messageContent: {
     fontSize: 14,
     lineHeight: 20,
+    fontWeight: '400',
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 14,
+    minHeight: 48,
+  },
+  menuItemIcon: {
+    marginRight: 12,
   },
   menuItemText: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
+    fontSize: 16,
+    fontWeight: '400',
   },
 });
 

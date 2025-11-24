@@ -1,0 +1,57 @@
+services:
+  # MySQL Database với data persistence
+  mysql:
+    image: mysql:8.0
+    container_name: zalo-clone-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-zalo_clone}
+      MYSQL_USER: ${MYSQL_USER:-zalo_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-zalo_password}
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-p${MYSQL_ROOT_PASSWORD:-root}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - zalo-clone-network
+
+  # Redis Cache với data persistence (optional)
+  redis:
+    image: redis:7.0-alpine
+    container_name: zalo-clone-redis
+    command: redis-server --appendonly yes --save 60 1 --loglevel warning
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli ping | grep PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - zalo-clone-network
+
+volumes:
+  mysql_data:
+    driver: local
+    name: zalo-clone-mysql-data
+  redis_data:
+    driver: local
+    name: zalo-clone-redis-data
+
+networks:
+  zalo-clone-network:
+    driver: bridge
+    name: zalo-clone-network
+

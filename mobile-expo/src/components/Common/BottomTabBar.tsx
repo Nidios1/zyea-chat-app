@@ -7,18 +7,23 @@ import {
   Platform,
   Animated,
   Dimensions,
+  Image,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBar } from '../../contexts/TabBarContext';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { getAvatarURL } from '../../utils/imageUtils';
+import { getInitials } from '../../utils/nameUtils';
 import { useQuery } from '@tanstack/react-query';
-import { chatAPI } from '../../utils/api';
+import { notificationsAPI } from '../../utils/api';
 
 interface TabItem {
   id: string;
   label: string;
   icon: string;
+  iconFilled: string; // Filled variant for active state
   badge?: number | 'dot' | null;
 }
 
@@ -28,18 +33,32 @@ interface BottomTabBarProps {
   navigation: any;
 }
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const BAR_WIDTH = SCREEN_WIDTH * 0.8;   // 80% width
-const BAR_RADIUS = 32;                  // pill/capsule, nên >= 1/2 bar height
+const ICON_WIDTH = 28; // Giống social-app-main
 
-// Màu icon giống Threads - active màu primary, inactive màu textSecondary
+// Clamp function giống social-app-main
+const clamp = (value: number, min: number, max: number) => {
+  return Math.min(Math.max(value, min), max);
+};
+
+// Màu icon giống social-app-main - active/inactive cùng màu text, opacity khác nhau
 const getIconColors = (colors: any, isActive: boolean) => {
-  if (isActive) {
-    // Icon active: màu primary
-    return colors.primary || '#E74C3C';
-  } else {
-    // Icon inactive: textSecondary
-    return colors.textSecondary || '#707070';
+  // Social-app-main dùng cùng màu text cho cả active và inactive
+  // Active có opacity cao hơn (1.0), inactive có opacity thấp hơn (0.7)
+  return colors.text || (isActive ? '#000000' : '#707070');
+};
+
+const getIconOpacity = (isActive: boolean) => {
+  return isActive ? 1.0 : 0.7;
+};
+
+// Icon sizes khác nhau cho từng tab (giống social-app-main)
+const getIconSize = (tabId: string) => {
+  switch (tabId) {
+    case 'NewsFeed': return ICON_WIDTH + 1; // 29
+    case 'Video': return ICON_WIDTH + 2; // 30 (giống Search)
+    case 'Party': return ICON_WIDTH; // 28
+    case 'Profile': return ICON_WIDTH - 2; // 26 (avatar)
+    default: return ICON_WIDTH; // 28
   }
 };
 
@@ -47,54 +66,34 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
   const insets = useSafeAreaInsets();
   const { isVisible } = useTabBar();
   const { isDarkMode, colors } = useAppTheme(); // Lấy từ ThemeContext thật
+  const { user } = useAuth();
   
-  // Fetch conversations to get unread count
-  const { data: conversations = [] } = useQuery({
-    queryKey: ['conversations'],
+  // Fetch unread notification count
+  const { data: unreadCountData } = useQuery({
+    queryKey: ['notifications', 'unread-count'],
     queryFn: async () => {
-      const res = await chatAPI.getConversations();
-      return Array.isArray(res.data) ? res.data : (res.data?.conversations || []);
+      try {
+        const response = await notificationsAPI.getUnreadCount();
+        return response.data?.count || 0;
+      } catch (error) {
+        console.log('Error fetching unread count:', error);
+        // Fallback: fetch tất cả và đếm
+        try {
+          const notificationsResponse = await notificationsAPI.getNotifications();
+          const notifications = notificationsResponse.data || [];
+          return notifications.filter((n: any) => !n.read || n.read === 0 || n.read === false).length;
+        } catch (fallbackError) {
+          return 0;
+        }
+      }
     },
-    staleTime: 30000, // 30 seconds
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: false, // No polling - use socket for real-time badge updates
+    refetchOnWindowFocus: true, // Refetch khi quay lại app
+    refetchOnMount: true, // Always refetch on mount for fresh data (no delay)
+    enabled: !!user, // Chỉ fetch khi đã login
   });
-  
-  // Calculate unread count from conversations
-  const unreadCount = useMemo(() => {
-    return conversations.reduce((total: number, conv: any) => {
-      return total + (conv.unread_count || conv.unreadCount || 0);
-    }, 0);
-  }, [conversations]);
-  
-  // Animation for badge pulse effect
-  const badgeScale = useRef(new Animated.Value(1)).current;
-  
-  useEffect(() => {
-    if (unreadCount > 0) {
-      // Pulse animation when there are unread messages
-      const pulseAnimation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(badgeScale, {
-            toValue: 1.2,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(badgeScale, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulseAnimation.start();
-      
-      return () => {
-        pulseAnimation.stop();
-      };
-    } else {
-      badgeScale.setValue(1);
-    }
-  }, [unreadCount, badgeScale]);
+
+  const unreadCount = unreadCountData || 0;
 
   // Helper: get focused nested route name for a tab
   const getFocusedNestedRouteName = (route: any): string | undefined => {
@@ -106,33 +105,60 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
     return getFocusedNestedRouteName(nestedRoute) || nestedRoute.name;
   };
 
-  // Khai báo lại tabItems tránh lỗi không tìm thấy - giống Threads
-  const tabItems: TabItem[] = [
-    { id: 'NewsFeed', label: '', icon: 'home', badge: null },
-    { id: 'Video', label: '', icon: 'eye-outline', badge: null },
-    { id: 'Party', label: 'Party', icon: '', badge: null }, // Text ở giữa
-    { id: 'Chat', label: '', icon: 'message-outline', badge: unreadCount > 0 ? unreadCount : null }, // Badge từ unread count thực tế
-    { id: 'Profile', label: '', icon: 'account-circle-outline', badge: null },
-  ];
+  // Khai báo lại tabItems giống social-app-main (Bluesky)
+  const tabItems: TabItem[] = useMemo(() => [
+    { 
+      id: 'NewsFeed', 
+      label: '', 
+      icon: 'home-outline', 
+      iconFilled: 'home',
+      badge: null 
+    },
+    { 
+      id: 'Video', 
+      label: '', 
+      icon: 'play-circle-outline', 
+      iconFilled: 'play-circle',
+      badge: null 
+    },
+    { 
+      id: 'Party', 
+      label: '', 
+      icon: 'bell-outline', 
+      iconFilled: 'bell',
+      badge: unreadCount > 0 ? unreadCount : null 
+    },
+    { 
+      id: 'Profile', 
+      label: '', 
+      icon: 'account-circle-outline', 
+      iconFilled: 'account-circle',
+      badge: null 
+    },
+  ], [unreadCount]);
 
-  // 1) Ẩn khi ở tab Profile hoặc Video (fullscreen experience)
+  // 1) Ẩn khi ở tab Video hoặc Chat (fullscreen experience)
   const currentRoute = state.routes[state.index];
   const nestedFocused = getFocusedNestedRouteName(currentRoute);
-  if (currentRoute?.name === 'Profile' || currentRoute?.name === 'Video') {
+  if (currentRoute?.name === 'Video' || currentRoute?.name === 'Chat') {
     return null;
   }
 
-  // Ẩn hoàn toàn khi đang ở màn hình đọc tin nhắn (ChatDetail)
-  if (currentRoute?.name === 'Chat' && nestedFocused === 'ChatDetail') {
+  // 2) Ẩn khi ở trong ChatDetail hoặc ChatList (màn hình tin nhắn)
+  if (nestedFocused === 'ChatDetail' || nestedFocused === 'ChatList') {
     return null;
   }
 
-  // Ẩn hoàn toàn khi đang ở màn hình cuộc gọi (VideoCall)
-  if (currentRoute?.name === 'Chat' && nestedFocused === 'VideoCall') {
+  // 3) Ẩn ở một số màn hình cụ thể trong Profile stack (nhưng hiển thị ở MyProfile và Profile chính)
+  const hiddenProfileScreens = ['EditProfile', 'Settings', 'InterfaceSettings', 'FontSizeSettings', 
+    'ProfileInformation', 'Feedback', 'Help', 'StatusFeed', 'ActivityStatus', 
+    'ResourceManagement', 'DeviceManagement', 'Security', 'Privacy', 'AppInfo', 
+    'SelfDestructPost', 'QRScanner', 'AddPhone', 'VerifyPhone', 'SystemNotifications'];
+  if (currentRoute?.name === 'Profile' && hiddenProfileScreens.includes(nestedFocused || '')) {
     return null;
   }
 
-  // 2) Ẩn/hiện dựa trên context (dùng cho NewsFeed khi cuộn)
+  // 3) Ẩn/hiện dựa trên context (dùng cho NewsFeed khi cuộn)
   if (!isVisible) {
     return null;
   }
@@ -142,7 +168,7 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
         style={[
           styles.tabBarBackground,
           {
-            paddingBottom: insets.bottom || 0,
+            paddingBottom: clamp(insets.bottom || 0, 15, 60), // Giống social-app-main
             backgroundColor: colors.surface || colors.background, // Sử dụng theme colors
             borderTopColor: colors.border || '#E0E0E0',
           },
@@ -160,12 +186,20 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
                 // Direct navigation for better responsiveness
                 navigation.navigate(route.name);
               } else if (isFocused && route.name === 'NewsFeed') {
-                // If already on NewsFeed tab, scroll to top or refresh
+                // If already on NewsFeed tab, scroll to top and refresh (like Facebook)
                 const feedStack = navigation.getParent();
                 if (feedStack) {
-                  feedStack.navigate('Feed', { refresh: Date.now() });
+                  // Navigate to Feed screen with refresh param
+                  feedStack.navigate('Feed', { 
+                    refresh: Date.now(),
+                    scrollToTop: true 
+                  });
                 } else {
-                  navigation.navigate(route.name, { refresh: Date.now() });
+                  // Fallback: navigate with refresh param
+                  navigation.navigate(route.name, { 
+                    refresh: Date.now(),
+                    scrollToTop: true 
+                  });
                 }
               }
               
@@ -184,8 +218,8 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
               });
             };
 
-            // Nếu là tab "Party", hiển thị text thay vì icon
-            if (tabItem.id === 'Party') {
+            // Nếu là tab Profile, hiển thị avatar thay vì icon (giống social-app-main)
+            if (tabItem.id === 'Profile') {
               return (
                 <TouchableOpacity
                   key={route.key}
@@ -198,9 +232,37 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
                   style={styles.tabItem}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.partyText, { color: isFocused ? colors.primary || '#E74C3C' : colors.textSecondary || '#707070' }]}>
-                    {tabItem.label}
-                  </Text>
+                  <View style={styles.avatarContainer}>
+                    <View style={[
+                      styles.profileAvatarWrapper,
+                      isFocused && styles.profileAvatarActive,
+                      {
+                        borderColor: isFocused 
+                          ? (colors.text || '#000000') 
+                          : 'transparent',
+                        borderWidth: isFocused ? 1 : 0,
+                      }
+                    ]}>
+                      {user?.avatar_url ? (
+                        <Image
+                          source={{ uri: getAvatarURL(user.avatar_url) }}
+                          style={styles.profileAvatar}
+                        />
+                      ) : (
+                        <View style={[
+                          styles.profileAvatar,
+                          styles.profileAvatarPlaceholder,
+                          { 
+                            backgroundColor: colors.primary || '#0084ff',
+                          },
+                        ]}>
+                          <Text style={styles.profileAvatarText}>
+                            {getInitials(user?.full_name || user?.username || 'U')}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
                 </TouchableOpacity>
               );
             }
@@ -219,31 +281,27 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
               >
                 <View style={styles.iconContainer}>
                   <MaterialCommunityIcons
-                    name={tabItem.icon as any}
-                    size={28}
+                    name={(isFocused ? tabItem.iconFilled : tabItem.icon) as any}
+                    size={getIconSize(tabItem.id)}
                     color={getIconColors(colors, isFocused)}
+                    style={[
+                      { opacity: getIconOpacity(isFocused) },
+                      tabItem.id === 'Video' && styles.videoIcon, // Adjust position for Video icon
+                    ]}
                   />
-                  {tabItem.badge !== null && tabItem.badge !== undefined && typeof tabItem.badge === 'number' && tabItem.badge > 0 && (
-                    <Animated.View 
-                      style={[
-                        styles.badge,
-                        {
-                          transform: [{ scale: badgeScale }],
-                        },
-                      ]}
-                    >
-                      <Text style={styles.badgeText}>{tabItem.badge > 99 ? '99+' : tabItem.badge}</Text>
-                    </Animated.View>
-                  )}
-                  {tabItem.badge === 'dot' && !isFocused && (
-                    <Animated.View 
-                      style={[
-                        styles.dot,
-                        {
-                          transform: [{ scale: badgeScale }],
-                        },
-                      ]}
-                    />
+                  {/* Badge cho thông báo - màu đỏ */}
+                  {tabItem.badge && tabItem.badge !== null && (
+                    <>
+                      {typeof tabItem.badge === 'number' && tabItem.badge > 0 ? (
+                        <View style={[styles.badge, { backgroundColor: '#FF3B30' }]}>
+                          <Text style={styles.badgeText}>
+                            {tabItem.badge > 99 ? '99+' : tabItem.badge.toString()}
+                          </Text>
+                        </View>
+                      ) : tabItem.badge === 'dot' ? (
+                        <View style={[styles.dot, { backgroundColor: '#FF3B30' }]} />
+                      ) : null}
+                    </>
                   )}
                 </View>
               </TouchableOpacity>
@@ -267,7 +325,9 @@ const styles = StyleSheet.create({
     width: '100%',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: '#E0E0E0',
-    paddingTop: 8,
+    // Không có paddingTop ở đây - giống social-app-main (paddingTop chỉ ở tabItem)
+    paddingLeft: 5,
+    paddingRight: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
@@ -279,50 +339,85 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
     width: '100%',
-    paddingHorizontal: 8,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    paddingTop: 13, // Giống chính xác social-app-main
+    paddingBottom: 4, // Giống chính xác social-app-main
   },
   iconContainer: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 'auto',
+    marginRight: 'auto',
   },
-  partyText: {
-    fontSize: 16,
+  // Icon positioning adjustments (giống social-app-main)
+  homeIcon: {},
+  videoIcon: {
+    top: -1, // Giống searchIcon trong social-app-main
+  },
+  bellIcon: {},
+  avatarContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 'auto',
+    marginRight: 'auto',
+  },
+  profileAvatarWrapper: {
+    borderRadius: 100, // Full circle
+    borderWidth: 1,
+    borderColor: 'transparent',
+    overflow: 'hidden',
+  },
+  profileAvatarActive: {
+    borderWidth: 1,
+    borderRadius: 100,
+  },
+  profileAvatar: {
+    width: ICON_WIDTH - 2, // Giống social-app-main (28 - 2 = 26)
+    height: ICON_WIDTH - 2,
+    borderRadius: (ICON_WIDTH - 2) / 2,
+  },
+  profileAvatarPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileAvatarText: {
+    fontSize: 12,
     fontWeight: '600',
-    letterSpacing: 0.5,
+    color: '#FFFFFF',
   },
   badge: {
     position: 'absolute',
-    top: -8,
-    right: -10,
-    backgroundColor: '#FF4444',
-    borderRadius: 10,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
+    right: -6, // Điều chỉnh để badge gần icon hơn, không bị đẩy ra ngoài quá xa
+    top: -6, // Điều chỉnh để badge ở góc trên bên phải của icon
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingBottom: 1,
     minWidth: 18,
     height: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 1,
   },
   badgeText: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 12, // Giống social-app-main
+    fontWeight: '600', // Giống social-app-main
+    fontVariant: ['tabular-nums'], // Giống social-app-main (số có chiều rộng đồng nhất)
   },
   dot: {
     position: 'absolute',
-    top: -2,
-    right: -2,
+    right: -2, // Điều chỉnh để dot gần icon hơn
+    top: -2, // Điều chỉnh để dot ở góc trên bên phải của icon
     width: 8,
     height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ff4444',
+    borderRadius: 6,
+    zIndex: 1,
   },
 });
 

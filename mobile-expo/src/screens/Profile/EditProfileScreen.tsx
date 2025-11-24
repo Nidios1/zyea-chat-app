@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView } from 'react-native';
-import { Text, TextInput, Button, useTheme } from 'react-native-paper';
+import { Text, TextInput, useTheme } from 'react-native-paper';
+import { Button } from '../../components/UI';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import { usersAPI, uploadAPI } from '../../utils/api';
+import { spacing, typography } from '../../config/designTokens';
 
 const EditProfileScreen = () => {
   const theme = useTheme();
@@ -72,13 +74,13 @@ const EditProfileScreen = () => {
         )}
 
         <Button
-          mode="contained"
+          title="Lưu thay đổi"
           onPress={handleSave}
           loading={Boolean(loading)}
+          variant="primary"
+          fullWidth
           style={styles.button}
-        >
-          Lưu thay đổi
-        </Button>
+        />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -89,17 +91,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 16,
+    padding: spacing.base,
   },
   input: {
-    marginBottom: 16,
+    marginBottom: spacing.base,
   },
   button: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   error: {
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: spacing.base,
   },
 });
 

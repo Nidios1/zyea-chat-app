@@ -7,8 +7,9 @@ import ChatDetailScreen from '../screens/Chat/ChatDetailScreen';
 // Tạm thời disable VideoCall để tránh lỗi WebRTC trong Expo Go
 // import VideoCallScreen from '../screens/Chat/VideoCallScreen';
 import ContactsScreen from '../screens/Contacts/ContactsScreen';
-import PostsListScreen from '../screens/NewsFeed/PostsListScreen';
+import HomeScreen from '../screens/NewsFeed/HomeScreen';
 import ProfileScreen from '../screens/Profile/ProfileScreen';
+import MyProfileScreen from '../screens/Profile/MyProfileScreen';
 import EditProfileScreen from '../screens/Profile/EditProfileScreen';
 import ProfileInformationScreen from '../screens/Profile/ProfileInformationScreen';
 import FeedbackScreen from '../screens/Profile/FeedbackScreen';
@@ -21,12 +22,18 @@ import ActivityStatusScreen from '../screens/Profile/ActivityStatusScreen';
 import ResourceManagementScreen from '../screens/Profile/ResourceManagementScreen';
 import DeviceManagementScreen from '../screens/Profile/DeviceManagementScreen';
 import SecurityScreen from '../screens/Profile/SecurityScreen';
+import PrivacyScreen from '../screens/Profile/PrivacyScreen';
 import AppInfoScreen from '../screens/Profile/AppInfoScreen';
 import SelfDestructPostScreen from '../screens/Profile/SelfDestructPostScreen';
 import QRScannerScreen from '../screens/Profile/QRScannerScreen';
+import AddPhoneScreen from '../screens/Profile/AddPhoneScreen';
+import VerifyPhoneScreen from '../screens/Profile/VerifyPhoneScreen';
 import FriendsListScreen from '../screens/Friends/FriendsListScreen';
 import NotificationsScreen from '../screens/Notifications/NotificationsScreen';
+import SystemNotificationsScreen from '../screens/Notifications/SystemNotificationsScreen';
 import CreatePostScreen from '../screens/NewsFeed/CreatePostScreen';
+import CreateStoryScreen from '../screens/NewsFeed/CreateStoryScreen';
+import CommentsScreen from '../screens/NewsFeed/CommentsScreen';
 import VideoFeedScreen from '../screens/Video/VideoFeedScreen';
 import OtherUserProfileScreen from '../screens/Profile/OtherUserProfileScreen';
 import BottomTabBar from '../components/Common/BottomTabBar';
@@ -69,12 +76,22 @@ const FeedStackNavigator = () => (
   <FeedStack.Navigator>
     <FeedStack.Screen
       name="Feed"
-      component={PostsListScreen}
+      component={HomeScreen}
       options={{ headerShown: false as boolean }}
     />
     <FeedStack.Screen
       name="CreatePost"
       component={CreatePostScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <FeedStack.Screen
+      name="CreateStory"
+      component={CreateStoryScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <FeedStack.Screen
+      name="Comments"
+      component={CommentsScreen}
       options={{ headerShown: false as boolean }}
     />
     <FeedStack.Screen
@@ -91,6 +108,11 @@ const ProfileStackNavigator = () => (
     <ProfileStack.Screen
       name="Profile"
       component={ProfileScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="MyProfile"
+      component={MyProfileScreen}
       options={{ headerShown: false as boolean }}
     />
     <ProfileStack.Screen
@@ -154,6 +176,11 @@ const ProfileStackNavigator = () => (
       options={{ headerShown: false as boolean }}
     />
     <ProfileStack.Screen
+      name="Privacy"
+      component={PrivacyScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
       name="AppInfo"
       component={AppInfoScreen}
       options={{ headerShown: false as boolean }}
@@ -168,6 +195,21 @@ const ProfileStackNavigator = () => (
       component={QRScannerScreen}
       options={{ headerShown: false as boolean }}
     />
+    <ProfileStack.Screen
+      name="AddPhone"
+      component={AddPhoneScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="VerifyPhone"
+      component={VerifyPhoneScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="SystemNotifications"
+      component={SystemNotificationsScreen}
+      options={{ headerShown: false as boolean }}
+    />
   </ProfileStack.Navigator>
 );
 
@@ -179,28 +221,28 @@ const MainNavigator = () => {
         headerShown: false as boolean,
       }}
     >
-      <Tab.Screen 
-        name="NewsFeed" 
+      <Tab.Screen
+        name="NewsFeed"
         component={FeedStackNavigator}
         options={{ title: 'Bảng feed' }}
       />
-      <Tab.Screen 
-        name="Video" 
+      <Tab.Screen
+        name="Video"
         component={VideoFeedScreen}
         options={{ title: 'Video' }}
       />
-      <Tab.Screen 
-        name="Party" 
+      <Tab.Screen
+        name="Party"
         component={NotificationsScreen}
         options={{ title: 'Party' }}
       />
-      <Tab.Screen 
-        name="Chat" 
+      <Tab.Screen
+        name="Chat"
         component={ChatStackNavigator}
-        options={{ title: 'Tin nhắn' }}
+        options={{ title: 'Tin nhắn', tabBarButton: () => null }}
       />
-      <Tab.Screen 
-        name="Profile" 
+      <Tab.Screen
+        name="Profile"
         component={ProfileStackNavigator}
         options={{ title: 'Cá nhân' }}
       />

@@ -89,10 +89,24 @@ router.get('/posts', async (req, res) => {
           u.full_name,
           u.avatar_url,
           u.status,
-          CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked
+          CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked,
+          pl.reaction_type as reactionType,
+          COALESCE(like_counts.likes_count, 0) as likes_count,
+          COALESCE(comment_counts.comments_count, 0) as comments_count,
+          COALESCE(p.views_count, 0) as views_count
         FROM posts p
         JOIN users u ON p.user_id = u.id
         LEFT JOIN post_likes pl ON p.id = pl.post_id AND pl.user_id = ?
+        LEFT JOIN (
+          SELECT post_id, COUNT(*) as likes_count
+          FROM post_likes
+          GROUP BY post_id
+        ) like_counts ON p.id = like_counts.post_id
+        LEFT JOIN (
+          SELECT post_id, COUNT(*) as comments_count
+          FROM comments
+          GROUP BY post_id
+        ) comment_counts ON p.id = comment_counts.post_id
         WHERE p.privacy = 'public' OR p.user_id = ?
         ORDER BY p.created_at DESC
         LIMIT 50
@@ -108,10 +122,24 @@ router.get('/posts', async (req, res) => {
           u.full_name,
           u.avatar_url,
           u.status,
-          CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked
+          CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked,
+          pl.reaction_type as reactionType,
+          COALESCE(like_counts.likes_count, 0) as likes_count,
+          COALESCE(comment_counts.comments_count, 0) as comments_count,
+          COALESCE(p.views_count, 0) as views_count
         FROM posts p
         JOIN users u ON p.user_id = u.id
         LEFT JOIN post_likes pl ON p.id = pl.post_id AND pl.user_id = ?
+        LEFT JOIN (
+          SELECT post_id, COUNT(*) as likes_count
+          FROM post_likes
+          GROUP BY post_id
+        ) like_counts ON p.id = like_counts.post_id
+        LEFT JOIN (
+          SELECT post_id, COUNT(*) as comments_count
+          FROM comments
+          GROUP BY post_id
+        ) comment_counts ON p.id = comment_counts.post_id
         JOIN follows fl ON fl.follower_id = ? AND fl.following_id = p.user_id
         WHERE p.privacy = 'public' OR p.user_id = ?
         ORDER BY p.created_at DESC
@@ -129,17 +157,56 @@ router.get('/posts', async (req, res) => {
           u.full_name,
           u.avatar_url,
           u.status,
-          CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked
+          CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked,
+          pl.reaction_type as reactionType,
+          COALESCE(like_counts.likes_count, 0) as likes_count,
+          COALESCE(comment_counts.comments_count, 0) as comments_count,
+          COALESCE(p.views_count, 0) as views_count
         FROM posts p
         JOIN users u ON p.user_id = u.id
         LEFT JOIN post_likes pl ON p.id = pl.post_id AND pl.user_id = ?
+        LEFT JOIN (
+          SELECT post_id, COUNT(*) as likes_count
+          FROM post_likes
+          GROUP BY post_id
+        ) like_counts ON p.id = like_counts.post_id
+        LEFT JOIN (
+          SELECT post_id, COUNT(*) as comments_count
+          FROM comments
+          GROUP BY post_id
+        ) comment_counts ON p.id = comment_counts.post_id
         ORDER BY p.created_at DESC
         LIMIT 50
       `;
       params = [userId];
     }
     
-    const [posts] = await getConnection().execute(query, params);
+    let posts;
+    try {
+      [posts] = await getConnection().execute(query, params);
+    } catch (error) {
+      // Nếu lỗi do thiếu cột views_count, thử thêm cột và query lại
+      if (error.code === 'ER_BAD_FIELD_ERROR' && error.sqlMessage.includes('views_count')) {
+        console.warn('views_count column not found, attempting to add it...');
+        try {
+          await getConnection().execute(`
+            ALTER TABLE posts ADD COLUMN views_count INT DEFAULT 0
+          `);
+          // Query lại sau khi thêm cột
+          [posts] = await getConnection().execute(query, params);
+        } catch (alterError) {
+          console.error('Failed to add views_count column:', alterError);
+          // Fallback: query lại không có views_count
+          const fallbackQuery = query.replace(/COALESCE\(p\.views_count, 0\) as views_count,?\s*/g, '');
+          [posts] = await getConnection().execute(fallbackQuery, params);
+          // Set views_count = 0 cho tất cả posts
+          posts = posts.map((p) => ({ ...p, views_count: 0 }));
+        }
+      } else {
+        throw error;
+      }
+    }
+    
     console.log('📱 [Backend] Found', posts.length, 'posts for type:', type || 'default');
     if (posts.length > 0) {
       const userIds = [...new Set(posts.map((p) => p.user_id))];
@@ -149,8 +216,41 @@ router.get('/posts', async (req, res) => {
       console.log('⚠️ [Backend] No posts found! Check database.');
     }
 
+    // Get all reactions for all posts to calculate breakdown
+    const postIds = posts.map(p => p.id);
+    let allReactions = [];
+    if (postIds.length > 0) {
+      const placeholders = postIds.map(() => '?').join(',');
+      const [reactions] = await getConnection().execute(`
+        SELECT post_id, reaction_type, COUNT(*) as count
+        FROM post_likes
+        WHERE post_id IN (${placeholders})
+        GROUP BY post_id, reaction_type
+      `, postIds);
+      allReactions = reactions;
+    }
+
     // Get comments for each post and parse images
     for (let post of posts) {
+      // Calculate reactions breakdown from allReactions
+      const postReactions = allReactions.filter(r => r.post_id === post.id);
+      post.reactions_breakdown = {
+        like: 0,
+        love: 0,
+        care: 0,
+        haha: 0,
+        wow: 0,
+        sad: 0,
+        angry: 0,
+      };
+      
+      postReactions.forEach(reaction => {
+        const reactionType = reaction.reaction_type || 'like';
+        if (post.reactions_breakdown.hasOwnProperty(reactionType)) {
+          post.reactions_breakdown[reactionType] = parseInt(reaction.count) || 0;
+        }
+      });
+      
       const [comments] = await getConnection().execute(`
         SELECT 
           pc.*,
@@ -271,9 +371,22 @@ router.post('/posts', async (req, res) => {
         u.full_name,
         u.avatar_url,
         u.status,
-        0 as isLiked
+        0 as isLiked,
+        COALESCE(like_counts.likes_count, 0) as likes_count,
+        COALESCE(comment_counts.comments_count, 0) as comments_count,
+        COALESCE(p.views_count, 0) as views_count
       FROM posts p
       JOIN users u ON p.user_id = u.id
+      LEFT JOIN (
+        SELECT post_id, COUNT(*) as likes_count
+        FROM post_likes
+        GROUP BY post_id
+      ) like_counts ON p.id = like_counts.post_id
+      LEFT JOIN (
+        SELECT post_id, COUNT(*) as comments_count
+        FROM comments
+        GROUP BY post_id
+      ) comment_counts ON p.id = comment_counts.post_id
       WHERE p.id = ?
     `, [result.insertId]);
 
@@ -315,51 +428,311 @@ router.post('/posts', async (req, res) => {
 // Like/Unlike a post with reaction type
 router.post('/posts/:id/like', async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    
     const userId = req.user.id;
     const postId = req.params.id;
     const { reactionType = 'like' } = req.body;
+
+    if (!postId) {
+      return res.status(400).json({ message: 'Post ID is required' });
+    }
+
+    console.log(`📝 [Like Post] User ${userId} reacting to post ${postId} with reaction: ${reactionType}`);
+
+    // Validate reaction type
+    const validReactions = ['like', 'love', 'care', 'haha', 'wow', 'sad', 'angry'];
+    if (!validReactions.includes(reactionType)) {
+      return res.status(400).json({ 
+        message: 'Invalid reaction type',
+        validReactions 
+      });
+    }
 
     // Check if user already liked the post
     const [existingLike] = await getConnection().execute(`
       SELECT id, COALESCE(reaction_type, 'like') as reaction_type FROM post_likes WHERE post_id = ? AND user_id = ?
     `, [postId, userId]);
+    
+    console.log(`📝 [Like Post] Existing like:`, existingLike.length > 0 ? existingLike[0] : 'none');
+
+    // Lấy thông tin post owner để tạo notification
+    const [postData] = await getConnection().execute(`
+      SELECT user_id FROM posts WHERE id = ?
+    `, [postId]);
+    
+    if (!postData || postData.length === 0) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+    
+    const postOwnerId = postData[0]?.user_id;
+    const isOwnPost = postOwnerId === userId;
+    
+    console.log(`📝 [Like Post] Post owner: ${postOwnerId}, Current user: ${userId}, Is own post: ${isOwnPost}`);
 
     if (existingLike.length > 0) {
       // Update reaction type or unlike if same reaction
       if (existingLike[0].reaction_type === reactionType) {
         // Unlike the post
+        console.log(`📝 [Like Post] Unliking post ${postId}`);
         await getConnection().execute(`
           DELETE FROM post_likes WHERE post_id = ? AND user_id = ?
         `, [postId, userId]);
         
-        await getConnection().execute(`
-          UPDATE posts SET likes_count = likes_count - 1 WHERE id = ?
-        `, [postId]);
-        
+        console.log(`✅ [Like Post] Post ${postId} unliked successfully`);
         res.json({ liked: false, reactionType: null });
       } else {
         // Update reaction type
+        console.log(`📝 [Like Post] Updating reaction from ${existingLike[0].reaction_type} to ${reactionType}`);
         await getConnection().execute(`
           UPDATE post_likes SET reaction_type = ? WHERE post_id = ? AND user_id = ?
         `, [reactionType, postId, userId]);
         
+        // Tạo notification cho post owner (nếu không phải chính mình)
+        if (!isOwnPost && postOwnerId) {
+          try {
+            const reactionMessages = {
+              like: 'đã thích bài viết của bạn',
+              love: 'đã yêu thích bài viết của bạn',
+              care: 'đã quan tâm đến bài viết của bạn',
+              haha: 'đã cười với bài viết của bạn',
+              wow: 'đã ngạc nhiên với bài viết của bạn',
+              sad: 'đã buồn với bài viết của bạn',
+              angry: 'đã tức giận với bài viết của bạn',
+            };
+            
+            const message = reactionMessages[reactionType] || 'đã thích bài viết của bạn';
+            
+            // Xóa notification cũ nếu có (để tránh duplicate)
+            await getConnection().execute(`
+              DELETE FROM notifications 
+              WHERE user_id = ? AND from_user_id = ? AND post_id = ? AND type = 'like'
+            `, [postOwnerId, userId, postId]);
+            
+            // Tạo notification mới
+            await getConnection().execute(`
+              INSERT INTO notifications (user_id, from_user_id, type, message, post_id, reaction_type)
+              VALUES (?, ?, 'like', ?, ?, ?)
+            `, [postOwnerId, userId, message, postId, reactionType]);
+            
+            console.log(`📬 [Notification] Created like notification for user ${postOwnerId} (reaction: ${reactionType})`);
+          } catch (notifError) {
+            console.error('❌ [Notification] Error creating notification:', notifError);
+            // Không throw error để không ảnh hưởng đến like action
+            // Notification có thể được tạo sau
+          }
+        } else {
+          console.log(`ℹ️ [Notification] Skipping notification - isOwnPost: ${isOwnPost}, postOwnerId: ${postOwnerId}`);
+        }
+        
+        console.log(`✅ [Like Post] Reaction updated successfully`);
         res.json({ liked: true, reactionType });
       }
     } else {
       // Like the post with reaction type
+      console.log(`📝 [Like Post] Creating new like for post ${postId}`);
       await getConnection().execute(`
         INSERT INTO post_likes (post_id, user_id, reaction_type) VALUES (?, ?, ?)
       `, [postId, userId, reactionType]);
       
-      await getConnection().execute(`
-        UPDATE posts SET likes_count = likes_count + 1 WHERE id = ?
-      `, [postId]);
+      // Tạo notification cho post owner (nếu không phải chính mình)
+      if (!isOwnPost && postOwnerId) {
+        try {
+          const reactionMessages = {
+            like: 'đã thích bài viết của bạn',
+            love: 'đã yêu thích bài viết của bạn',
+            care: 'đã quan tâm đến bài viết của bạn',
+            haha: 'đã cười với bài viết của bạn',
+            wow: 'đã ngạc nhiên với bài viết của bạn',
+            sad: 'đã buồn với bài viết của bạn',
+            angry: 'đã tức giận với bài viết của bạn',
+          };
+          
+          const message = reactionMessages[reactionType] || 'đã thích bài viết của bạn';
+          
+          await getConnection().execute(`
+            INSERT INTO notifications (user_id, from_user_id, type, message, post_id, reaction_type)
+            VALUES (?, ?, 'like', ?, ?, ?)
+          `, [postOwnerId, userId, message, postId, reactionType]);
+          
+          console.log(`📬 [Notification] Created like notification for user ${postOwnerId} (reaction: ${reactionType})`);
+        } catch (notifError) {
+          console.error('❌ [Notification] Error creating notification:', notifError);
+          // Không throw error để không ảnh hưởng đến like action
+          // Notification có thể được tạo sau
+        }
+      } else {
+        console.log(`ℹ️ [Notification] Skipping notification - isOwnPost: ${isOwnPost}, postOwnerId: ${postOwnerId}`);
+      }
       
+      console.log(`✅ [Like Post] Post ${postId} liked successfully with reaction ${reactionType}`);
       res.json({ liked: true, reactionType });
     }
   } catch (error) {
-    console.error('Error liking post:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('❌ [Like Post] Error:', error.message);
+    console.error('❌ [Like Post] Error stack:', error.stack);
+    console.error('❌ [Like Post] Error details:', {
+      userId: req.user?.id,
+      postId: req.params.id,
+      reactionType: req.body.reactionType,
+    });
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Track post view - tăng views_count khi user xem post
+router.post('/posts/:id/view', async (req, res) => {
+  try {
+    console.log('📊 [View Post] Request received:', {
+      postId: req.params.id,
+      userId: req.user?.id,
+      method: req.method,
+      path: req.path,
+      originalUrl: req.originalUrl
+    });
+    
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+    
+    const userId = req.user.id;
+    const postId = req.params.id;
+
+    if (!postId) {
+      return res.status(400).json({ message: 'Post ID is required' });
+    }
+
+    // Kiểm tra xem post có tồn tại không
+    const [post] = await getConnection().execute(`
+      SELECT id, user_id, privacy, COALESCE(views_count, 0) as views_count FROM posts WHERE id = ?
+    `, [postId]);
+
+    if (post.length === 0) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    const postData = post[0];
+    
+    // Kiểm tra quyền xem post (chỉ tăng views nếu user có quyền xem)
+    if (postData.privacy === 'private' && postData.user_id !== userId) {
+      return res.status(403).json({ message: 'Not authorized to view this post' });
+    }
+
+    // Không tính lượt xem của chính người đăng bài
+    if (postData.user_id === userId) {
+      return res.json({ 
+        success: true,
+        views_count: postData.views_count || 0,
+        message: 'Post owner view not counted'
+      });
+    }
+
+    // Kiểm tra xem user đã xem post này chưa
+    let hasViewed = false;
+    try {
+      const [existingView] = await getConnection().execute(`
+        SELECT id FROM post_views WHERE post_id = ? AND user_id = ?
+      `, [postId, userId]);
+      
+      hasViewed = existingView.length > 0;
+      console.log(`🔍 [View Post] User ${userId} - Post ${postId} - Has viewed: ${hasViewed}`);
+    } catch (error) {
+      // Nếu bảng post_views chưa tồn tại, tạo bảng
+      if (error.code === 'ER_NO_SUCH_TABLE' || error.sqlMessage?.includes('post_views')) {
+        console.warn('post_views table not found, attempting to create it...');
+        try {
+          await getConnection().execute(`
+            CREATE TABLE IF NOT EXISTS post_views (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              post_id INT NOT NULL,
+              user_id INT NOT NULL,
+              viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+              UNIQUE KEY unique_post_view (post_id, user_id)
+            )
+          `);
+          console.log('✅ post_views table created successfully');
+          // Sau khi tạo bảng, kiểm tra lại
+          const [existingView] = await getConnection().execute(`
+            SELECT id FROM post_views WHERE post_id = ? AND user_id = ?
+          `, [postId, userId]);
+          hasViewed = existingView.length > 0;
+        } catch (createError) {
+          console.error('Failed to create post_views table:', createError);
+          // Nếu không tạo được bảng, return error
+          return res.status(500).json({ message: 'Failed to track view - database error' });
+        }
+      } else {
+        throw error;
+      }
+    }
+
+    // Chỉ tăng views_count nếu user chưa xem post này trước đó
+    if (!hasViewed) {
+      try {
+        // Thêm record vào post_views TRƯỚC (với ON DUPLICATE KEY để tránh lỗi)
+        await getConnection().execute(`
+          INSERT INTO post_views (post_id, user_id) 
+          VALUES (?, ?)
+          ON DUPLICATE KEY UPDATE viewed_at = CURRENT_TIMESTAMP
+        `, [postId, userId]);
+
+        // Sau đó mới tăng views_count - chỉ tăng 1 lần
+        const [updateResult] = await getConnection().execute(`
+          UPDATE posts 
+          SET views_count = COALESCE(views_count, 0) + 1 
+          WHERE id = ?
+        `, [postId]);
+        
+        console.log(`✅ [View Post] User ${userId} viewed post ${postId} for the first time. Views updated.`);
+      } catch (error) {
+        // Nếu cột views_count chưa tồn tại, thêm cột và update lại
+        if (error.code === 'ER_BAD_FIELD_ERROR' && error.sqlMessage.includes('views_count')) {
+          console.warn('views_count column not found, attempting to add it...');
+          try {
+            await getConnection().execute(`
+              ALTER TABLE posts ADD COLUMN views_count INT DEFAULT 0
+            `);
+            await getConnection().execute(`
+              UPDATE posts SET views_count = 1 WHERE id = ?
+            `, [postId]);
+          } catch (alterError) {
+            console.error('Failed to add views_count column:', alterError);
+            return res.status(500).json({ message: 'Failed to track view' });
+          }
+        } else {
+          throw error;
+        }
+      }
+    } else {
+      console.log(`ℹ️ [View Post] User ${userId} already viewed post ${postId}, not counting again`);
+    }
+
+    // Luôn lấy views_count mới nhất từ database (kể cả khi đã xem rồi)
+    const [updatedPost] = await getConnection().execute(`
+      SELECT COALESCE(views_count, 0) as views_count FROM posts WHERE id = ?
+    `, [postId]);
+
+    const currentViewsCount = updatedPost[0]?.views_count || 0;
+
+    res.json({ 
+      success: true,
+      views_count: currentViewsCount,
+      isNewView: !hasViewed, // Cho biết đây có phải lượt xem mới không
+    });
+  } catch (error) {
+    console.error('❌ [View Post] Error:', error.message);
+    console.error('❌ [View Post] Error stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -379,11 +752,6 @@ router.post('/posts/:id/comment', async (req, res) => {
       INSERT INTO post_comments (post_id, user_id, content)
       VALUES (?, ?, ?)
     `, [postId, userId, content.trim()]);
-
-    // Update comment count
-    await getConnection().execute(`
-      UPDATE posts SET comments_count = comments_count + 1 WHERE id = ?
-    `, [postId]);
 
     // Get the comment with user info
     const [comments] = await getConnection().execute(`
@@ -482,8 +850,8 @@ router.get('/posts/:id/comments', async (req, res) => {
       JOIN users u ON pc.user_id = u.id
       WHERE pc.post_id = ?
       ORDER BY pc.created_at ASC
-      LIMIT ? OFFSET ?
-    `, [postId, limit, offset]);
+      LIMIT ${limit} OFFSET ${offset}
+    `, [postId]);
 
     res.json(comments);
   } catch (error) {

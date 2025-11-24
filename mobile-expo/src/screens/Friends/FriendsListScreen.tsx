@@ -1,14 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, FlatList, Image } from 'react-native';
-import { Text, Searchbar, useTheme, Appbar, Card, Button } from 'react-native-paper';
+import { Text, Searchbar, useTheme, Appbar } from 'react-native-paper';
+import { Card, Button } from '../../components/UI';
 import { useQuery } from '@tanstack/react-query';
 import { friendsAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL } from '../../utils/imageUtils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { spacing, typography, borderRadius } from '../../config/designTokens';
 
 const FriendsListScreen = () => {
   const theme = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
+  const [activityStatusEnabled, setActivityStatusEnabled] = useState(true);
+
+  // Load activity status setting
+  useEffect(() => {
+    const loadActivityStatus = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('activityStatusEnabled');
+        if (saved !== null) {
+          setActivityStatusEnabled(saved === 'true');
+        }
+      } catch (error) {
+        console.error('Error loading activity status:', error);
+      }
+    };
+    loadActivityStatus();
+    
+    // Listen for changes
+    const interval = setInterval(loadActivityStatus, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const {
     data: friends = [],
@@ -24,8 +47,8 @@ const FriendsListScreen = () => {
   );
 
   const renderFriend = ({ item }: { item: any }) => (
-    <Card style={styles.friendCard}>
-      <Card.Content style={styles.friendContent}>
+    <Card style={styles.friendCard} padding={spacing.base}>
+      <View style={styles.friendContent}>
         {item.avatar_url ? (
           <Image source={{ uri: getAvatarURL(item.avatar_url) }} style={styles.avatar} />
         ) : (
@@ -40,19 +63,20 @@ const FriendsListScreen = () => {
           <Text style={styles.friendName}>
             {item.full_name || item.username}
           </Text>
-          <Text style={[styles.friendStatus, { color: item.status === 'online' ? '#4caf50' : '#999' }]}>
-            {item.status === 'online' ? 'Đang hoạt động' : 'Offline'}
-          </Text>
+          {activityStatusEnabled && (
+            <Text style={[styles.friendStatus, { color: item.status === 'online' ? '#4caf50' : '#999' }]}>
+              {item.status === 'online' ? 'Đang hoạt động' : 'Offline'}
+            </Text>
+          )}
         </View>
 
         <Button
-          mode="text"
-          icon="message-text"
+          title="Nhắn tin"
           onPress={() => {/* Navigate to chat */}}
-        >
-          Nhắn tin
-        </Button>
-      </Card.Content>
+          variant="ghost"
+          size="small"
+        />
+      </View>
     </Card>
   );
 
@@ -101,11 +125,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   searchbar: {
-    margin: 8,
+    margin: spacing.sm,
   },
   friendCard: {
-    marginHorizontal: 16,
-    marginVertical: 4,
+    marginHorizontal: spacing.base,
+    marginVertical: spacing.xs,
+    // Card padding is now handled by Card component prop
   },
   friendContent: {
     flexDirection: 'row',
@@ -114,32 +139,32 @@ const styles = StyleSheet.create({
   avatar: {
     width: 50,
     height: 50,
-    borderRadius: 25,
-    marginRight: 12,
+    borderRadius: borderRadius.full / 2,
+    marginRight: spacing.md,
   },
   avatarPlaceholder: {
     width: 50,
     height: 50,
-    borderRadius: 25,
+    borderRadius: borderRadius.full / 2,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: spacing.md,
   },
   avatarText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: typography.fontSize.lg,
+    fontWeight: typography.fontWeight.bold,
   },
   friendInfo: {
     flex: 1,
   },
   friendName: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.medium,
+    marginBottom: spacing.xs,
   },
   friendStatus: {
-    fontSize: 13,
+    fontSize: typography.fontSize.sm + 1,
   },
 });
 

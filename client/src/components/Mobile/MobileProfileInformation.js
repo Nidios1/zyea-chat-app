@@ -132,23 +132,6 @@ const DecorativeLine = styled.div`
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
 `;
 
-const LogoElement = styled.div`
-  position: relative;
-  width: 50px;
-  height: 50px;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 4px;
-`;
-
-const LogoBar = styled.div`
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 3px;
-  width: 14px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-`;
-
 const CameraButtonOverlay = styled.label`
   position: absolute;
   bottom: 12px;
@@ -938,7 +921,6 @@ const MobileProfileInformation = ({ user: userProp, onBack, onShowEdit }) => {
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [showImageViewer, setShowImageViewer] = useState(false);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [notification, setNotification] = useState(null);
   const [showMediaModal, setShowMediaModal] = useState(false);
   const [activeMediaTab, setActiveMediaTab] = useState('photo');
@@ -1047,7 +1029,7 @@ const MobileProfileInformation = ({ user: userProp, onBack, onShowEdit }) => {
     };
     
     loadUserData();
-  }, [user?.avatar_url, user?.cover_url]);
+  }, [user?.avatar_url, user?.cover_url, avatarUrl, coverUrl]);
 
   // Handle cover photo upload
   const handleCoverUpload = async (event) => {
@@ -1254,6 +1236,7 @@ const MobileProfileInformation = ({ user: userProp, onBack, onShowEdit }) => {
   // Load posts
   useEffect(() => {
     loadPosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadPosts = async () => {

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useContext } from 'react';
 import styled from 'styled-components';
-import { FiLogOut, FiSearch, FiPlus, FiMoreVertical, FiSun, FiMoon } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
+import { FiLogOut, FiSearch, FiPlus, FiMoreVertical, FiSun, FiMoon, FiSettings } from 'react-icons/fi';
 import AuthContext from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import Sidebar from './DesktopSidebar';
 import DesktopChatArea from './DesktopChatArea';
+import WelcomeScreen from './WelcomeScreen';
 import UserSearch from '../Shared/Chat/UserSearch';
 import FriendsList from '../Shared/Chat/FriendsList';
 import ProfilePage from '../Shared/Profile/ProfilePage';
@@ -22,11 +24,9 @@ import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
 const Container = styled.div`
   display: flex;
   height: 100vh;
-  height: 100dvh; /* Use dynamic viewport height */
+  height: 100dvh;
   width: 100vw;
-  background: ${props => props.theme === 'dark' 
-    ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)' 
-    : 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'};
+  background: ${props => props.$isDark ? '#1a1a1a' : '#f5f5f5'};
   position: fixed;
   top: 0;
   left: 0;
@@ -35,27 +35,6 @@ const Container = styled.div`
   overflow: hidden;
   margin: 0;
   padding: 0;
-
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: ${props => props.theme === 'dark'
-      ? `
-        radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.2) 0%, transparent 50%),
-        radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.2) 0%, transparent 50%),
-        radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.2) 0%, transparent 50%)
-      `
-      : `
-        radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.1) 0%, transparent 50%),
-        radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.1) 0%, transparent 50%),
-        radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.1) 0%, transparent 50%)
-      `};
-    pointer-events: none;
-  }
 
   @media (max-width: 768px) {
     flex-direction: column;
@@ -238,6 +217,38 @@ const ThemeToggleButton = styled.button`
   }
 `;
 
+const AdminButton = styled.button`
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  @media (max-width: 768px) {
+    width: 32px;
+    height: 32px;
+    padding: 0.4rem;
+  }
+
+  @media (max-width: 480px) {
+    width: 28px;
+    height: 28px;
+    padding: 0.3rem;
+  }
+`;
+
 const LogoutButton = styled.button`
   background: none;
   border: none;
@@ -305,16 +316,13 @@ const MobileMenuButton = styled.button`
 
 const MainContent = styled.div`
   display: flex;
-  margin-top: 60px;
-  height: calc(100vh - 60px);
+  height: 100vh;
   width: 100%;
   position: relative;
   z-index: 1;
 
   @media (max-width: 768px) {
-    /* Account for safe area - notch + home indicator */
-    margin-top: calc(56px + env(safe-area-inset-top));
-    height: calc(100vh - 56px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     flex-direction: column;
   }
 `;
@@ -322,6 +330,7 @@ const MainContent = styled.div`
 const Chat = () => {
   const { user, logout } = useContext(AuthContext);
   const { isDarkMode, toggleTheme } = useTheme();
+  const navigate = useNavigate();
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [showUserSearch, setShowUserSearch] = useState(false);
   const [conversations, setConversations] = useState([]);
@@ -382,6 +391,33 @@ const Chat = () => {
       console.log('Setting up socket listeners for user:', user.id);
       // Join user to their personal room
       socket.emit('join', user.id);
+      
+      // Listen for session revoked event (when logged out from another device)
+      socket.on('session-revoked', (data) => {
+        console.log('🔒 Session revoked via socket:', data);
+        
+        // Check if this is our session being revoked
+        const currentToken = localStorage.getItem('token') || sessionStorage.getItem('token');
+        if (!currentToken) return; // No token, nothing to check
+        
+        let shouldLogout = false;
+        
+        if (data.reason === 'logged_out') {
+          // Specific session logout - check if it's our session
+          shouldLogout = data.sessionId === currentToken;
+        } else if (data.reason === 'logged_out_all_other') {
+          // Logout all other - only logout if our token is in the revoked list
+          shouldLogout = data.revokedSessions && data.revokedSessions.includes(currentToken);
+        }
+        
+        if (shouldLogout) {
+          console.log('🔒 Our session was revoked, logging out...');
+          // Trigger logout immediately
+          window.dispatchEvent(new CustomEvent('session-revoked', {
+            detail: { reason: data.reason || 'socket_revoked' }
+          }));
+        }
+      });
       
       // Force refresh conversations to get latest status
       setTimeout(() => {
@@ -494,6 +530,7 @@ const Chat = () => {
         socket.off('receiveMessage');
         socket.off('conversationUpdated');
         socket.off('userStatusChanged');
+        socket.off('session-revoked');
       };
     }
   }, [socket, user]);
@@ -655,39 +692,7 @@ const Chat = () => {
   }
 
   return (
-    <Container theme={isDarkMode ? 'dark' : 'light'}>
-      <Header>
-        <Logo>
-          <MobileMenuButton onClick={() => setShowMobileSidebar(!showMobileSidebar)} title="Menu">
-            ☰
-          </MobileMenuButton>
-          <div className="logo-icon"><img src={`${process.env.PUBLIC_URL || ''}/Zyea.jpg?v=2`} alt="Zyea+" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} /></div>
-          <h1 className="logo-text">Zyea+</h1>
-        </Logo>
-        <UserInfo>
-          <NotificationBell 
-            theme={isDarkMode ? 'dark' : 'light'}
-            onOpenNotificationCenter={() => setShowNotificationCenter(true)}
-          />
-          <UserProfile onClick={() => setShowProfile(true)} style={{ cursor: 'pointer' }}>
-            <Avatar>
-              {user?.avatar_url ? (
-                <img src={getAvatarURL(user.avatar_url)} alt={user.full_name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                getInitials(user?.full_name || user?.fullName || user?.username)
-              )}
-            </Avatar>
-            <UserName>{user?.full_name || user?.fullName || user?.username || (user ? 'Đang tải...' : 'Người dùng')}</UserName>
-          </UserProfile>
-          <ThemeToggleButton onClick={toggleTheme} title={isDarkMode ? 'Chuyển sang sáng' : 'Chuyển sang tối'}>
-            {isDarkMode ? <FiSun size={18} /> : <FiMoon size={18} />}
-          </ThemeToggleButton>
-          <LogoutButton onClick={handleLogout} title="Đăng xuất">
-            <FiLogOut size={18} />
-          </LogoutButton>
-        </UserInfo>
-      </Header>
-
+    <Container $isDark={isDarkMode}>
       <MainContent>
         <Sidebar
           conversations={conversations}
@@ -700,6 +705,18 @@ const Chat = () => {
           reloadKey={sidebarReloadKey}
           isVisible={showMobileSidebar}
           onClose={() => setShowMobileSidebar(false)}
+          user={user}
+          isDarkMode={isDarkMode}
+          onShowProfile={() => setShowProfile(true)}
+          onLogout={handleLogout}
+          onConversationDeleted={(conversationId) => {
+            // Remove deleted conversation from list
+            setConversations(prev => prev.filter(conv => conv.id !== conversationId));
+            // Clear selection if deleted conversation was selected
+            if (selectedConversation?.id === conversationId) {
+              setSelectedConversation(null);
+            }
+          }}
         />
         
         {showUserSearch || showAddFriend ? (
@@ -715,34 +732,24 @@ const Chat = () => {
             onStartChat={handleUserSelect}
             onClose={() => setShowFriendsList(false)}
           />
+        ) : selectedConversation ? (
+          <DesktopChatArea 
+            conversation={selectedConversation} 
+            currentUser={user} 
+            socket={socket}
+            onMessageSent={updateConversationOnMessage}
+            onSidebarReload={handleSidebarReload}
+            isMobile={isMobile}
+            onBackToSidebar={() => setSelectedConversation(null)}
+            currentView="conversation"
+          />
         ) : (
-          <>
-            {isMobile && !selectedConversation ? (
-              <Sidebar
-                conversations={conversations}
-                selectedConversation={selectedConversation}
-                onConversationSelect={handleConversationSelect}
-                onNewChat={() => setShowUserSearch(true)}
-                onAddFriend={() => setShowAddFriend(true)}
-                onShowFriends={() => setShowFriendsList(true)}
-                socket={socket}
-                reloadKey={sidebarReloadKey}
-                isVisible={true}
-                onClose={() => {}}
-              />
-            ) : (
-              <DesktopChatArea 
-                conversation={selectedConversation} 
-                currentUser={user} 
-                socket={socket}
-                onMessageSent={updateConversationOnMessage}
-                onSidebarReload={handleSidebarReload}
-                isMobile={isMobile}
-                onBackToSidebar={() => setSelectedConversation(null)}
-                currentView="conversation"
-              />
-            )}
-          </>
+          <WelcomeScreen 
+            user={user}
+            isDarkMode={isDarkMode}
+            onNewChat={handleNewChat}
+            onCreateGroup={handleNewChat}
+          />
         )}
       </MainContent>
       

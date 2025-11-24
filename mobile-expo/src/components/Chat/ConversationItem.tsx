@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL } from '../../utils/imageUtils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ConversationItemProps {
   conversation: {
@@ -24,6 +25,26 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
 }) => {
   const theme = useTheme();
   const hasUnread = (conversation.unread_count || 0) > 0;
+  const [activityStatusEnabled, setActivityStatusEnabled] = useState(true);
+
+  // Load activity status setting
+  useEffect(() => {
+    const loadActivityStatus = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('activityStatusEnabled');
+        if (saved !== null) {
+          setActivityStatusEnabled(saved === 'true');
+        }
+      } catch (error) {
+        console.error('Error loading activity status:', error);
+      }
+    };
+    loadActivityStatus();
+    
+    // Listen for changes
+    const interval = setInterval(loadActivityStatus, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <TouchableOpacity
@@ -46,7 +67,7 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
             </Text>
           </View>
         )}
-        {conversation.status === 'online' && (
+        {conversation.status === 'online' && activityStatusEnabled && (
           <View style={[styles.statusIndicator, { backgroundColor: '#4caf50' }]} />
         )}
       </View>

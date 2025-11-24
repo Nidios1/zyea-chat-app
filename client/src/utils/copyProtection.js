@@ -25,6 +25,11 @@ export const initCopyProtection = () => {
 
   // Chặn copy/paste/cut
   const preventCopyPaste = (e) => {
+    // TẮT CHẶN PASTE - Cho phép paste
+    if (e.type === 'paste') {
+      return; // Không chặn paste
+    }
+    // Vẫn chặn copy và cut
     e.preventDefault();
     e.stopPropagation();
     return false;
@@ -32,29 +37,43 @@ export const initCopyProtection = () => {
 
   // Chặn keyboard shortcuts
   const preventKeyboardShortcuts = (e) => {
-    // Chặn Ctrl+C, Ctrl+V, Ctrl+A, Ctrl+X, Ctrl+S
-    if (e.ctrlKey && ['c', 'v', 'a', 'x', 's'].includes(e.key.toLowerCase())) {
+    // Chỉ chặn trong production và không phải admin panel
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isAdminPanel = window.location.pathname.startsWith('/admin');
+    
+    // Cho phép DevTools shortcuts trong development hoặc admin panel
+    if ((!isProduction || isAdminPanel) && (
+      e.key === 'F12' || 
+      (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+      (e.ctrlKey && e.key === 'u')
+    )) {
+      return; // Không chặn DevTools shortcuts
+    }
+    
+    // Chặn Ctrl+C, Ctrl+A, Ctrl+X, Ctrl+S (chỉ trong production, không phải admin)
+    // TẮT CHẶN Ctrl+V (paste) - Cho phép paste
+    if (isProduction && !isAdminPanel && e.ctrlKey && ['c', 'a', 'x', 's'].includes(e.key.toLowerCase())) {
       e.preventDefault();
       e.stopPropagation();
       return false;
     }
     
-    // Chặn F12 (Developer Tools)
-    if (e.key === 'F12') {
+    // Chặn F12 (chỉ trong production, không phải admin)
+    if (isProduction && !isAdminPanel && e.key === 'F12') {
       e.preventDefault();
       e.stopPropagation();
       return false;
     }
     
-    // Chặn Ctrl+Shift+I (Developer Tools)
-    if (e.ctrlKey && e.shiftKey && e.key === 'I') {
+    // Chặn Ctrl+Shift+I (chỉ trong production, không phải admin)
+    if (isProduction && !isAdminPanel && e.ctrlKey && e.shiftKey && e.key === 'I') {
       e.preventDefault();
       e.stopPropagation();
       return false;
     }
     
-    // Chặn Ctrl+U (View Source)
-    if (e.ctrlKey && e.key === 'u') {
+    // Chặn Ctrl+U (chỉ trong production, không phải admin)
+    if (isProduction && !isAdminPanel && e.ctrlKey && e.key === 'u') {
       e.preventDefault();
       e.stopPropagation();
       return false;
@@ -101,7 +120,8 @@ export const initCopyProtection = () => {
     document.addEventListener('selectstart', preventSelectStart, { passive: false });
     document.addEventListener('dragstart', preventDragStart, { passive: false });
     document.addEventListener('copy', preventCopyPaste, { passive: false });
-    document.addEventListener('paste', preventCopyPaste, { passive: false });
+    // TẮT CHẶN PASTE - Không thêm event listener cho paste
+    // document.addEventListener('paste', preventCopyPaste, { passive: false });
     document.addEventListener('cut', preventCopyPaste, { passive: false });
     document.addEventListener('keydown', preventKeyboardShortcuts, { passive: false });
     
@@ -132,7 +152,8 @@ export const initCopyProtection = () => {
     document.removeEventListener('selectstart', preventSelectStart);
     document.removeEventListener('dragstart', preventDragStart);
     document.removeEventListener('copy', preventCopyPaste);
-    document.removeEventListener('paste', preventCopyPaste);
+    // TẮT CHẶN PASTE - Không cần remove vì không add
+    // document.removeEventListener('paste', preventCopyPaste);
     document.removeEventListener('cut', preventCopyPaste);
     document.removeEventListener('keydown', preventKeyboardShortcuts);
     document.removeEventListener('touchstart', preventTouchGestures);
@@ -161,7 +182,8 @@ export const protectElement = (element) => {
   element.addEventListener('selectstart', preventCopy);
   element.addEventListener('dragstart', preventCopy);
   element.addEventListener('copy', preventCopy);
-  element.addEventListener('paste', preventCopy);
+  // TẮT CHẶN PASTE - Cho phép paste trong elements
+  // element.addEventListener('paste', preventCopy);
   element.addEventListener('cut', preventCopy);
   
   // CSS protection
@@ -183,8 +205,19 @@ export const allowInputCopy = (element) => {
 };
 
 // Chặn Developer Tools
+// DISABLED: Cho phép mở DevTools trong development và admin panel
 export const preventDevTools = () => {
-  // Chặn F12
+  // Chỉ chặn trong production và không phải admin panel
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isAdminPanel = window.location.pathname.startsWith('/admin');
+  
+  // Cho phép DevTools trong development hoặc admin panel
+  if (!isProduction || isAdminPanel) {
+    console.log('🔓 DevTools allowed (development or admin panel)');
+    return;
+  }
+  
+  // Chặn F12 (chỉ trong production, không phải admin)
   document.addEventListener('keydown', (e) => {
     if (e.key === 'F12') {
       e.preventDefault();
@@ -192,7 +225,7 @@ export const preventDevTools = () => {
     }
   });
 
-  // Chặn Ctrl+Shift+I
+  // Chặn Ctrl+Shift+I (chỉ trong production, không phải admin)
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.shiftKey && e.key === 'I') {
       e.preventDefault();
@@ -200,7 +233,7 @@ export const preventDevTools = () => {
     }
   });
 
-  // Chặn Ctrl+U (View Source)
+  // Chặn Ctrl+U (View Source) - chỉ trong production, không phải admin
   document.addEventListener('keydown', (e) => {
     if (e.ctrlKey && e.key === 'u') {
       e.preventDefault();
@@ -208,7 +241,7 @@ export const preventDevTools = () => {
     }
   });
 
-  // Detect DevTools open
+  // Detect DevTools open (chỉ trong production, không phải admin)
   let devtools = { open: false };
   const threshold = 160;
   

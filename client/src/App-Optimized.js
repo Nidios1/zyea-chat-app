@@ -84,8 +84,8 @@ function App() {
       const cleanupCopyProtection = initCopyProtection();
       preventDevTools();
 
-      // Register service worker (PWA only)
-      if ('serviceWorker' in navigator && !isCapacitor()) {
+      // Register service worker (PWA only) - CHỈ TRÊN PC, KHÔNG TRÊN MOBILE
+      if ('serviceWorker' in navigator && !isCapacitor() && !isMobile) {
         try {
           await navigator.serviceWorker.register('/sw.js');
           console.log('✅ Service Worker registered');

@@ -21,13 +21,20 @@ router.get('/', async (req, res) => {
         n.*,
         u.username,
         u.full_name,
-        u.avatar_url
+        u.avatar_url,
+        p.image_url as post_image_url
       FROM notifications n
       LEFT JOIN users u ON n.from_user_id = u.id
+      LEFT JOIN posts p ON n.post_id = p.id
       ${whereClause}
       ORDER BY n.created_at DESC
       LIMIT 50
     `, params);
+
+    console.log(`📬 [Notifications API] User ${userId} - Found ${notifications.length} notifications`);
+    if (notifications.length > 0) {
+      console.log(`📬 [Notifications API] Sample: Type=${notifications[0].type}, From=${notifications[0].full_name || notifications[0].username}, Message=${notifications[0].message}`);
+    }
 
     res.json(notifications);
   } catch (error) {
@@ -46,9 +53,11 @@ router.get('/recent', async (req, res) => {
         n.*,
         u.username,
         u.full_name,
-        u.avatar_url
+        u.avatar_url,
+        p.image_url as post_image_url
       FROM notifications n
       LEFT JOIN users u ON n.from_user_id = u.id
+      LEFT JOIN posts p ON n.post_id = p.id
       WHERE n.user_id = ?
       ORDER BY n.created_at DESC
       LIMIT 10
@@ -220,6 +229,135 @@ router.post('/:id/reject-friend-request', async (req, res) => {
     }
   } catch (error) {
     console.error('Error rejecting friend request:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ==================== SYSTEM NOTIFICATIONS ====================
+// Get system notifications for current user
+router.get('/system', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // Parse query parameters to integers (they come as strings from URL)
+    const category = req.query.category || '';
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    const connection = getConnection();
+    
+    let query = `
+      SELECT 
+        sn.*,
+        usn.read as is_read,
+        usn.read_at
+      FROM system_notifications sn
+      INNER JOIN user_system_notifications usn ON sn.id = usn.system_notification_id
+      WHERE usn.user_id = ?
+    `;
+    const params = [userId];
+    
+    if (category) {
+      query += ' AND sn.category = ?';
+      params.push(category);
+    }
+    
+    // LIMIT and OFFSET cannot be parameters in MySQL prepared statements
+    // Use string interpolation after validation (safe because validated as integers)
+    if (!Number.isInteger(limit) || !Number.isInteger(offset) || limit < 0 || offset < 0) {
+      throw new Error('Invalid limit or offset');
+    }
+    query += ` ORDER BY sn.created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+    
+    const [notifications] = await connection.execute(query, params);
+    
+    // Get total count
+    let countQuery = `
+      SELECT COUNT(*) as count
+      FROM system_notifications sn
+      INNER JOIN user_system_notifications usn ON sn.id = usn.system_notification_id
+      WHERE usn.user_id = ?
+    `;
+    const countParams = [userId];
+    
+    if (category) {
+      countQuery += ' AND sn.category = ?';
+      countParams.push(category);
+    }
+    
+    const [countResult] = await connection.execute(countQuery, countParams);
+    const total = countResult[0].count;
+    
+    res.json({
+      notifications,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching system notifications:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get unread system notifications count
+router.get('/system/unread-count', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const [result] = await getConnection().execute(`
+      SELECT COUNT(*) as count
+      FROM user_system_notifications usn
+      INNER JOIN system_notifications sn ON usn.system_notification_id = sn.id
+      WHERE usn.user_id = ? AND usn.read = FALSE
+    `, [userId]);
+
+    res.json({ count: result[0].count });
+  } catch (error) {
+    console.error('Error fetching unread system notifications count:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Mark system notification as read
+router.post('/system/:id/read', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const notificationId = req.params.id;
+    
+    const [result] = await getConnection().execute(`
+      UPDATE user_system_notifications 
+      SET \`read\` = TRUE, read_at = CURRENT_TIMESTAMP
+      WHERE user_id = ? AND system_notification_id = ?
+    `, [userId, notificationId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'System notification not found' });
+    }
+
+    res.json({ message: 'System notification marked as read' });
+  } catch (error) {
+    console.error('Error marking system notification as read:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Mark all system notifications as read
+router.post('/system/read-all', async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    await getConnection().execute(`
+      UPDATE user_system_notifications 
+      SET \`read\` = TRUE, read_at = CURRENT_TIMESTAMP
+      WHERE user_id = ? AND \`read\` = FALSE
+    `, [userId]);
+
+    res.json({ message: 'All system notifications marked as read' });
+  } catch (error) {
+    console.error('Error marking all system notifications as read:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

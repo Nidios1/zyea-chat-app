@@ -71,7 +71,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const db = getConnection();
     
     const [rows] = await db.execute(
-      'SELECT id, username, full_name, avatar_url, cover_url, email, phone, bio, location, website, status, created_at FROM users WHERE id = ?',
+      'SELECT id, username, full_name, avatar_url, cover_url, email, phone, bio, location, website, status, role, activity_status_enabled, created_at FROM users WHERE id = ?',
       [userId]
     );
     
@@ -156,6 +156,11 @@ router.put('/', authenticateToken, async (req, res) => {
       values.push(website);
     }
     
+    if (req.body.activity_status_enabled !== undefined) {
+      updates.push('activity_status_enabled = ?');
+      values.push(req.body.activity_status_enabled === true || req.body.activity_status_enabled === 'true' || req.body.activity_status_enabled === 1);
+    }
+    
     // Add updated_at
     updates.push('updated_at = CURRENT_TIMESTAMP');
     
@@ -168,7 +173,7 @@ router.put('/', authenticateToken, async (req, res) => {
     
     // Fetch updated user data
     const [updatedUser] = await db.execute(
-      'SELECT id, username, full_name, avatar_url, cover_url, email, phone, bio, location, website, status, created_at, updated_at FROM users WHERE id = ?',
+      'SELECT id, username, full_name, avatar_url, cover_url, email, phone, bio, location, website, status, activity_status_enabled, created_at, updated_at FROM users WHERE id = ?',
       [userId]
     );
     

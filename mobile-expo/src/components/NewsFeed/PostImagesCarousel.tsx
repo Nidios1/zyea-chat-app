@@ -1,18 +1,32 @@
-import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import { View, FlatList, TouchableOpacity, Dimensions, StyleSheet, ViewToken, ActivityIndicator } from 'react-native';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { View, FlatList, TouchableOpacity, Dimensions, StyleSheet, ViewToken, ActivityIndicator, InteractionManager } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { Text } from 'react-native-paper';
+import {
+	type AnimatedRef,
+	measure,
+	type MeasuredDimensions,
+	runOnJS,
+	runOnUI,
+	useAnimatedRef,
+} from 'react-native-reanimated';
 import { getImageURL } from '../../utils/imageUtils';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
 import { getImageMetadata, calculateDisplayDimensions, MediaMetadata, CalculatedDimensions } from '../../utils/mediaUtils';
+import { AutoSizedImage } from './AutoSizedImage';
+import { useLightboxControls } from '../../contexts/LightboxContext';
+import { type ImageSource } from '../../contexts/LightboxContext';
 
 interface PostImagesCarouselProps {
 	images: string[];
+	altTexts?: string[]; // Alt text for each image (like social-app-main)
 	onPressImage?: (index: number) => void;
 }
 
-const PostImagesCarousel: React.FC<PostImagesCarouselProps> = ({ images, onPressImage }) => {
+const PostImagesCarousel: React.FC<PostImagesCarouselProps> = ({ images, altTexts, onPressImage }) => {
 	const { colors } = useAppTheme();
+	const { openLightbox } = useLightboxControls();
 	// Cache screen width to avoid re-calculating on every render (fixes jitter)
 	const screenWidth = useMemo(() => Dimensions.get('window').width, []);
 	const itemWidth = screenWidth;
@@ -20,7 +34,7 @@ const PostImagesCarousel: React.FC<PostImagesCarouselProps> = ({ images, onPress
 	const [activeIndex, setActiveIndex] = useState(0);
 	const [imageMetadata, setImageMetadata] = useState<Map<string, MediaMetadata>>(new Map());
 	const [imageDimensions, setImageDimensions] = useState<Map<string, CalculatedDimensions>>(new Map());
-	const [loadingMetadata, setLoadingMetadata] = useState(true);
+	const [loadingMetadata, setLoadingMetadata] = useState(false); // Bắt đầu với false để hiển thị ngay
 	const flatListRef = useRef<FlatList>(null);
 	
 	const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
@@ -52,39 +66,49 @@ const PostImagesCarousel: React.FC<PostImagesCarouselProps> = ({ images, onPress
 		}
 		prevImagesKeyRef.current = imagesKey;
 
+		// Nếu chỉ có 1 ảnh, AutoSizedImage tự xử lý metadata và dimensions
+		// Chỉ cần load metadata để truyền vào AutoSizedImage
+		if (data.length === 1) {
+			setLoadingMetadata(false);
+			// Load metadata cho single image để truyền vào AutoSizedImage
+			getImageMetadata(data[0])
+				.then((metadata) => {
+					if (metadata) {
+						setImageMetadata((prev) => {
+							const newMap = new Map(prev);
+							newMap.set(data[0], metadata);
+							return newMap;
+						});
+					}
+				})
+				.catch((error) => {
+					console.warn('Error loading metadata:', error);
+				});
+			return;
+		}
+
+		// Nhiều ảnh: cần tính dimensions cho carousel
 		// Set fallback dimensions ngay lập tức để hiển thị ảnh không bị delay
-		// Sử dụng aspect ratio 1:1 (square) làm fallback - an toàn nhất, không quá khác biệt
 		const fallbackDimensionsMap = new Map<string, CalculatedDimensions>();
 		data.forEach((imageUrl) => {
-			// Sử dụng fallback dimensions với aspect ratio 1:1 (square)
-			// Điều này đảm bảo layout không bị giật khi metadata load xong
-			// Square là an toàn nhất vì không quá dài hay quá rộng
 			const fallback = calculateDisplayDimensions(null, screenWidth);
 			fallbackDimensionsMap.set(imageUrl, fallback);
 		});
-		// Set dimensions ngay lập tức để tránh layout shift
 		setImageDimensions(fallbackDimensionsMap);
-		// Set loadingMetadata = false ngay để hiển thị ảnh với fallback dimensions
-		// Metadata sẽ được update sau khi load xong (smooth transition)
 		setLoadingMetadata(false);
 
-		// BẮT ĐẦU LOAD METADATA NGAY LẬP TỨC (không đợi)
-		// Load metadata cho tất cả ảnh song song và cập nhật ngay khi có kết quả
-		const totalImages = data.length;
-		
-		// Load tất cả metadata song song để tối ưu tốc độ
+		// Load metadata cho tất cả ảnh song song
 		const metadataPromises = data.map((imageUrl) => 
 			getImageMetadata(imageUrl)
 				.then((metadata) => {
 					if (metadata) {
-						// Cập nhật metadata ngay khi có (không đợi tất cả)
 						setImageMetadata((prev) => {
 							const newMap = new Map(prev);
 							newMap.set(imageUrl, metadata);
 							return newMap;
 						});
 
-						// Cập nhật dimensions ngay khi có metadata (smooth update, không giật)
+						// Cập nhật dimensions cho carousel (nhiều ảnh)
 						const dimensions = calculateDisplayDimensions(metadata, screenWidth);
 						setImageDimensions((prev) => {
 							const newMap = new Map(prev);
@@ -100,202 +124,267 @@ const PostImagesCarousel: React.FC<PostImagesCarouselProps> = ({ images, onPress
 				})
 		);
 
-		// Đợi tất cả metadata load xong (hoặc fail) để set loadingMetadata = false
 		Promise.all(metadataPromises).then(() => {
 			setLoadingMetadata(false);
 		});
-		
-		// Nếu không có ảnh nào, set loadingMetadata = false ngay
-		if (totalImages === 0) {
-			setLoadingMetadata(false);
-		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [imagesKey, screenWidth]);
 
-	// Single image: hiển thị với aspect ratio đúng theo kích thước thực tế của ảnh
+	// Single image: sử dụng AutoSizedImage với logic constrain aspect ratio giống social-app-main
 	if (data.length === 1) {
 		const imageUrl = data[0];
 		const metadata = imageMetadata.get(imageUrl);
-		const dimensions = imageDimensions.get(imageUrl) || calculateDisplayDimensions(null, screenWidth);
-
-		// Handler để lấy dimensions ngay khi ảnh load (nhanh hơn Image.getSize)
-		const handleImageLoad = useCallback((event: any) => {
-			// expo-image onLoad trả về: event.source.width và event.source.height
-			const source = event?.source || event?.nativeEvent?.source;
-			const width = source?.width;
-			const height = source?.height;
-			
-			if (width && height && width > 0 && height > 0) {
-				// Chỉ cập nhật nếu chưa có metadata hoặc metadata khác
-				const currentMetadata = imageMetadata.get(imageUrl);
-				if (!currentMetadata || 
-					Math.abs(currentMetadata.width - width) > 1 || 
-					Math.abs(currentMetadata.height - height) > 1) {
-					const newMetadata: MediaMetadata = {
-						width,
-						height,
-						aspectRatio: width / height,
-						type: 'image',
-					};
-					
-					// Cập nhật metadata ngay lập tức
-					setImageMetadata((prev) => {
-						const newMap = new Map(prev);
-						newMap.set(imageUrl, newMetadata);
-						return newMap;
-					});
-
-					// Cập nhật dimensions ngay lập tức
-					const newDimensions = calculateDisplayDimensions(newMetadata, screenWidth);
-					setImageDimensions((prev) => {
-						const newMap = new Map(prev);
-						newMap.set(imageUrl, newDimensions);
-						return newMap;
-					});
-				}
-			}
-		}, [imageUrl, screenWidth]);
+		const aspectRatio = metadata?.aspectRatio;
 
 		// Debug: Log dimensions để kiểm tra
 		if (metadata && __DEV__) {
 			console.log('📐 Single image dimensions:', {
 				url: imageUrl.substring(0, 50),
 				originalAspectRatio: metadata.aspectRatio,
-				displayWidth: dimensions.width,
-				displayHeight: dimensions.height,
-				displayAspectRatio: dimensions.aspectRatio,
 			});
 		}
 
+		// Prefetch images khi onPressIn (giống social-app-main)
+		const handlePressIn = () => {
+			InteractionManager.runAfterInteractions(() => {
+				Image.prefetch(
+					data.map(img => getImageURL(img)),
+					'memory',
+				);
+			});
+		};
+
+		// Open lightbox với measure thumbnail position (giống social-app-main)
+		const _openLightbox = (
+			thumbRect: MeasuredDimensions | null,
+			fetchedDims: { width: number; height: number } | null,
+		) => {
+			const items: ImageSource[] = data.map((img, i) => ({
+				uri: getImageURL(img),
+				thumbUri: getImageURL(img),
+				alt: altTexts && altTexts[i] ? altTexts[i] : undefined, // Like social-app-main: alt: img.alt
+				dimensions: metadata ? { width: metadata.width, height: metadata.height } : null,
+				thumbRect: thumbRect,
+				thumbDimensions: fetchedDims,
+			}));
+
+			openLightbox({
+				images: items,
+				index: 0,
+			});
+
+			// Callback cũ để backward compatible
+			onPressImage?.(0);
+		};
+
+		const handlePress = (
+			containerRef: AnimatedRef<any>,
+			fetchedDims: { width: number; height: number } | null,
+		) => {
+			runOnUI(() => {
+				'worklet';
+				const rect = measure(containerRef);
+				runOnJS(_openLightbox)(rect, fetchedDims);
+			})();
+		};
+
 		return (
-			<TouchableOpacity 
-				activeOpacity={0.9} 
-				onPress={() => onPressImage?.(0)}
-				style={[styles.singleImageContainer, { 
-					width: '100%', // Luôn full width
-					aspectRatio: dimensions.aspectRatio, // Height tự động tính từ aspect ratio
-				}]}
-			>
-				<Image 
-					source={{ uri: getImageURL(imageUrl) }} 
-					style={styles.singleImage} 
-					contentFit="cover"
-					transition={200}
-					placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
-					placeholderContentFit="cover"
-					onLoad={handleImageLoad}
-				/>
-			</TouchableOpacity>
+			<AutoSizedImage
+				imageUrl={imageUrl}
+				aspectRatio={aspectRatio}
+				crop="constrained"
+				onPress={handlePress}
+				onPressIn={handlePressIn}
+				metadata={metadata}
+			/>
 		);
 	}
+
+	// Prefetch images khi onPressIn (giống social-app-main)
+	const handlePressInMultiple = () => {
+		InteractionManager.runAfterInteractions(() => {
+			Image.prefetch(
+				data.map(img => getImageURL(img)),
+				'memory',
+			);
+		});
+	};
+
+	// Helper để mở lightbox cho multiple images
+	const openLightboxForMultiple = (
+		index: number,
+		thumbRects: (MeasuredDimensions | null)[],
+		fetchedDims: ({ width: number; height: number } | null)[],
+	) => {
+		const items: ImageSource[] = data.map((img, i) => {
+			const metadata = imageMetadata.get(img);
+			return {
+				uri: getImageURL(img),
+				thumbUri: getImageURL(img),
+				alt: altTexts && altTexts[i] ? altTexts[i] : undefined, // Like social-app-main: alt: img.alt
+				dimensions: metadata ? { width: metadata.width, height: metadata.height } : null,
+				thumbRect: thumbRects[i] ?? null,
+				thumbDimensions: fetchedDims[i] ?? null,
+			};
+		});
+
+		openLightbox({
+			images: items,
+			index,
+		});
+
+		// Callback cũ để backward compatible
+		onPressImage?.(index);
+	};
 
 	// Two images: side-by-side với aspect square (giống social-app-main)
 	if (data.length === 2) {
 		const imageGap = 4; // gap_xs
 		const imageWidth = (itemWidth - imageGap) / 2;
 		const imageHeight = imageWidth; // Square aspect ratio
+		const containerRef0 = useAnimatedRef();
+		const containerRef1 = useAnimatedRef();
+		const containerRefs = [containerRef0, containerRef1];
+		const thumbDimsRef = useRef<({ width: number; height: number } | null)[]>([]);
+
+		const handlePress = (index: number) => {
+			runOnUI(() => {
+				'worklet';
+				const rects: (MeasuredDimensions | null)[] = [];
+				for (const r of containerRefs) {
+					rects.push(measure(r));
+				}
+				runOnJS(openLightboxForMultiple)(index, rects, thumbDimsRef.current);
+			})();
+		};
 
 		return (
 			<View style={[styles.twoImagesContainer, { gap: imageGap }]}>
 				<TouchableOpacity 
 					activeOpacity={0.9} 
-					onPress={() => onPressImage?.(0)}
+					onPress={() => handlePress(0)}
+					onPressIn={handlePressInMultiple}
 					style={[styles.twoImageItem, { flex: 1, aspectRatio: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]}
 				>
-					<Image 
-						source={{ uri: getImageURL(data[0]) }} 
-						style={[styles.twoImage, { width: imageWidth, height: imageHeight }]} 
-						contentFit="cover"
-						transition={200}
-						placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
-						placeholderContentFit="cover"
-					/>
+					<Animated.View ref={containerRef0} style={StyleSheet.absoluteFill} collapsable={false}>
+						<Image 
+							source={{ uri: getImageURL(data[0]) }} 
+							style={[styles.twoImage, { width: imageWidth, height: imageHeight }]} 
+							contentFit="cover"
+							transition={200}
+							placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+							placeholderContentFit="cover"
+							onLoad={(e) => {
+								thumbDimsRef.current[0] = {
+									width: e.source.width,
+									height: e.source.height,
+								};
+							}}
+						/>
+					</Animated.View>
 				</TouchableOpacity>
 				<TouchableOpacity 
 					activeOpacity={0.9} 
-					onPress={() => onPressImage?.(1)}
+					onPress={() => handlePress(1)}
+					onPressIn={handlePressInMultiple}
 					style={[styles.twoImageItem, { flex: 1, aspectRatio: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }]}
 				>
-					<Image 
-						source={{ uri: getImageURL(data[1]) }} 
-						style={[styles.twoImage, { width: imageWidth, height: imageHeight }]} 
-						contentFit="cover"
-						transition={200}
-						placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
-						placeholderContentFit="cover"
-					/>
+					<Animated.View ref={containerRef1} style={StyleSheet.absoluteFill} collapsable={false}>
+						<Image 
+							source={{ uri: getImageURL(data[1]) }} 
+							style={[styles.twoImage, { width: imageWidth, height: imageHeight }]} 
+							contentFit="cover"
+							transition={200}
+							placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+							placeholderContentFit="cover"
+							onLoad={(e) => {
+								thumbDimsRef.current[1] = {
+									width: e.source.width,
+									height: e.source.height,
+								};
+							}}
+						/>
+					</Animated.View>
 				</TouchableOpacity>
 			</View>
 		);
 	}
 
-	// Three images: Facebook style - 2 ảnh trên (trái/phải), 1 ảnh dưới full width
+	// Three images: social-app-main style - 1 square trái + 2 stacked phải
 	if (data.length === 3) {
-		const imageGap = 4;
-		const topImageWidth = (itemWidth - imageGap) / 2;
-		const topImageHeight = topImageWidth; // Square aspect ratio
-		const bottomImageHeight = topImageWidth * 0.75; // Slightly smaller height for bottom image
+		const imageGap = 4; // gap_xs
+		const leftWidth = (itemWidth - imageGap) / 2;
+		const rightWidth = leftWidth;
+		const leftHeight = leftWidth; // Square
+		const rightItemHeight = (leftHeight - imageGap) / 2; // 2 ảnh stacked
 
 		return (
-			<View style={styles.threeImagesContainer}>
-				{/* Row 1: 2 ảnh trên (trái/phải) */}
-				<View style={[styles.threeImagesTopRow, { gap: imageGap, marginBottom: imageGap }]}>
-					<TouchableOpacity 
-						activeOpacity={0.9} 
-						onPress={() => onPressImage?.(0)}
-						style={[styles.threeImageItem, { width: topImageWidth, height: topImageHeight, borderBottomLeftRadius: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]}
-					>
-						{loadingMetadata ? (
-							<View style={[styles.loadingContainer, { width: topImageWidth, height: topImageHeight }]}>
-								<ActivityIndicator size="small" color={colors.primary} />
-							</View>
-						) : (
-							<Image 
-								source={{ uri: getImageURL(data[0]) }} 
-								style={[styles.threeImage, { width: topImageWidth, height: topImageHeight }]} 
-								contentFit="cover"
-								transition={200}
-							/>
-						)}
-					</TouchableOpacity>
+			<View style={[styles.threeImagesContainer, { flexDirection: 'row', gap: imageGap }]}>
+				{/* Left: 1 square image */}
+				<TouchableOpacity 
+					activeOpacity={0.9} 
+					onPress={() => onPressImage?.(0)}
+					onPressIn={handlePressInMultiple}
+					style={[styles.threeImageItem, { 
+						flex: 1, 
+						aspectRatio: 1,
+						borderTopRightRadius: 0,
+						borderBottomRightRadius: 0,
+					}]}
+				>
+					<Image 
+						source={{ uri: getImageURL(data[0]) }} 
+						style={styles.threeImage} 
+						contentFit="cover"
+						transition={200}
+						placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+						placeholderContentFit="cover"
+					/>
+				</TouchableOpacity>
+				
+				{/* Right: 2 stacked images */}
+				<View style={{ flex: 1, gap: imageGap }}>
 					<TouchableOpacity 
 						activeOpacity={0.9} 
 						onPress={() => onPressImage?.(1)}
-						style={[styles.threeImageItem, { width: topImageWidth, height: topImageHeight, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}
+						onPressIn={handlePressInMultiple}
+						style={[styles.threeImageItem, { 
+							flex: 1,
+							borderTopLeftRadius: 0,
+							borderBottomLeftRadius: 0,
+							borderBottomRightRadius: 0,
+						}]}
 					>
-						{loadingMetadata ? (
-							<View style={[styles.loadingContainer, { width: topImageWidth, height: topImageHeight }]}>
-								<ActivityIndicator size="small" color={colors.primary} />
-							</View>
-						) : (
-							<Image 
-								source={{ uri: getImageURL(data[1]) }} 
-								style={[styles.threeImage, { width: topImageWidth, height: topImageHeight }]} 
-								contentFit="cover"
-								transition={200}
-							/>
-						)}
-					</TouchableOpacity>
-				</View>
-				{/* Row 2: 1 ảnh dưới full width */}
-				<TouchableOpacity 
-					activeOpacity={0.9} 
-					onPress={() => onPressImage?.(2)}
-					style={[styles.threeImageBottom, { width: itemWidth, height: bottomImageHeight, borderTopLeftRadius: 0, borderTopRightRadius: 0 }]}
-				>
-					{loadingMetadata ? (
-						<View style={[styles.loadingContainer, { width: itemWidth, height: bottomImageHeight }]}>
-							<ActivityIndicator size="small" color={colors.primary} />
-						</View>
-					) : (
 						<Image 
-							source={{ uri: getImageURL(data[2]) }} 
-							style={[styles.threeImage, { width: itemWidth, height: bottomImageHeight }]} 
+							source={{ uri: getImageURL(data[1]) }} 
+							style={styles.threeImage} 
 							contentFit="cover"
 							transition={200}
+							placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+							placeholderContentFit="cover"
 						/>
-					)}
-				</TouchableOpacity>
+					</TouchableOpacity>
+					<TouchableOpacity 
+						activeOpacity={0.9} 
+						onPress={() => onPressImage?.(2)}
+						onPressIn={handlePressInMultiple}
+						style={[styles.threeImageItem, { 
+							flex: 1,
+							borderTopLeftRadius: 0,
+							borderBottomLeftRadius: 0,
+							borderTopRightRadius: 0,
+						}]}
+					>
+						<Image 
+							source={{ uri: getImageURL(data[2]) }} 
+							style={styles.threeImage} 
+							contentFit="cover"
+							transition={200}
+							placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+							placeholderContentFit="cover"
+						/>
+					</TouchableOpacity>
+				</View>
 			</View>
 		);
 	}
@@ -312,76 +401,69 @@ const PostImagesCarousel: React.FC<PostImagesCarouselProps> = ({ images, onPress
 					<TouchableOpacity 
 						activeOpacity={0.9} 
 						onPress={() => onPressImage?.(0)}
+						onPressIn={handlePressInMultiple}
 						style={[styles.fourImageItem, { width: imageWidth, height: imageHeight, borderBottomLeftRadius: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]}
 					>
-						{loadingMetadata ? (
-							<View style={[styles.loadingContainer, { width: imageWidth, height: imageHeight }]}>
-								<ActivityIndicator size="small" color={colors.primary} />
-							</View>
-						) : (
-							<Image 
-								source={{ uri: getImageURL(data[0]) }} 
-								style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
-								contentFit="cover"
-								transition={200}
-							/>
-						)}
+						{/* Hiển thị ảnh ngay với placeholder, không chờ metadata */}
+						<Image 
+							source={{ uri: getImageURL(data[0]) }} 
+							style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
+							contentFit="cover"
+							transition={200}
+							placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+							placeholderContentFit="cover"
+							cachePolicy="memory-disk"
+						/>
 					</TouchableOpacity>
 					<TouchableOpacity 
 						activeOpacity={0.9} 
 						onPress={() => onPressImage?.(1)}
+						onPressIn={handlePressInMultiple}
 						style={[styles.fourImageItem, { width: imageWidth, height: imageHeight, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}
 					>
-						{loadingMetadata ? (
-							<View style={[styles.loadingContainer, { width: imageWidth, height: imageHeight }]}>
-								<ActivityIndicator size="small" color={colors.primary} />
-							</View>
-						) : (
-							<Image 
-								source={{ uri: getImageURL(data[1]) }} 
-								style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
-								contentFit="cover"
-								transition={200}
-							/>
-						)}
+						<Image 
+							source={{ uri: getImageURL(data[1]) }} 
+							style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
+							contentFit="cover"
+							transition={200}
+							placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+							placeholderContentFit="cover"
+							cachePolicy="memory-disk"
+						/>
 					</TouchableOpacity>
 				</View>
 				<View style={[styles.fourImagesRow, { gap: imageGap }]}>
 					<TouchableOpacity 
 						activeOpacity={0.9} 
 						onPress={() => onPressImage?.(2)}
+						onPressIn={handlePressInMultiple}
 						style={[styles.fourImageItem, { width: imageWidth, height: imageHeight, borderTopLeftRadius: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]}
 					>
-						{loadingMetadata ? (
-							<View style={[styles.loadingContainer, { width: imageWidth, height: imageHeight }]}>
-								<ActivityIndicator size="small" color={colors.primary} />
-							</View>
-						) : (
-							<Image 
-								source={{ uri: getImageURL(data[2]) }} 
-								style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
-								contentFit="cover"
-								transition={200}
-							/>
-						)}
+						<Image 
+							source={{ uri: getImageURL(data[2]) }} 
+							style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
+							contentFit="cover"
+							transition={200}
+							placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+							placeholderContentFit="cover"
+							cachePolicy="memory-disk"
+						/>
 					</TouchableOpacity>
 					<TouchableOpacity 
 						activeOpacity={0.9} 
 						onPress={() => onPressImage?.(3)}
+						onPressIn={handlePressInMultiple}
 						style={[styles.fourImageItem, { width: imageWidth, height: imageHeight, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderTopRightRadius: 0 }]}
 					>
-						{loadingMetadata ? (
-							<View style={[styles.loadingContainer, { width: imageWidth, height: imageHeight }]}>
-								<ActivityIndicator size="small" color={colors.primary} />
-							</View>
-						) : (
-							<Image 
-								source={{ uri: getImageURL(data[3]) }} 
-								style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
-								contentFit="cover"
-								transition={200}
-							/>
-						)}
+						<Image 
+							source={{ uri: getImageURL(data[3]) }} 
+							style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
+							contentFit="cover"
+							transition={200}
+							placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+							placeholderContentFit="cover"
+							cachePolicy="memory-disk"
+						/>
 					</TouchableOpacity>
 				</View>
 			</View>
@@ -403,36 +485,31 @@ const PostImagesCarousel: React.FC<PostImagesCarouselProps> = ({ images, onPress
 						onPress={() => onPressImage?.(0)}
 						style={[styles.fourImageItem, { width: imageWidth, height: imageHeight, borderBottomLeftRadius: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]}
 					>
-						{loadingMetadata ? (
-							<View style={[styles.loadingContainer, { width: imageWidth, height: imageHeight }]}>
-								<ActivityIndicator size="small" color={colors.primary} />
-							</View>
-						) : (
-							<Image 
-								source={{ uri: getImageURL(data[0]) }} 
-								style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
-								contentFit="cover"
-								transition={200}
-							/>
-						)}
+						{/* Hiển thị ảnh ngay với placeholder, không chờ metadata */}
+						<Image 
+							source={{ uri: getImageURL(data[0]) }} 
+							style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
+							contentFit="cover"
+							transition={200}
+							placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+							placeholderContentFit="cover"
+							cachePolicy="memory-disk"
+						/>
 					</TouchableOpacity>
 					<TouchableOpacity 
 						activeOpacity={0.9} 
 						onPress={() => onPressImage?.(1)}
 						style={[styles.fourImageItem, { width: imageWidth, height: imageHeight, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}
 					>
-						{loadingMetadata ? (
-							<View style={[styles.loadingContainer, { width: imageWidth, height: imageHeight }]}>
-								<ActivityIndicator size="small" color={colors.primary} />
-							</View>
-						) : (
-							<Image 
-								source={{ uri: getImageURL(data[1]) }} 
-								style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
-								contentFit="cover"
-								transition={200}
-							/>
-						)}
+						<Image 
+							source={{ uri: getImageURL(data[1]) }} 
+							style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
+							contentFit="cover"
+							transition={200}
+							placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+							placeholderContentFit="cover"
+							cachePolicy="memory-disk"
+						/>
 					</TouchableOpacity>
 				</View>
 				<View style={[styles.fourImagesRow, { gap: imageGap }]}>
@@ -441,42 +518,34 @@ const PostImagesCarousel: React.FC<PostImagesCarouselProps> = ({ images, onPress
 						onPress={() => onPressImage?.(2)}
 						style={[styles.fourImageItem, { width: imageWidth, height: imageHeight, borderTopLeftRadius: 0, borderTopRightRadius: 0, borderBottomRightRadius: 0 }]}
 					>
-						{loadingMetadata ? (
-							<View style={[styles.loadingContainer, { width: imageWidth, height: imageHeight }]}>
-								<ActivityIndicator size="small" color={colors.primary} />
-							</View>
-						) : (
-							<Image 
-								source={{ uri: getImageURL(data[2]) }} 
-								style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
-								contentFit="cover"
-								transition={200}
-							/>
-						)}
+						<Image 
+							source={{ uri: getImageURL(data[2]) }} 
+							style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
+							contentFit="cover"
+							transition={200}
+							placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+							placeholderContentFit="cover"
+							cachePolicy="memory-disk"
+						/>
 					</TouchableOpacity>
 					<TouchableOpacity 
 						activeOpacity={0.9} 
 						onPress={() => onPressImage?.(3)}
 						style={[styles.fourImageItem, { width: imageWidth, height: imageHeight, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderTopRightRadius: 0, position: 'relative' }]}
 					>
-						{loadingMetadata ? (
-							<View style={[styles.loadingContainer, { width: imageWidth, height: imageHeight }]}>
-								<ActivityIndicator size="small" color={colors.primary} />
+						<Image 
+							source={{ uri: getImageURL(data[3]) }} 
+							style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
+							contentFit="cover"
+							transition={200}
+							placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+							placeholderContentFit="cover"
+							cachePolicy="memory-disk"
+						/>
+						{remainingCount > 0 && (
+							<View style={styles.moreImagesOverlay}>
+								<Text style={styles.moreImagesText}>+{remainingCount}</Text>
 							</View>
-						) : (
-							<>
-								<Image 
-									source={{ uri: getImageURL(data[3]) }} 
-									style={[styles.fourImage, { width: imageWidth, height: imageHeight }]} 
-									contentFit="cover"
-									transition={200}
-								/>
-								{remainingCount > 0 && (
-									<View style={styles.moreImagesOverlay}>
-										<Text style={styles.moreImagesText}>+{remainingCount}</Text>
-									</View>
-								)}
-							</>
 						)}
 					</TouchableOpacity>
 				</View>
@@ -500,6 +569,7 @@ const PostImagesCarousel: React.FC<PostImagesCarouselProps> = ({ images, onPress
 				style={styles.flatList}
 				contentContainerStyle={styles.flatListContent}
 				renderItem={({ item, index }) => {
+					// Luôn có dimensions (fallback hoặc từ metadata) - hiển thị ngay
 					const dimensions = imageDimensions.get(item) || calculateDisplayDimensions(null, itemWidth);
 					const itemHeight = dimensions.height;
 
@@ -507,20 +577,19 @@ const PostImagesCarousel: React.FC<PostImagesCarouselProps> = ({ images, onPress
 						<TouchableOpacity 
 							activeOpacity={0.9} 
 							onPress={() => onPressImage?.(index)}
+							onPressIn={handlePressInMultiple}
 							style={[styles.carouselItemContainer, { width: itemWidth, height: itemHeight }]}
 						>
-							{loadingMetadata ? (
-								<View style={[styles.loadingContainer, { width: itemWidth, height: itemHeight }]}>
-									<ActivityIndicator size="large" color={colors.primary} />
-								</View>
-							) : (
-								<Image 
-									source={{ uri: getImageURL(item) }} 
-									style={[styles.carouselImage, { width: itemWidth, height: itemHeight }]} 
-									contentFit="cover"
-									transition={200}
-								/>
-							)}
+							{/* Hiển thị ảnh ngay với placeholder, không chờ metadata */}
+							<Image 
+								source={{ uri: getImageURL(item) }} 
+								style={[styles.carouselImage, { width: itemWidth, height: itemHeight }]} 
+								contentFit="cover"
+								transition={200}
+								placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+								placeholderContentFit="cover"
+								cachePolicy="memory-disk" // Tối ưu caching
+							/>
 						</TouchableOpacity>
 					);
 				}}
@@ -551,17 +620,6 @@ const createStyles = (colors: any) => StyleSheet.create({
 		position: 'relative',
 		width: '100%',
 		alignItems: 'center', // Căn giữa container giống Facebook
-	},
-	singleImageContainer: {
-		overflow: 'hidden',
-		borderRadius: 12,
-		alignSelf: 'center', // Căn giữa ảnh
-		// Width, height và aspectRatio sẽ được set từ inline style
-	},
-	singleImage: {
-		width: '100%',
-		height: '100%',
-		borderRadius: 12,
 	},
 	twoImagesContainer: {
 		flexDirection: 'row',

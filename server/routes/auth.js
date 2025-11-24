@@ -16,6 +16,181 @@ const phoneVerificationStore = new Map(); // key: phone, value: { code, expiresA
 // Structure: { qrToken: { userId: null, status: 'pending'|'confirmed'|'expired', expiresAt: timestamp, token: null } }
 const qrLoginSessions = new Map();
 
+// In-memory store for active user sessions
+// Structure: { token: { userId, deviceInfo, createdAt, lastActive } }
+const activeSessions = new Map();
+
+// In-memory store for revoked tokens (blacklist)
+// Structure: Set of revoked token strings
+const revokedTokens = new Set();
+
+// Helper function to send QR login system notification message
+const sendQRLoginSystemMessage = async (userId, deviceInfo) => {
+  try {
+    const connection = getConnection();
+    
+    // Check if BOT_USER_ID is set in environment (use real user as bot)
+    const botUserIdFromEnv = process.env.BOT_USER_ID;
+    let systemUserId;
+    
+    if (botUserIdFromEnv) {
+      // Use specified user ID as bot
+      const [botUser] = await connection.execute(
+        'SELECT id, username, full_name, avatar_url FROM users WHERE id = ?',
+        [botUserIdFromEnv]
+      );
+      
+      if (botUser.length === 0) {
+        console.error('❌ Bot user ID specified but user not found:', botUserIdFromEnv);
+        throw new Error('Bot user not found');
+      }
+      
+      systemUserId = botUser[0].id;
+      console.log('✅ Using real user as bot:', {
+        id: systemUserId,
+        username: botUser[0].username,
+        full_name: botUser[0].full_name,
+        avatar_url: botUser[0].avatar_url
+      });
+    } else {
+      // Get or create system user (username: 'system' or email: 'system@zyea.com')
+      let [systemUsers] = await connection.execute(
+        'SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1',
+        ['system', 'system@zyea.com']
+      );
+      
+      if (systemUsers.length === 0) {
+        // Create system user if doesn't exist
+        // Use a dummy password hash (system user won't login)
+        const dummyPassword = await bcrypt.hash('system_user_no_login', 10);
+        // Set avatar_url for system user (logo)
+        const systemAvatarUrl = '/assets/icon.jpg'; // Logo path
+        const [result] = await connection.execute(
+          'INSERT INTO users (username, email, password, full_name, role, status, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          ['system', 'system@zyea.com', dummyPassword, 'ZYEA Chat', 'admin', 'online', systemAvatarUrl]
+        );
+        systemUserId = result.insertId;
+        console.log('✅ Created system user with ID:', systemUserId);
+      } else {
+        systemUserId = systemUsers[0].id;
+        // Always update avatar_url to ensure it's set correctly
+        const systemAvatarUrl = '/assets/icon.jpg';
+        await connection.execute(
+          'UPDATE users SET avatar_url = ?, full_name = ? WHERE id = ?',
+          [systemAvatarUrl, 'ZYEA Chat', systemUserId]
+        );
+        console.log('✅ Updated system user avatar to:', systemAvatarUrl);
+        console.log('✅ Using existing system user with ID:', systemUserId);
+      }
+    }
+
+    // Format date and time (format: "11 tháng 11, 2025 20:16")
+    const now = new Date();
+    const day = now.getDate();
+    const monthNames = ['tháng 1', 'tháng 2', 'tháng 3', 'tháng 4', 'tháng 5', 'tháng 6', 
+                        'tháng 7', 'tháng 8', 'tháng 9', 'tháng 10', 'tháng 11', 'tháng 12'];
+    const month = monthNames[now.getMonth()];
+    const year = now.getFullYear();
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const dateTimeStr = `${day} ${month}, ${year} ${hours}:${minutes}`;
+
+    // Format device info properly
+    const deviceType = deviceInfo.device || deviceInfo.deviceType || 'Desktop';
+    const browser = deviceInfo.browser || 'Chrome';
+    const browserVersion = deviceInfo.browserVersion || deviceInfo.version || 'Unknown';
+    const os = deviceInfo.os || deviceInfo.osName || 'Windows';
+    const deviceStr = `${deviceType} - ${browser} - ${browserVersion} - ${os}`;
+
+    // Get IP address (handle various proxy headers)
+    let ipAddress = deviceInfo.ip || 'Unknown';
+    if (ipAddress === 'Unknown' || !ipAddress) {
+      // Try to get from request if available (but we don't have req here, so use deviceInfo)
+      ipAddress = deviceInfo.ip || 'Unknown';
+    }
+    // Clean IP address (remove port if present, handle IPv6)
+    if (ipAddress && ipAddress !== 'Unknown') {
+      // Remove port number if present (e.g., "192.168.0.104:12345" -> "192.168.0.104")
+      ipAddress = ipAddress.split(':')[0];
+    }
+
+    // Create system message content
+    const messageContent = `[Cảnh báo] Hệ thống ghi nhận phiên đăng nhập tài khoản của bạn trên thiết bị mới:
+Thời gian: ${dateTimeStr}
+Địa điểm: ${deviceInfo.location || 'Unknown'}
+Thiết bị: ${deviceStr}
+IP: ${ipAddress}
+Vui lòng kiểm tra tại mục Bảo mật & An toàn.`;
+
+    // Get or create conversation between user and system
+    console.log('🔍 Looking for existing conversation between user', userId, 'and system user', systemUserId);
+    const [existingConvs] = await connection.execute(`
+      SELECT c.id FROM conversations c
+      JOIN conversation_participants cp1 ON c.id = cp1.conversation_id
+      JOIN conversation_participants cp2 ON c.id = cp2.conversation_id
+      WHERE cp1.user_id = ? AND cp2.user_id = ? AND c.type = 'private'
+    `, [userId, systemUserId]);
+    console.log('🔍 Found existing conversations:', existingConvs.length);
+
+    let conversationId;
+    if (existingConvs.length > 0) {
+      conversationId = existingConvs[0].id;
+      console.log('✅ Using existing conversation:', conversationId);
+      // Unhide conversation if it was hidden
+      await connection.execute(`
+        UPDATE conversation_settings 
+        SET hidden = FALSE 
+        WHERE conversation_id = ? AND user_id = ?
+      `, [conversationId, userId]);
+      console.log('✅ Conversation unhidden');
+    } else {
+      // Create new conversation
+      console.log('📝 Creating new conversation with system user');
+      const [convResult] = await connection.execute(
+        'INSERT INTO conversations (type, name) VALUES (?, ?)',
+        ['private', 'ZYEA Chat']
+      );
+      conversationId = convResult.insertId;
+      console.log('✅ Created new conversation:', conversationId);
+
+      // Add participants
+      await connection.execute(
+        'INSERT INTO conversation_participants (conversation_id, user_id) VALUES (?, ?), (?, ?)',
+        [conversationId, userId, conversationId, systemUserId]
+      );
+      console.log('✅ Added participants to conversation');
+
+      // Don't hide conversation - system messages should be visible
+      await connection.execute(`
+        INSERT INTO conversation_settings (conversation_id, user_id, hidden)
+        VALUES (?, ?, FALSE)
+      `, [conversationId, userId]);
+      console.log('✅ Conversation settings created (not hidden)');
+    }
+
+    // Send system message (sender is system user)
+    console.log('📤 Sending system message to conversation:', conversationId);
+    console.log('📤 Message content length:', messageContent.length);
+    const [messageResult] = await connection.execute(
+      'INSERT INTO messages (conversation_id, sender_id, content, message_type) VALUES (?, ?, ?, ?)',
+      [conversationId, systemUserId, messageContent, 'system']
+    );
+    console.log('✅ System message inserted with ID:', messageResult.insertId);
+
+    // Update conversation timestamp
+    await connection.execute(
+      'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [conversationId]
+    );
+    console.log('✅ Conversation timestamp updated');
+
+    console.log('✅ QR login system message sent to conversation:', conversationId);
+  } catch (error) {
+    console.error('Error sending QR login system message:', error);
+    throw error;
+  }
+};
+
 // Email transporter configuration
 const createTransporter = () => {
   const emailUser = process.env.EMAIL_USER;
@@ -85,7 +260,8 @@ router.post('/register', [
         username: email,
         email,
         fullName,
-        phone
+        phone,
+        role: 'user' // New users are always 'user' by default
       }
     });
   } catch (error) {
@@ -154,6 +330,68 @@ router.post('/login', [
       { expiresIn: process.env.JWT_EXPIRES_IN }
     );
 
+    // Extract device info from request
+    const userAgent = req.headers['user-agent'] || '';
+    const clientIp = req.ip || req.connection.remoteAddress || 'Unknown';
+    
+    // Parse device info
+    let device = 'Mobile';
+    let browser = 'Unknown';
+    let browserVersion = '';
+    let os = 'Unknown';
+    
+    if (userAgent) {
+      // Detect browser
+      if (userAgent.includes('Chrome')) {
+        browser = 'Chrome';
+        const match = userAgent.match(/Chrome\/(\d+)/);
+        browserVersion = match ? match[1] : '';
+      } else if (userAgent.includes('Firefox')) {
+        browser = 'Firefox';
+        const match = userAgent.match(/Firefox\/(\d+)/);
+        browserVersion = match ? match[1] : '';
+      } else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) {
+        browser = 'Safari';
+        const match = userAgent.match(/Version\/(\d+)/);
+        browserVersion = match ? match[1] : '';
+      }
+      
+      // Detect OS
+      if (userAgent.includes('Windows')) os = 'Windows';
+      else if (userAgent.includes('Mac')) os = 'macOS';
+      else if (userAgent.includes('Linux')) os = 'Linux';
+      else if (userAgent.includes('Android')) {
+        os = 'Android';
+        device = 'Mobile';
+      } else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+        os = 'iOS';
+        device = 'Mobile';
+      }
+    }
+
+    // Store active session
+    // Try to get location from request body (if sent from client) or use IP-based location
+    let location = 'Unknown';
+    if (req.body.deviceInfo && req.body.deviceInfo.location) {
+      location = req.body.deviceInfo.location;
+    }
+    
+    const deviceInfo = {
+      device,
+      browser,
+      browserVersion,
+      os,
+      ip: clientIp,
+      location: location
+    };
+
+    activeSessions.set(token, {
+      userId: user.id,
+      deviceInfo,
+      createdAt: new Date(),
+      lastActive: new Date()
+    });
+
     res.json({
       message: 'Login successful',
       token,
@@ -166,6 +404,7 @@ router.post('/login', [
         avatar_url: user.avatar_url,
         cover_url: user.cover_url,
         phone: user.phone,
+        role: user.role || 'user', // Include role
         status: 'online'
       }
     });
@@ -284,7 +523,175 @@ router.post('/logout', async (req, res) => {
   }
 });
 
+// Get active sessions for current user
+router.get('/active-sessions', async (req, res) => {
+  try {
+    console.log('📥 GET /auth/active-sessions - Request received');
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      console.log('❌ No token provided');
+      return res.status(401).json({ message: 'Access token required' });
+    }
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const userId = decoded.userId;
+      console.log('✅ Token verified, userId:', userId);
+      console.log('📊 Active sessions count:', activeSessions.size);
+
+      // Get all active sessions for this user (excluding current token)
+      const userSessions = [];
+      for (const [sessionToken, sessionData] of activeSessions.entries()) {
+        if (sessionData.userId === userId && !revokedTokens.has(sessionToken)) {
+          // Skip current session token
+          if (sessionToken !== token) {
+            const browser = sessionData.deviceInfo?.browser || 'Unknown';
+            const browserVersion = sessionData.deviceInfo?.browserVersion || '';
+            const appVersion = sessionData.deviceInfo?.version || 'Zyea+ Web';
+            
+            userSessions.push({
+              id: sessionToken.substring(0, 20) + '...', // Use partial token as ID for display
+              sessionId: sessionToken, // Full token for logout
+              browser: browser,
+              browserVersion: browserVersion,
+              appVersion: appVersion,
+              location: sessionData.deviceInfo?.location || 'Unknown',
+              lastActive: sessionData.lastActive || sessionData.createdAt
+            });
+          }
+        }
+      }
+
+      console.log('📊 Found', userSessions.length, 'sessions for user', userId);
+      res.json({
+        sessions: userSessions
+      });
+    } catch (error) {
+      console.error('❌ Token verification error:', error);
+      if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+        return res.status(403).json({ message: 'Invalid or expired token' });
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.error('❌ Get active sessions error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Logout from a specific session
+router.post('/logout-session', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ message: 'Access token required' });
+    }
+
+    const { sessionId } = req.body;
+    if (!sessionId) {
+      return res.status(400).json({ message: 'Session ID is required' });
+    }
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const userId = decoded.userId;
+
+      // Verify the session belongs to this user
+      const session = activeSessions.get(sessionId);
+      if (!session || session.userId !== userId) {
+        return res.status(404).json({ message: 'Session not found' });
+      }
+
+      // Revoke the token
+      revokedTokens.add(sessionId);
+      activeSessions.delete(sessionId);
+
+      // Emit socket event to notify the revoked session (if socket exists)
+      // Get io instance from req.app if available
+      const io = req.app.get('io');
+      if (io) {
+        // Emit to user room - all sockets for this user will receive it
+        // Client will check if it's their session and logout if needed
+        io.to(userId.toString()).emit('session-revoked', { 
+          reason: 'logged_out',
+          sessionId: sessionId 
+        });
+      }
+
+      res.json({ message: 'Session logged out successfully' });
+    } catch (error) {
+      if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+        return res.status(403).json({ message: 'Invalid or expired token' });
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.error('Logout session error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Logout from all other sessions (keep current session)
+router.post('/logout-all-other-sessions', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ message: 'Access token required' });
+    }
+
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const userId = decoded.userId;
+
+      // Revoke all other sessions for this user
+      let revokedCount = 0;
+      const revokedTokensList = [];
+      for (const [sessionToken, sessionData] of activeSessions.entries()) {
+        if (sessionData.userId === userId && sessionToken !== token) {
+          revokedTokens.add(sessionToken);
+          activeSessions.delete(sessionToken);
+          revokedTokensList.push(sessionToken);
+          revokedCount++;
+        }
+      }
+
+      // Emit socket events to notify all revoked sessions
+      const io = req.app.get('io');
+      if (io) {
+        // Emit to user room - all sockets for this user will receive it
+        // Client will check if it's their session and logout if needed
+        io.to(userId.toString()).emit('session-revoked', { 
+          reason: 'logged_out_all_other',
+          revokedSessions: revokedTokensList 
+        });
+      }
+
+      res.json({ 
+        message: 'All other sessions logged out successfully',
+        revokedCount 
+      });
+    } catch (error) {
+      if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+        return res.status(403).json({ message: 'Invalid or expired token' });
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.error('Logout all other sessions error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Export revokedTokens for middleware to check
 module.exports = router;
+module.exports.revokedTokens = revokedTokens;
+module.exports.activeSessions = activeSessions;
 
 // -- Email/Phone Verification (DEV) --
 // Send verification code to email or phone
@@ -340,11 +747,34 @@ router.post('/send-verification', async (req, res) => {
       }
     }
 
-    // Send to phone (DEV: log to console)
+    // Send to phone
     if (phone) {
       phoneVerificationStore.set(phone, { code, expiresAt });
-      console.log(`📱 Verification code for ${phone}: ${code} (expires in 10m)`);
-      console.log(`--- Copy this code and paste it in the app ---`);
+      
+      // Try to send real SMS if Twilio is configured
+      try {
+        if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER) {
+          const twilio = require('twilio');
+          const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+          
+          await client.messages.create({
+            body: `Mã xác thực Zyea+ của bạn là: ${code}. Mã này có hiệu lực trong 10 phút.`,
+            from: process.env.TWILIO_PHONE_NUMBER,
+            to: phone
+          });
+          
+          console.log(`📱 SMS sent to ${phone}`);
+        } else {
+          // Fallback: log to console if Twilio not configured
+          console.log(`📱 Verification code for ${phone}: ${code} (expires in 10m)`);
+          console.log(`--- Copy this code and paste it in the app ---`);
+        }
+      } catch (smsError) {
+        console.error('SMS sending failed:', smsError);
+        // Still log to console as fallback
+        console.log(`📱 Verification code for ${phone}: ${code} (expires in 10m)`);
+        console.log(`--- Copy this code and paste it in the app ---`);
+      }
     }
 
     return res.json({ message: 'Verification code sent' });
@@ -412,10 +842,54 @@ router.post('/verify-code', [
 // Register QR code session (called by PC when generating QR)
 router.post('/qr-login-init', (req, res) => {
   try {
-    const { qrToken } = req.body;
+    const { qrToken, deviceInfo } = req.body;
     
     if (!qrToken) {
       return res.status(400).json({ message: 'QR token is required' });
+    }
+
+    // Get device info from request
+    const userAgent = req.headers['user-agent'] || '';
+    // Get IP address (handle various proxy headers)
+    let clientIp = req.ip || 
+                   req.connection?.remoteAddress || 
+                   req.socket?.remoteAddress ||
+                   (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : null) ||
+                   req.headers['x-real-ip'] ||
+                   'Unknown';
+    // Clean IP address (remove port if present)
+    if (clientIp && clientIp !== 'Unknown') {
+      clientIp = clientIp.split(':')[0];
+    }
+    
+    // Parse device info from user agent or use provided deviceInfo
+    let device = 'Desktop';
+    let browser = 'Chrome';
+    let browserVersion = 'Unknown';
+    let os = 'Windows';
+    let location = 'Unknown';
+    
+    if (deviceInfo) {
+      device = deviceInfo.device || deviceInfo.deviceType || device;
+      browser = deviceInfo.browser || browser;
+      browserVersion = deviceInfo.browserVersion || deviceInfo.version || browserVersion;
+      os = deviceInfo.os || deviceInfo.osName || os;
+      location = deviceInfo.location || location; // Get location from client if provided
+    } else if (userAgent) {
+      // Simple parsing from user agent
+      if (userAgent.includes('Chrome')) {
+        browser = 'Chrome';
+        const match = userAgent.match(/Chrome\/([\d.]+)/);
+        if (match) browserVersion = match[1];
+      } else if (userAgent.includes('Firefox')) {
+        browser = 'Firefox';
+      } else if (userAgent.includes('Safari')) {
+        browser = 'Safari';
+      }
+      
+      if (userAgent.includes('Windows')) os = 'Windows';
+      else if (userAgent.includes('Mac')) os = 'macOS';
+      else if (userAgent.includes('Linux')) os = 'Linux';
     }
 
     // Check if session already exists and is still valid
@@ -428,13 +902,21 @@ router.post('/qr-login-init', (req, res) => {
       });
     }
 
-    // Create new session
+    // Create new session with device info
     const expiresAt = Date.now() + 60 * 1000; // 60 seconds
     qrLoginSessions.set(qrToken, {
       userId: null,
       status: 'pending',
       expiresAt: expiresAt,
-      token: null
+      token: null,
+      deviceInfo: {
+        device,
+        browser,
+        browserVersion,
+        os,
+        ip: clientIp,
+        location: location // Use location from client or 'Unknown'
+      }
     });
 
     // Auto-cleanup expired session
@@ -516,6 +998,16 @@ router.post('/qr-login-confirm', async (req, res) => {
       status: user.status
     };
 
+    // Store active session for QR login
+    if (session.deviceInfo) {
+      activeSessions.set(token, {
+        userId: user.id,
+        deviceInfo: session.deviceInfo,
+        createdAt: new Date(),
+        lastActive: new Date()
+      });
+    }
+
     // Update user status to online
     await connection.execute(
       'UPDATE users SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?',
@@ -527,9 +1019,55 @@ router.post('/qr-login-confirm', async (req, res) => {
       qrLoginSessions.delete(qrToken);
     }, 5 * 60 * 1000);
 
+    // Send system notification message
+    try {
+      console.log('📱 Attempting to send QR login system message for user:', user.id);
+      // Get IP address (handle various proxy headers)
+      let clientIp = req.ip || 
+                     req.connection?.remoteAddress || 
+                     req.socket?.remoteAddress ||
+                     (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : null) ||
+                     req.headers['x-real-ip'] ||
+                     'Unknown';
+      // Clean IP address (remove port if present)
+      if (clientIp && clientIp !== 'Unknown') {
+        clientIp = clientIp.split(':')[0];
+      }
+      // Use session deviceInfo if available, otherwise create default
+      const deviceInfoToSend = session.deviceInfo ? {
+        ...session.deviceInfo,
+        ip: session.deviceInfo.ip || clientIp
+      } : {
+        device: 'Desktop',
+        browser: 'Chrome',
+        browserVersion: 'Unknown',
+        os: 'Windows',
+        ip: clientIp,
+        location: 'Unknown'
+      };
+      await sendQRLoginSystemMessage(user.id, deviceInfoToSend);
+      console.log('✅ QR login system message sent successfully');
+    } catch (notifError) {
+      console.error('❌ Failed to send QR login system message:', notifError);
+      console.error('Error details:', {
+        message: notifError.message,
+        stack: notifError.stack
+      });
+      // Don't fail the login if notification fails
+    }
+
+    // Return success with device info for notification
     res.json({ 
       success: true, 
-      message: 'QR login confirmed successfully'
+      message: 'QR login confirmed successfully',
+      deviceInfo: session.deviceInfo || {
+        device: 'Desktop',
+        browser: 'Chrome',
+        browserVersion: 'Unknown',
+        os: 'Windows',
+        ip: req.ip || req.connection.remoteAddress || 'Unknown',
+        location: 'Unknown'
+      }
     });
   } catch (error) {
     console.error('QR confirm error:', error);
@@ -571,7 +1109,8 @@ router.post('/qr-login-status', (req, res) => {
 
     res.json({
       status: session.status,
-      message: session.status === 'pending' ? 'Waiting for scan' : 'QR expired'
+      message: session.status === 'pending' ? 'Waiting for scan' : 'QR expired',
+      deviceInfo: session.deviceInfo || null
     });
   } catch (error) {
     console.error('QR status error:', error);

@@ -12,6 +12,8 @@ import PermissionRequest from '../Shared/Chat/PermissionRequest';
 import { chatAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL } from '../../utils/imageUtils';
+import { useActivityStatus } from '../../hooks/useActivityStatus';
+import { getApiBaseUrl } from '../../utils/platformConfig';
 
 const ChatContainer = styled.div`
   flex: 1;
@@ -507,9 +509,11 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
   const [isVideoCall, setIsVideoCall] = useState(true);
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [showPermissionRequest, setShowPermissionRequest] = useState(false);
+  const activityStatusEnabled = useActivityStatus();
   
   // Desktop - No swipe navigation needed
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const viewingTimeoutRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
@@ -862,13 +866,39 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
     }
   }, [socket, conversation, currentUser.id]);
 
+  // Expose scrollToBottom globally for images/stickers to trigger
+  useEffect(() => {
+    window.scrollToBottomCallback = () => {
+      scrollToBottom();
+    };
+    return () => {
+      delete window.scrollToBottomCallback;
+    };
+  }, []);
+
   useEffect(() => {
     // Scroll to bottom when messages change
     // Use requestAnimationFrame to ensure DOM is updated first
     if (messages.length > 0) {
+      // Multiple attempts to ensure scroll works even with images/stickers loading
       requestAnimationFrame(() => {
         scrollToBottom();
       });
+      
+      // Additional scroll after delay to account for images/stickers loading
+      const timeout1 = setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+      
+      // Final scroll after images/stickers should be loaded
+      const timeout2 = setTimeout(() => {
+        scrollToBottom();
+      }, 300);
+      
+      return () => {
+        clearTimeout(timeout1);
+        clearTimeout(timeout2);
+      };
     }
   }, [messages]);
 
@@ -915,17 +945,33 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
   }, [loading, conversation?.id]);
 
   const scrollToBottom = (instant = false) => {
-    if (messagesEndRef.current) {
+    const container = messagesContainerRef.current;
+    
+    if (container) {
       try {
-        // Get parent container
+        if (instant) {
+          // For instant scroll, use scrollTop directly (more reliable)
+          container.scrollTop = container.scrollHeight;
+        } else {
+          // For smooth scroll
+          container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      } catch (error) {
+        console.error('Error scrolling to bottom:', error);
+        // Fallback
+        container.scrollTop = container.scrollHeight;
+      }
+    } else if (messagesEndRef.current) {
+      // Fallback: use messagesEndRef
+      try {
         const messagesContainer = messagesEndRef.current.parentElement;
-        
         if (messagesContainer) {
           if (instant) {
-            // For instant scroll, use scrollTop directly (more reliable on mobile)
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
           } else {
-            // For smooth scroll, use scrollIntoView
             messagesEndRef.current.scrollIntoView({ 
               behavior: 'smooth',
               block: 'end',
@@ -1145,6 +1191,79 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
     setShowEmojiPicker(false);
   };
 
+  const handleStickerSelect = async (packId, stickerIndex, sticker) => {
+    if (!conversation) {
+      console.error('Cannot send sticker: No conversation selected');
+      return;
+    }
+
+    console.log('🎨 Sending sticker:', { packId, stickerIndex, sticker });
+
+    try {
+      // Create sticker content as JSON string
+      const stickerContent = JSON.stringify({ packId, stickerIndex });
+      console.log('📤 Sticker content:', stickerContent);
+
+      // Send sticker message via API
+      console.log('📤 Calling sendMessage API...');
+      const response = await chatAPI.sendMessage(conversation.id, stickerContent, 'text');
+      console.log('✅ Send message response:', response);
+      const realMessageId = response.messageId || Date.now();
+
+      // Send message via socket for real-time delivery
+      if (socket) {
+        socket.emit('sendMessage', {
+          receiverId: conversation.other_user_id,
+          message: stickerContent,
+          senderId: currentUser.id,
+          conversationId: conversation.id
+        });
+      }
+
+      // Add message to local state immediately
+      const newMsg = {
+        id: realMessageId,
+        content: stickerContent,
+        sender_id: currentUser.id,
+        created_at: new Date().toISOString(),
+        username: currentUser.username,
+        full_name: currentUser.fullName,
+        avatar_url: currentUser.avatar_url,
+        status: 'sent'
+      };
+
+      setMessages(prev => [...prev, newMsg]);
+
+      // Auto scroll to bottom when sending new message
+      setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+
+      // Update sidebar immediately
+      if (onMessageSent) {
+        onMessageSent(conversation.id, '[Sticker]', new Date().toISOString());
+      }
+
+      // Simulate message delivery after a short delay
+      setTimeout(() => {
+        setMessages(prev => prev.map(msg => 
+          msg.id === newMsg.id ? { ...msg, status: 'delivered' } : msg
+        ));
+      }, 500);
+
+      // If other user is currently viewing, mark as read immediately
+      if (otherUserViewing) {
+        setMessages(prev => prev.map(msg => 
+          msg.id === newMsg.id ? { ...msg, status: 'read' } : msg
+        ));
+      }
+    } catch (error) {
+      console.error('❌ Error sending sticker:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      alert('Không thể gửi sticker: ' + (error.response?.data?.message || error.message || 'Lỗi không xác định'));
+    }
+  };
+
   const handleImageSelect = (file) => {
     setSelectedImage(file);
   };
@@ -1159,7 +1278,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
       formData.append('conversationId', conversation.id);
 
       // Upload image
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://192.168.0.103:5000/api'}/chat/upload-image`, {
+      const response = await fetch(`${getApiBaseUrl()}/chat/upload-image`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -1331,16 +1450,16 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
           ) : (
             getInitials(conversation.full_name)
           )}
-          {conversation.status === 'online' && <OnlineIndicator />}
+          {activityStatusEnabled && conversation.status === 'online' && <OnlineIndicator />}
         </Avatar>
         <UserInfo>
           <UserName onClick={() => setShowOptionsMenu(true)}>
             {conversationSettings?.nickname || conversation.full_name || conversation.username}
           </UserName>
           <UserStatus>
-            {conversation.status === 'online' ? 'Đang hoạt động' : 
-             conversation.status === 'recently_active' ? `Hoạt động ${getTimeAgo(conversation.last_seen)}` :
-             conversation.status === 'away' ? `Không có mặt ${getTimeAgo(conversation.last_seen)}` : 
+            {activityStatusEnabled && conversation.status === 'online' ? 'Đang hoạt động' : 
+             activityStatusEnabled && conversation.status === 'recently_active' ? `Hoạt động ${getTimeAgo(conversation.last_seen)}` :
+             activityStatusEnabled && conversation.status === 'away' ? `Không có mặt ${getTimeAgo(conversation.last_seen)}` : 
              conversation.last_seen ? `Ngoại tuyến ${getTimeAgo(conversation.last_seen)}` : 'Ngoại tuyến'}
           </UserStatus>
         </UserInfo>
@@ -1362,7 +1481,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         </CallButtons>
       </ChatHeader>
 
-      <MessagesContainer>
+      <MessagesContainer ref={messagesContainerRef}>
         {loading ? (
           <div>Đang tải tin nhắn...</div>
         ) : (
@@ -1375,7 +1494,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
               typingUsers={typingUsers} 
               conversationSettings={conversationSettings}
             />
-            <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} style={{ height: '1px', minHeight: '1px' }} />
           </>
         )}
       </MessagesContainer>
@@ -1464,6 +1583,7 @@ const ChatArea = ({ conversation, currentUser, socket, onMessageSent, onSidebarR
         {showEmojiPicker && (
           <EmojiPicker
             onEmojiSelect={handleEmojiSelect}
+            onStickerSelect={handleStickerSelect}
             isOpen={showEmojiPicker}
             onClose={() => setShowEmojiPicker(false)}
           />

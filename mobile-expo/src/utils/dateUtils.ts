@@ -167,3 +167,48 @@ export const isRecentActivity = (lastSeen: string | null | undefined): boolean =
   }
 };
 
+// Format time ago for posts (like social-app-main)
+export const formatTimeAgo = (date: Date): string => {
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return `${diffInSeconds} giây`;
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} phút`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} giờ`;
+  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} ngày`;
+  return date.toLocaleDateString('vi-VN');
+};
+
+// Format time for badge on avatar (recent messages) - đồng bộ với getTimeAgo
+// Trả về "15 phút" (không có "trước") hoặc null nếu quá cũ
+export const formatRecentTime = (dateString: string | null | undefined): string | null => {
+  if (!dateString) return null;
+  
+  try {
+    const now = new Date();
+    const date = new Date(dateString);
+    
+    // Validate date
+    if (isNaN(date.getTime())) {
+      return null;
+    }
+    
+    // Sử dụng cùng logic tính toán với getTimeAgo để đảm bảo đồng bộ
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    // Chỉ hiển thị badge nếu trong vòng 60 phút (giống logic cũ)
+    if (diffInSeconds < 60) {
+      return 'vừa xong';
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60);
+      return `${minutes} phút`;
+    } else {
+      // Quá 1 giờ, không hiển thị badge
+      return null;
+    }
+  } catch (error) {
+    console.error('Error formatting recent time:', error);
+    return null;
+  }
+};
+

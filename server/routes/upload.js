@@ -10,14 +10,45 @@ const router = express.Router();
 const uploadsDir = path.join(__dirname, '../uploads');
 const postsDir = path.join(__dirname, '../uploads/posts');
 const videosDir = path.join(__dirname, '../uploads/videos');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-if (!fs.existsSync(postsDir)) {
-  fs.mkdirSync(postsDir, { recursive: true });
-}
-if (!fs.existsSync(videosDir)) {
-  fs.mkdirSync(videosDir, { recursive: true });
+const stickersDir = path.join(__dirname, '../uploads/stickers');
+
+// Ensure directories exist with proper error handling
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    console.log('Created uploads directory:', uploadsDir);
+  } else {
+    console.log('Uploads directory exists:', uploadsDir);
+  }
+  
+  if (!fs.existsSync(postsDir)) {
+    fs.mkdirSync(postsDir, { recursive: true });
+    console.log('Created posts directory:', postsDir);
+  }
+  
+  if (!fs.existsSync(videosDir)) {
+    fs.mkdirSync(videosDir, { recursive: true });
+    console.log('Created videos directory:', videosDir);
+  }
+  
+  if (!fs.existsSync(stickersDir)) {
+    fs.mkdirSync(stickersDir, { recursive: true });
+    console.log('Created stickers directory:', stickersDir);
+  }
+  
+  // Verify write permissions
+  try {
+    const testFile = path.join(uploadsDir, '.test-write');
+    fs.writeFileSync(testFile, 'test');
+    fs.unlinkSync(testFile);
+    console.log('Uploads directory is writable');
+  } catch (writeError) {
+    console.error('ERROR: Uploads directory is not writable:', writeError.message);
+    console.error('Please check permissions for:', uploadsDir);
+  }
+} catch (error) {
+  console.error('ERROR creating upload directories:', error);
+  console.error('Uploads directory path:', uploadsDir);
 }
 
 // Configure multer for image uploads
@@ -50,15 +81,41 @@ const upload = multer({
 // Upload image endpoint
 router.post('/image', authenticateToken, upload.single('image'), (req, res) => {
   try {
+    console.log('Image upload request received');
+    console.log('Request file:', req.file ? {
+      filename: req.file.filename,
+      originalname: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      path: req.file.path
+    } : 'No file');
+    
     if (!req.file) {
+      console.error('No file in request');
       return res.status(400).json({ 
         success: false, 
         message: 'No image file provided' 
       });
     }
 
+    // Verify file was saved
+    if (!fs.existsSync(req.file.path)) {
+      console.error('File was not saved to disk:', req.file.path);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'File was not saved to server. Please check uploads directory permissions.' 
+      });
+    }
+
     // Generate URL for the uploaded image
     const imageUrl = `/uploads/${req.file.filename}`;
+    
+    console.log('Image uploaded successfully:', {
+      filename: req.file.filename,
+      path: req.file.path,
+      url: imageUrl,
+      size: req.file.size
+    });
     
     res.json({
       success: true,
@@ -69,9 +126,11 @@ router.post('/image', authenticateToken, upload.single('image'), (req, res) => {
     });
   } catch (error) {
     console.error('Image upload error:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ 
       success: false, 
-      message: 'Error uploading image' 
+      message: error.message || 'Error uploading image',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -148,7 +207,7 @@ const videoFileFilter = (req, file, cb) => {
 const videoUpload = multer({
   storage: videoStorage,
   limits: {
-    fileSize: 100 * 1024 * 1024 // 100MB limit for videos
+    fileSize: 500 * 1024 * 1024 // 500MB limit for videos - tăng từ 100MB để hỗ trợ video dài
   },
   fileFilter: videoFileFilter
 });
@@ -182,6 +241,72 @@ router.post('/video', authenticateToken, videoUpload.single('video'), (req, res)
   }
 });
 
+// Upload sticker endpoint (supports .webp, .png, .jpg, .jpeg, .gif)
+const stickerStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, stickersDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    // Keep original extension
+    const ext = path.extname(file.originalname) || '.webp';
+    cb(null, 'sticker-' + uniqueSuffix + ext);
+  }
+});
+
+const stickerFileFilter = (req, file, cb) => {
+  // Accept image files: webp, png, jpg, jpeg, gif
+  const allowedMimes = ['image/webp', 'image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
+  if (allowedMimes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files (webp, png, jpg, jpeg, gif) are allowed!'), false);
+  }
+};
+
+const stickerUpload = multer({
+  storage: stickerStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit for stickers
+  },
+  fileFilter: stickerFileFilter
+});
+
+router.post('/sticker', authenticateToken, stickerUpload.single('sticker'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No sticker file provided' 
+      });
+    }
+
+    // Determine file format from extension
+    const ext = path.extname(req.file.originalname).toLowerCase().replace('.', '');
+    const fileFormat = ext === 'jpg' ? 'jpeg' : ext;
+    
+    // Generate URL for the uploaded sticker
+    const stickerUrl = `uploads/stickers/${req.file.filename}`;
+    
+    res.json({
+      success: true,
+      url: stickerUrl,
+      imageUrl: stickerUrl, // Alias for compatibility
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      fileFormat: fileFormat,
+      size: req.file.size,
+      mimetype: req.file.mimetype
+    });
+  } catch (error) {
+    console.error('Sticker upload error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Error uploading sticker' 
+    });
+  }
+});
+
 // Serve uploaded images
 router.get('/uploads/:filename', (req, res) => {
   const filename = req.params.filename;
@@ -190,6 +315,19 @@ router.get('/uploads/:filename', (req, res) => {
   // Check if file exists
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ message: 'Image not found' });
+  }
+  
+  res.sendFile(filePath);
+});
+
+// Serve sticker images
+router.get('/uploads/stickers/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join(stickersDir, filename);
+  
+  // Check if file exists
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ message: 'Sticker not found' });
   }
   
   res.sendFile(filePath);

@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
-import { FiCheck, FiCheckCircle, FiArrowLeft } from 'react-icons/fi';
+import { FiCheck, FiCheckCircle, FiArrowLeft, FiMoreVertical, FiCornerUpLeft, FiSmile } from 'react-icons/fi';
 import { getInitials } from '../../utils/nameUtils';
-import { getAvatarURL, getUploadedImageURL } from '../../utils/imageUtils';
+import { getAvatarURL, getUploadedImageURL, getStickerURL } from '../../utils/imageUtils';
+import { stickerAPI } from '../../utils/api';
 import MessageContextMenu from './MessageContextMenu';
 
 const MessageContainer = styled.div`
@@ -37,26 +38,30 @@ const MessageContent = styled.div`
 `;
 
 const MessageBubble = styled.div`
-  background: ${props => props.isOwn ? 'var(--primary-color, #0068ff)' : 'var(--bg-primary, white)'};
+  background: ${props => (props.isSticker ? 'transparent' : (props.isOwn ? '#2c2c2e' : 'var(--bg-primary, white)'))};
   color: ${props => props.isOwn ? 'white' : 'var(--text-primary, #333)'};
-  padding: ${props => props.isImage ? '0' : '0.75rem 1rem'};
-  border-radius: 18px;
-  box-shadow: 0 1px 2px var(--shadow-color, rgba(0, 0, 0, 0.1));
+  padding: ${props => (props.isImage || props.isSticker) ? '0' : '0.75rem 1rem'};
+  border-radius: ${props => props.isSticker ? '0' : '18px'};
+  box-shadow: ${props => props.isSticker ? 'none' : '0 1px 2px var(--shadow-color, rgba(0, 0, 0, 0.1))'};
   word-wrap: break-word;
   position: relative;
-  max-width: 300px;
+  max-width: ${props => props.isOwn ? '70%' : '300px'};
+  min-width: ${props => props.isOwn ? 'auto' : '100px'};
   transition: opacity 0.2s ease;
   user-select: ${props => !props.isOwn ? 'none' : 'text'};
+  display: flex;
+  flex-direction: column;
+  align-items: ${props => props.isOwn ? 'flex-end' : 'flex-start'};
 
-  ${props => props.isOwn && `
+  ${props => props.isOwn && !props.isSticker && `
     border-bottom-right-radius: 4px;
   `}
 
-  ${props => !props.isOwn && `
+  ${props => !props.isOwn && !props.isSticker && `
     border-bottom-left-radius: 4px;
   `}
 
-  ${props => props.isPress && !props.isOwn && `
+  ${props => props.isPress && !props.isOwn && !props.isSticker && `
     opacity: 0.7;
     background: var(--bg-secondary, #f0f0f0);
   `}
@@ -73,6 +78,36 @@ const MessageImage = styled.img`
   &:hover {
     transform: scale(1.02);
   }
+`;
+
+const StickerImage = styled.img`
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: default;
+  transition: transform 0.2s ease;
+  display: block;
+  
+  &:hover {
+    transform: scale(1.05);
+  }
+`;
+
+const StickerStatus = styled.div`
+  font-size: 0.7rem;
+  color: ${props => props.isOwn ? 'rgba(255, 255, 255, 0.7)' : 'var(--text-tertiary, #999)'};
+  margin-bottom: 0.25rem;
+  text-align: right;
+  align-self: flex-end;
+`;
+
+const StickerTimestamp = styled.div`
+  font-size: 0.7rem;
+  color: ${props => props.isOwn ? 'rgba(255, 255, 255, 0.7)' : 'var(--text-tertiary, #999)'};
+  margin-top: 0.25rem;
+  text-align: right;
+  align-self: flex-end;
 `;
 
 const MessageTime = styled.div`
@@ -108,6 +143,57 @@ const MessageStatus = styled.div`
   
   .read {
     color: var(--primary-color, #0068ff);
+  }
+`;
+
+const MessageFooter = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding: 0 0.25rem;
+  font-size: 0.7rem;
+  color: ${props => props.isOwn ? 'rgba(255, 255, 255, 0.7)' : 'var(--text-tertiary, #999)'};
+  align-self: flex-end;
+`;
+
+const MessageActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding: 0.25rem 0;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  align-self: ${props => props.isOwn ? 'flex-end' : 'flex-start'};
+  
+  ${MessageContainer}:hover & {
+    opacity: 1;
+  }
+`;
+
+const ActionButton = styled.button`
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: ${props => props.isOwn ? 'rgba(255, 255, 255, 0.6)' : 'var(--text-tertiary, #999)'};
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: ${props => props.isOwn ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'};
+    color: ${props => props.isOwn ? 'rgba(255, 255, 255, 0.9)' : 'var(--text-primary, #333)'};
+  }
+  
+  svg {
+    width: 16px;
+    height: 16px;
   }
 `;
 
@@ -236,39 +322,21 @@ const formatTime = (timestamp) => {
   });
 };
 
-const renderMessageStatus = (message, isOwn) => {
+const renderMessageStatus = (message, isOwn, showTime) => {
   if (!isOwn) return null;
   
   const status = message.status || 'sent';
+  // Always show time in footer for own messages
+  const time = formatTime(message.created_at);
   
-  switch (status) {
-    case 'sent':
-      return (
-        <MessageStatus>
-          <span className="sent">Đã gửi</span>
-        </MessageStatus>
-      );
-    case 'delivered':
-      return (
-        <MessageStatus>
-          <FiCheck className="status-icon delivered" />
-          <span className="delivered">Đã nhận</span>
-        </MessageStatus>
-      );
-    case 'read':
-      return (
-        <MessageStatus>
-          <FiCheckCircle className="status-icon read" />
-          <span className="read">Đã xem</span>
-        </MessageStatus>
-      );
-    default:
-      return (
-        <MessageStatus>
-          <span className="sent">Đã gửi</span>
-        </MessageStatus>
-      );
-  }
+  return (
+    <MessageFooter isOwn={isOwn}>
+      <span>{time}</span>
+      {status === 'read' && <FiCheckCircle style={{ fontSize: '0.75rem', color: '#0068ff' }} />}
+      {status === 'delivered' && <FiCheck style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.7)' }} />}
+      {status === 'sent' && <FiCheck style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.7)' }} />}
+    </MessageFooter>
+  );
 };
 
 // Parse reactions from database (could be string or array)
@@ -295,6 +363,68 @@ const Message = ({ message, isOwn, showAvatar, showTime, onReply, onForward, onR
   const [localReactions, setLocalReactions] = useState(parseReactions(message.reactions));
   const swipeStartRef = useRef(null);
   const longPressPositionRef = useRef({ x: 0, y: 0 });
+  const [stickerPacks, setStickerPacks] = useState([]);
+  const [stickerUrl, setStickerUrl] = useState(null);
+  const [isStickerMessage, setIsStickerMessage] = useState(false);
+
+  // Check if message is a sticker and load sticker packs
+  useEffect(() => {
+    const checkAndLoadSticker = async () => {
+      if (!message.content) {
+        setIsStickerMessage(false);
+        setStickerUrl(null);
+        return;
+      }
+
+      // Try to parse as sticker JSON
+      try {
+        const parsed = JSON.parse(message.content);
+        if (parsed && (parsed.packId || parsed.packid || parsed.pack_id) && 
+            (parsed.stickerIndex !== undefined || parsed.stickerindex !== undefined || parsed.sticker_index !== undefined)) {
+          setIsStickerMessage(true);
+          
+          const packId = parsed.packId || parsed.packid || parsed.pack_id;
+          const stickerIndex = parsed.stickerIndex !== undefined 
+            ? parsed.stickerIndex 
+            : (parsed.stickerindex !== undefined ? parsed.stickerindex : parsed.sticker_index);
+
+          // Load sticker packs if not loaded
+          if (stickerPacks.length === 0) {
+            try {
+              const response = await stickerAPI.getStickerPacks();
+              const packs = response.data.packs || [];
+              setStickerPacks(packs);
+              
+              // Find the pack and sticker
+              const pack = packs.find(p => String(p.id) === String(packId) || p.name === packId);
+              if (pack && pack.stickers && pack.stickers[stickerIndex]) {
+                const sticker = pack.stickers[stickerIndex];
+                setStickerUrl(getStickerURL(sticker.url || sticker.image_url));
+              }
+            } catch (error) {
+              console.error('Error loading sticker packs:', error);
+            }
+          } else {
+            // Packs already loaded, find sticker
+            const pack = stickerPacks.find(p => String(p.id) === String(packId) || p.name === packId);
+            if (pack && pack.stickers && pack.stickers[stickerIndex]) {
+              const sticker = pack.stickers[stickerIndex];
+              setStickerUrl(getStickerURL(sticker.url || sticker.image_url));
+            }
+          }
+        } else {
+          setIsStickerMessage(false);
+          setStickerUrl(null);
+        }
+      } catch (e) {
+        // Not a JSON sticker, treat as normal message
+        setIsStickerMessage(false);
+        setStickerUrl(null);
+      }
+    };
+
+    checkAndLoadSticker();
+  }, [message.content, stickerPacks]);
 
   // Parse reply content - "Re: {original message}\n\n{new message}"
   const parseReply = (content) => {
@@ -615,6 +745,7 @@ const Message = ({ message, isOwn, showAvatar, showTime, onReply, onForward, onR
           ref={bubbleRef}
           isOwn={isOwn} 
           isImage={message.message_type === 'image'}
+          isSticker={isStickerMessage && stickerUrl}
           isPress={isPress}
           style={{ cursor: isOwn ? 'default' : 'context-menu' }}
         >
@@ -631,22 +762,90 @@ const Message = ({ message, isOwn, showAvatar, showTime, onReply, onForward, onR
             <MessageImage 
               src={getUploadedImageURL(message.content)} 
               alt="Message image"
+              onLoad={() => {
+                // Trigger scroll when image loads
+                if (window.scrollToBottomCallback) {
+                  setTimeout(() => {
+                    window.scrollToBottomCallback();
+                  }, 50);
+                }
+              }}
               onClick={() => window.open(getUploadedImageURL(message.content), '_blank')}
             />
+          ) : isStickerMessage && stickerUrl ? (
+            <>
+              {isOwn && (
+                <StickerStatus isOwn={isOwn}>
+                  {message.status === 'sent' ? 'Đã gửi' : 
+                   message.status === 'delivered' ? 'Đã nhận' : 
+                   message.status === 'read' ? 'Đã xem' : 'Đã gửi'}
+                </StickerStatus>
+              )}
+              <StickerImage
+                src={stickerUrl}
+                alt="Sticker"
+                onLoad={() => {
+                  // Trigger scroll when sticker loads
+                  if (window.scrollToBottomCallback) {
+                    setTimeout(() => {
+                      window.scrollToBottomCallback();
+                    }, 50);
+                  }
+                }}
+                onError={(e) => {
+                  console.error('Error loading sticker:', stickerUrl);
+                  e.target.style.display = 'none';
+                }}
+              />
+              {isOwn && (
+                <StickerTimestamp isOwn={isOwn}>
+                  {formatTime(message.created_at)}
+                </StickerTimestamp>
+              )}
+            </>
           ) : parsedReply.isReply ? (
             parsedReply.newContent
           ) : (
             message.content
           )}
+          
+          {!isStickerMessage && renderMessageStatus(message, isOwn, showTime)}
         </MessageBubble>
         
-        {showTime && (
-          <MessageTime>
-            {formatTime(message.created_at)}
-          </MessageTime>
+        {!isStickerMessage && (
+          <MessageActions isOwn={isOwn}>
+          <ActionButton 
+            isOwn={isOwn}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleLongPress(e);
+            }}
+            title="Tùy chọn"
+          >
+            <FiMoreVertical />
+          </ActionButton>
+          <ActionButton 
+            isOwn={isOwn}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleReply();
+            }}
+            title="Trả lời"
+          >
+            <FiCornerUpLeft />
+          </ActionButton>
+          <ActionButton 
+            isOwn={isOwn}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleReactionClick('👍');
+            }}
+            title="Thêm cảm xúc"
+          >
+            <FiSmile />
+          </ActionButton>
+        </MessageActions>
         )}
-        
-        {renderMessageStatus(message, isOwn)}
       </MessageContent>
 
     </MessageContainer>

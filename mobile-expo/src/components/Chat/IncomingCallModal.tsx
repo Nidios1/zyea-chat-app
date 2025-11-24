@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Image } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import useSocket from '../../hooks/useSocket';
@@ -22,6 +22,14 @@ const IncomingCallModal: React.FC = () => {
   const { socket, isConnected } = useSocket();
   const [incomingCall, setIncomingCall] = useState<IncomingCallData | null>(null);
   const [callerInfo, setCallerInfo] = useState<any>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!socket || !isConnected) {
@@ -29,6 +37,10 @@ const IncomingCallModal: React.FC = () => {
     }
 
     const handleIncomingCall = (data: IncomingCallData) => {
+      // Only update state if component is still mounted
+      if (!isMountedRef.current) {
+        return;
+      }
       console.log('📞 Incoming call:', data);
       setIncomingCall(data);
       
@@ -46,7 +58,7 @@ const IncomingCallModal: React.FC = () => {
   }, [socket, isConnected]);
 
   const handleAccept = () => {
-    if (!incomingCall || !socket) return;
+    if (!incomingCall || !socket || !isMountedRef.current) return;
     
     console.log('✅ Accepting call');
     socket.emit('call-answer', {
@@ -57,12 +69,14 @@ const IncomingCallModal: React.FC = () => {
     
     // TODO: Navigate to call screen or handle call acceptance
     // For now, just close the modal
-    setIncomingCall(null);
-    setCallerInfo(null);
+    if (isMountedRef.current) {
+      setIncomingCall(null);
+      setCallerInfo(null);
+    }
   };
 
   const handleReject = () => {
-    if (!incomingCall || !socket) return;
+    if (!incomingCall || !socket || !isMountedRef.current) return;
     
     console.log('❌ Rejecting call');
     socket.emit('call-answer', {
@@ -71,11 +85,15 @@ const IncomingCallModal: React.FC = () => {
       conversationId: incomingCall.conversationId,
     });
     
-    setIncomingCall(null);
-    setCallerInfo(null);
+    if (isMountedRef.current) {
+      setIncomingCall(null);
+      setCallerInfo(null);
+    }
   };
 
   const handleDismiss = () => {
+    if (!isMountedRef.current) return;
+    
     if (incomingCall && socket) {
       // Auto-reject if dismissed
       socket.emit('call-answer', {
@@ -84,8 +102,10 @@ const IncomingCallModal: React.FC = () => {
         conversationId: incomingCall.conversationId,
       });
     }
-    setIncomingCall(null);
-    setCallerInfo(null);
+    if (isMountedRef.current) {
+      setIncomingCall(null);
+      setCallerInfo(null);
+    }
   };
 
   if (!incomingCall) {
@@ -111,7 +131,7 @@ const IncomingCallModal: React.FC = () => {
               <Image
                 source={{ uri: callerAvatar }}
                 style={styles.avatar}
-                defaultSource={require('../../../assets/icon.png')}
+                defaultSource={require('../../../assets/Zyea.png')}
               />
             ) : (
               <View style={[styles.avatarPlaceholder, { backgroundColor: colors.primary }]}>

@@ -21,11 +21,21 @@ const isFormData = (data: any): boolean => {
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000, // 15 seconds timeout (optimized for faster response)
+  timeout: 5000, // 5 seconds timeout - faster response, no delay
   // Don't set default Content-Type here - set it conditionally in interceptor
   // Enable HTTP keep-alive for better connection reuse
   httpAgent: undefined, // Let axios use default agent
   httpsAgent: undefined,
+  // Optimize for faster connections
+  maxRedirects: 2, // Reduced redirects for faster failure
+  validateStatus: (status) => status < 500, // Don't throw on 4xx errors, only 5xx
+  // Enable request/response compression if supported
+  decompress: true,
+  // Max content length (50MB)
+  maxContentLength: 50 * 1024 * 1024,
+  maxBodyLength: 50 * 1024 * 1024,
+  // Optimize for instant response
+  adapter: undefined, // Use default adapter (fastest)
 });
 
 apiClient.interceptors.request.use(
@@ -383,8 +393,21 @@ export const newsfeedAPI = {
   getPost: (postId: string) =>
     apiClient.get(`/newsfeed/posts/${postId}`),
 
-  createPost: (content: string, images?: string[], videoUrl?: string) =>
-    apiClient.post('/newsfeed/posts', { content, images, videoUrl }),
+  createPost: (
+    content: string, 
+    images?: string[], 
+    videoUrl?: string,
+    threadgateSettings?: { replyType: 'everybody' | 'nobody' | 'followers' | 'following' | 'mention'; allowQuote: boolean }
+  ) =>
+    apiClient.post('/newsfeed/posts', { 
+      content, 
+      images, 
+      videoUrl,
+      threadgateSettings: threadgateSettings ? {
+        replyType: threadgateSettings.replyType,
+        allowQuote: threadgateSettings.allowQuote,
+      } : undefined,
+    }),
 
   likePost: (postId: string, reactionType?: string) =>
     apiClient.post(`/newsfeed/posts/${postId}/like`, { reactionType: reactionType || 'like' }),
@@ -395,8 +418,8 @@ export const newsfeedAPI = {
   trackPostView: (postId: string) =>
     apiClient.post(`/newsfeed/posts/${postId}/view`),
 
-  commentPost: (postId: string, content: string, parentId?: string | number) =>
-    apiClient.post(`/newsfeed/posts/${postId}/comments`, { content, parent_id: parentId }),
+  commentPost: (postId: string, content: string) =>
+    apiClient.post(`/newsfeed/posts/${postId}/comments`, { content }),
 
   getPostComments: (postId: string) =>
     apiClient.get(`/newsfeed/posts/${postId}/comments`),

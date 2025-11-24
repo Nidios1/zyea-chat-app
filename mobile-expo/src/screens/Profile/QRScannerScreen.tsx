@@ -17,7 +17,15 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { authAPI } from '../../utils/api';
 import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Constants from 'expo-constants';
+import QRLoginConfirmModal, { DeviceInfo } from '../../components/Common/QRLoginConfirmModal';
+
+// Lazy import expo-constants to avoid TurboModule errors
+let Constants: any = null;
+try {
+  Constants = require('expo-constants').default || require('expo-constants');
+} catch (e) {
+  Constants = { appOwnership: 'expo' };
+}
 
 // Try to import camera modules with fallback
 // Prefer expo-barcode-scanner for Expo Go compatibility
@@ -71,6 +79,9 @@ const QRScannerScreen = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [pendingQrToken, setPendingQrToken] = useState<string | null>(null);
   const lastScannedToken = React.useRef<string | null>(null);
   const scanTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -178,16 +189,119 @@ const QRScannerScreen = () => {
         throw new Error('Mã QR không hợp lệ - không tìm thấy token');
       }
 
+      console.log('QR Login - Fetching device info:', { 
+        qrToken: qrToken.substring(0, 20) + '...'
+      });
+
+      // First, get device info from backend
+      const statusResponse = await authAPI.qrLoginStatus(qrToken);
+
+      console.log('QR status response:', {
+        status: statusResponse.data.status,
+        hasDeviceInfo: !!statusResponse.data.deviceInfo,
+        deviceInfo: statusResponse.data.deviceInfo
+      });
+
+      if (statusResponse.data.status === 'expired') {
+        throw new Error('Mã QR đã hết hạn');
+      }
+
+      if (statusResponse.data.status !== 'pending') {
+        throw new Error('Mã QR không còn hợp lệ');
+      }
+
+      // Get device info from response
+      let deviceInfoData = statusResponse.data.deviceInfo;
+      
+      // If deviceInfo is null or missing, create default device info
+      // This can happen if QR was scanned before PC initialized the session
+      if (!deviceInfoData) {
+        console.log('Device info not available, using default values');
+        deviceInfoData = {
+          device: 'Desktop',
+          deviceType: 'Desktop',
+          browser: 'Chrome',
+          browserVersion: 'Unknown',
+          version: 'Unknown',
+          os: 'Windows',
+          osName: 'Windows',
+          ip: 'Unknown',
+          location: 'Unknown'
+        };
+      }
+
+      console.log('Using device info:', deviceInfoData);
+
+      // Set device info and show confirmation modal
+      setDeviceInfo(deviceInfoData);
+      setPendingQrToken(qrToken);
+      setShowConfirmModal(true);
+      setIsProcessing(false);
+      // Keep scanned state to prevent re-scanning while modal is open
+      
+    } catch (error: any) {
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        'Không thể lấy thông tin thiết bị. Vui lòng thử lại.';
+
+      console.error('QR status error:', error);
+
+      if (error.response?.status === 404 || errorMsg.includes('hết hạn') || errorMsg.includes('expired')) {
+        Toast.show({
+          type: 'error',
+          text1: 'Mã QR đã hết hạn',
+          text2: 'Vui lòng làm mới mã QR trên PC và thử lại',
+          position: 'bottom',
+        });
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Lỗi',
+          text2: errorMsg,
+          position: 'bottom',
+        });
+      }
+
+      // Reset states after a delay to allow scanning again
+      setTimeout(() => {
+        setScanned(false);
+        setIsProcessing(false);
+        lastScannedToken.current = null;
+      }, 3000);
+    }
+  };
+
+  // Handle confirm login from modal
+  const handleConfirmLogin = async () => {
+    if (!pendingQrToken || !user?.id) {
+      Toast.show({
+        type: 'error',
+        text1: 'Lỗi',
+        text2: 'Thông tin không hợp lệ',
+        position: 'bottom',
+      });
+      setShowConfirmModal(false);
+      setDeviceInfo(null);
+      setPendingQrToken(null);
+      setScanned(false);
+      setIsProcessing(false);
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
       const userId = user.id.toString();
 
       console.log('QR Login - Sending confirmation:', { 
-        qrToken: qrToken.substring(0, 20) + '...', 
+        qrToken: pendingQrToken.substring(0, 20) + '...', 
         userId,
         userEmail: user.email 
       });
 
       // Send confirmation to backend
-      const response = await authAPI.qrLoginConfirm(qrToken, userId);
+      const response = await authAPI.qrLoginConfirm(pendingQrToken, userId);
 
       if (response.data.success) {
         Toast.show({
@@ -197,12 +311,19 @@ const QRScannerScreen = () => {
           position: 'bottom',
         });
 
-        // System notification message is now sent by backend
-        // No need to send from mobile app
+        // Close modal and reset states
+        setShowConfirmModal(false);
+        setDeviceInfo(null);
+        setPendingQrToken(null);
+        setIsProcessing(false);
 
-        // Keep scanned state to prevent re-scanning
+        // Keep scanned state to prevent re-scanning while navigating
         // Wait a bit then navigate back safely
         setTimeout(() => {
+          // Reset scanned state before navigating
+          setScanned(false);
+          lastScannedToken.current = null;
+          
           // Check if we can go back, otherwise navigate to Profile
           if (navigation.canGoBack()) {
             navigation.goBack();
@@ -212,7 +333,6 @@ const QRScannerScreen = () => {
           }
         }, 1500);
         
-        // Don't reset scanned state on success - prevent re-scanning
         return;
       } else {
         throw new Error(response.data.message || 'Đăng nhập thất bại');
@@ -229,41 +349,15 @@ const QRScannerScreen = () => {
          error.response?.data?.message?.includes('đã được sử dụng') ||
          error.response?.data?.message?.includes('already used or expired'));
 
-      // If already used, it's likely a duplicate scan - don't show error, just ignore silently
-      // or show a subtle info message
       if (isAlreadyUsed) {
-        // This is likely a duplicate scan from camera - silently ignore or show subtle message
-        console.log('QR code already used (likely duplicate scan)');
-        
-        // Only show message if it's not the same token we just scanned (to avoid spam)
-        if (lastScannedToken.current !== qrToken) {
-          Toast.show({
-            type: 'info',
-            text1: 'Mã QR đã được sử dụng',
-            text2: 'Mã QR này đã được sử dụng. Vui lòng làm mới mã QR trên PC nếu cần đăng nhập lại.',
-            position: 'bottom',
-            visibilityTime: 2000,
-          });
-        }
-        
-        // Reset states quickly for already used
-        setTimeout(() => {
-          setScanned(false);
-          setIsProcessing(false);
-          lastScannedToken.current = null;
-        }, 1500);
-        return;
-      }
-
-      // Log other errors
-      console.error('QR login error:', error);
-      console.error('Error details:', {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message,
-      });
-
-      if (error.response?.status === 404) {
+        Toast.show({
+          type: 'info',
+          text1: 'Mã QR đã được sử dụng',
+          text2: 'Mã QR này đã được sử dụng. Vui lòng làm mới mã QR trên PC nếu cần đăng nhập lại.',
+          position: 'bottom',
+          visibilityTime: 2000,
+        });
+      } else if (error.response?.status === 404) {
         Toast.show({
           type: 'error',
           text1: 'Mã QR đã hết hạn',
@@ -271,7 +365,6 @@ const QRScannerScreen = () => {
           position: 'bottom',
         });
       } else if (error.response?.status === 400) {
-        // Show more specific error message
         const specificMsg = error.response?.data?.message || errorMsg;
         const isExpired = specificMsg.includes('expired') || specificMsg.includes('hết hạn');
         
@@ -292,14 +385,39 @@ const QRScannerScreen = () => {
         });
       }
 
-      // Reset states after a delay to allow scanning again
-      // Also clear the last scanned token to allow scanning a new QR code
+      // Close modal and reset states
+      setShowConfirmModal(false);
+      setDeviceInfo(null);
+      setPendingQrToken(null);
+      
       setTimeout(() => {
         setScanned(false);
         setIsProcessing(false);
-        lastScannedToken.current = null; // Allow scanning new QR code
-      }, 3000); // Increased delay to prevent rapid re-scanning
+        lastScannedToken.current = null;
+      }, 2000);
     }
+  };
+
+  // Handle reject from modal
+  const handleRejectLogin = () => {
+    // Close modal
+    setShowConfirmModal(false);
+    
+    // Reset all states to allow scanning again
+    setDeviceInfo(null);
+    setPendingQrToken(null);
+    setScanned(false);
+    setIsProcessing(false);
+    lastScannedToken.current = null;
+    
+    // Show info message to user
+    Toast.show({
+      type: 'info',
+      text1: 'Đã từ chối đăng nhập',
+      text2: 'Bạn có thể quét lại mã QR khác nếu cần',
+      position: 'bottom',
+      visibilityTime: 2000,
+    });
   };
 
   // Create styles early
@@ -647,6 +765,15 @@ const QRScannerScreen = () => {
           </Button>
         </View>
       )}
+
+      {/* QR Login Confirmation Modal */}
+      <QRLoginConfirmModal
+        visible={showConfirmModal}
+        deviceInfo={deviceInfo}
+        onConfirm={handleConfirmLogin}
+        onReject={handleRejectLogin}
+        isProcessing={isProcessing}
+      />
     </View>
   );
 };

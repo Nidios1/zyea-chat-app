@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { FiTrash2, FiMail, FiCheckCircle } from 'react-icons/fi';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL } from '../../utils/imageUtils';
+import { useActivityStatus } from '../../hooks/useActivityStatus';
 
 const SwipeContainer = styled.div`
   position: relative;
@@ -296,6 +297,7 @@ const MobileConversationItem = ({
 }) => {
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const activityStatusEnabled = useActivityStatus();
   const [dragStartX, setDragStartX] = useState(0);
 
   const handleTouchStart = (e) => {
@@ -417,16 +419,30 @@ const MobileConversationItem = ({
           ) : (
             getInitials(name)
           )}
-          {(conversation.participant_status || conversation.status) === 'online' && <OnlineIndicator />}
+          {activityStatusEnabled && (conversation.participant_status || conversation.status) === 'online' && <OnlineIndicator />}
         </Avatar>
         <ConversationInfo>
           <ConversationName hasUnread={hasUnread}>
             {name}
           </ConversationName>
           <LastMessage hasUnread={hasUnread}>
-            {(conversation.last_message || conversation.lastMessage) ? 
-              (conversation.last_message || conversation.lastMessage) : 
-              'Chưa có tin nhắn'}
+            {(() => {
+                const lastMsg = conversation.last_message || conversation.lastMessage;
+                if (lastMsg) {
+                  // Check if last message is a sticker
+                  try {
+                    const parsed = JSON.parse(lastMsg);
+                    if (parsed && (parsed.packId || parsed.packid || parsed.pack_id) && 
+                        (parsed.stickerIndex !== undefined || parsed.stickerindex !== undefined || parsed.sticker_index !== undefined)) {
+                      return 'Bạn đã gửi sticker';
+                    }
+                  } catch (e) {
+                    // Not JSON, continue
+                  }
+                  return lastMsg;
+                }
+                return 'Chưa có tin nhắn';
+              })()}
           </LastMessage>
         </ConversationInfo>
         <TimeStamp>

@@ -15,6 +15,7 @@ import { chatAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL } from '../../utils/imageUtils';
 import useKeyboard from '../../hooks/useKeyboard';
+import { useActivityStatus } from '../../hooks/useActivityStatus';
 
 // 📱 MOBILE-ONLY STYLES - No media queries needed!
 
@@ -312,6 +313,7 @@ const MobileChatArea = ({
   const [isTyping, setIsTyping] = useState(false);
   const [otherUserTyping, setOtherUserTyping] = useState(false);
   const [otherUserViewing, setOtherUserViewing] = useState(false);
+  const activityStatusEnabled = useActivityStatus();
   const [conversationSettings, setConversationSettings] = useState({});
   const [showVideoCall, setShowVideoCall] = useState(false);
   const [isVideoCall, setIsVideoCall] = useState(true);
@@ -915,6 +917,69 @@ const MobileChatArea = ({
     setShowEmojiPicker(false);
   };
 
+  const handleStickerSelect = async (packId, stickerIndex, sticker) => {
+    if (!conversation) return;
+
+    try {
+      // Create sticker content as JSON string
+      const stickerContent = JSON.stringify({ packId, stickerIndex });
+
+      // Send sticker message via API
+      const response = await chatAPI.sendMessage(conversation.id, stickerContent, 'text');
+      const realMessageId = response.messageId || Date.now();
+
+      // Send message via socket for real-time delivery
+      if (socket) {
+        socket.emit('sendMessage', {
+          receiverId: conversation.other_user_id,
+          message: stickerContent,
+          senderId: currentUser.id,
+          conversationId: conversation.id
+        });
+      }
+
+      // Add message to local state immediately
+      const newMsg = {
+        id: realMessageId,
+        content: stickerContent,
+        sender_id: currentUser.id,
+        created_at: new Date().toISOString(),
+        username: currentUser.username,
+        full_name: currentUser.fullName,
+        avatar_url: currentUser.avatar_url,
+        status: 'sent'
+      };
+
+      setMessages(prev => [...prev, newMsg]);
+
+      // Auto scroll to bottom when sending new message
+      setTimeout(() => {
+        scrollToBottom();
+      }, 100);
+
+      // Update sidebar immediately
+      if (onMessageSent) {
+        onMessageSent(conversation.id, '[Sticker]', new Date().toISOString());
+      }
+
+      // Simulate message delivery after a short delay
+      setTimeout(() => {
+        setMessages(prev => prev.map(msg => 
+          msg.id === newMsg.id ? { ...msg, status: 'delivered' } : msg
+        ));
+      }, 500);
+
+      // If other user is currently viewing, mark as read immediately
+      if (otherUserViewing) {
+        setMessages(prev => prev.map(msg => 
+          msg.id === newMsg.id ? { ...msg, status: 'read' } : msg
+        ));
+      }
+    } catch (error) {
+      console.error('Error sending sticker:', error);
+    }
+  };
+
   const handleImageSelect = (file) => {
     setSelectedImage(file);
     setShowImageUpload(true);
@@ -966,7 +1031,7 @@ const MobileChatArea = ({
             ) : (
               getInitials(displayName)
             )}
-            {isOnline && <OnlineIndicator />}
+            {activityStatusEnabled && isOnline && <OnlineIndicator />}
           </Avatar>
           
           <UserDetails>
@@ -974,7 +1039,7 @@ const MobileChatArea = ({
             <UserStatus>
               {otherUserViewing ? 'Đang xem' : 
                otherUserTyping ? 'Đang nhập...' : 
-               isOnline ? 'Đang hoạt động' : 'Ngoại tuyến'}
+               activityStatusEnabled && isOnline ? 'Đang hoạt động' : 'Ngoại tuyến'}
             </UserStatus>
           </UserDetails>
         </UserInfo>
@@ -1134,6 +1199,7 @@ const MobileChatArea = ({
         {showEmojiPicker && (
           <EmojiPicker
             onEmojiSelect={handleEmojiSelect}
+            onStickerSelect={handleStickerSelect}
             isOpen={showEmojiPicker}
             onClose={() => setShowEmojiPicker(false)}
           />

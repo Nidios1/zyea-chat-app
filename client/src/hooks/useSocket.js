@@ -9,11 +9,21 @@ const useSocket = (url) => {
 
   useEffect(() => {
     console.log('🔌 Connecting to socket:', socketUrl);
+    
+    // Get token for authentication
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    
     socketRef.current = io(socketUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
-      reconnectionAttempts: 5
+      reconnectionAttempts: 5,
+      auth: {
+        token: token
+      },
+      extraHeaders: token ? {
+        Authorization: `Bearer ${token}`
+      } : {}
     });
 
     socketRef.current.on('connect', () => {

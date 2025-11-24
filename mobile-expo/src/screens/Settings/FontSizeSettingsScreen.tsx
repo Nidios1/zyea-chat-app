@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -29,17 +29,23 @@ const FontSizeSettingsScreen = () => {
   const { fontSizeScale, useSystemFontSize, setFontSizeScale, setUseSystemFontSize, getFontSize } = useFontSize();
   const insets = useSafeAreaInsets();
 
+  const scaleMap: Record<FontSizeScale, number> = {
+    'small': 0,
+    'medium': 1,
+    'large': 2,
+    'extra-large': 3,
+  };
+
   const [sliderValue, setSliderValue] = useState(() => {
-    const scaleMap: Record<FontSizeScale, number> = {
-      'small': 0,
-      'medium': 1,
-      'large': 2,
-      'extra-large': 3,
-    };
     return scaleMap[fontSizeScale];
   });
   const sliderWidth = useRef(0);
   const sliderX = useRef(0);
+
+  // Sync slider value with fontSizeScale when it changes externally
+  useEffect(() => {
+    setSliderValue(scaleMap[fontSizeScale]);
+  }, [fontSizeScale]);
 
   const handleSliderChange = (value: number) => {
     const clampedValue = Math.max(0, Math.min(3, Math.round(value)));
@@ -47,6 +53,10 @@ const FontSizeSettingsScreen = () => {
     const scales: FontSizeScale[] = ['small', 'medium', 'large', 'extra-large'];
     const selectedScale = scales[clampedValue];
     setFontSizeScale(selectedScale);
+    // Tự động tắt system font size khi người dùng điều chỉnh slider
+    if (useSystemFontSize) {
+      setUseSystemFontSize(false);
+    }
   };
 
   const handleSliderLayout = (event: any) => {
@@ -172,7 +182,14 @@ const FontSizeSettingsScreen = () => {
             </View>
             <Switch
               value={useSystemFontSize}
-              onValueChange={setUseSystemFontSize}
+              onValueChange={(value) => {
+                setUseSystemFontSize(value);
+                // Khi bật system font size, reset slider về medium
+                if (value) {
+                  setSliderValue(1);
+                  setFontSizeScale('medium');
+                }
+              }}
               trackColor={{ false: colors.border, true: colors.primary }}
               thumbColor={useSystemFontSize ? '#fff' : colors.textSecondary}
               ios_backgroundColor={colors.border}

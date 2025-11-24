@@ -4,7 +4,7 @@
  * Script để cập nhật IP trong constants.ts trước khi build IPA
  * 
  * Usage:
- *   node update-api-ip.js 192.168.1.105
+ *   node update-api-ip.js 192.168.0.104
  *   hoặc
  *   node update-api-ip.js auto  (tự động lấy IP WiFi)
  */
@@ -22,7 +22,7 @@ function getIP() {
   if (args.length === 0) {
     console.error('❌ Vui lòng cung cấp IP!');
     console.log('\nUsage:');
-    console.log('  node update-api-ip.js 192.168.1.105');
+    console.log('  node update-api-ip.js 192.168.0.104');
     console.log('  node update-api-ip.js auto  (tự động lấy IP WiFi)');
     process.exit(1);
   }

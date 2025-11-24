@@ -17,10 +17,22 @@ const FILES_TO_CHECK = [
   {
     path: path.join(__dirname, 'src/config/constants.ts'),
     patterns: [
+      // Tìm IP trong return statements của functions
+      { regex: /return ['"]http:\/\/(\d+\.\d+\.\d+\.\d+):5000\/api['"]/g, replace: (ip) => `return 'http://${ip}:5000/api'` },
+      { regex: /return ['"]http:\/\/(\d+\.\d+\.\d+\.\d+):5000['"]/g, replace: (ip) => `return 'http://${ip}:5000'` },
+      // Fallback: tìm pattern cũ (nếu có)
       { regex: /export const API_BASE_URL = ['"](.*?)['"]/g, replace: (ip) => `export const API_BASE_URL = 'http://${ip}:5000/api'` },
       { regex: /export const SOCKET_URL = ['"](.*?)['"]/g, replace: (ip) => `export const SOCKET_URL = 'http://${ip}:5000'` },
     ],
     name: 'Mobile App Config (constants.ts)'
+  },
+  {
+    path: path.join(__dirname, 'app.json'),
+    patterns: [
+      { regex: /"apiUrl":\s*"http:\/\/(\d+\.\d+\.\d+\.\d+):5000\/api"/g, replace: (ip) => `"apiUrl": "http://${ip}:5000/api"` },
+      { regex: /"socketUrl":\s*"http:\/\/(\d+\.\d+\.\d+\.\d+):5000"/g, replace: (ip) => `"socketUrl": "http://${ip}:5000"` },
+    ],
+    name: 'Mobile App Config (app.json)'
   },
   {
     path: path.join(__dirname, '../server/config.env'),
@@ -87,17 +99,23 @@ function getIP() {
 function getCurrentIP(filePath, pattern) {
   try {
     const content = fs.readFileSync(filePath, 'utf8');
-    const match = content.match(pattern.regex);
-    if (match) {
-      // Extract IP from URL
-      const urlMatch = match[0].match(/(\d+\.\d+\.\d+\.\d+)/);
-      return urlMatch ? urlMatch[1] : null;
+    // Tìm tất cả matches
+    const matches = content.matchAll(pattern.regex);
+    const ips = [];
+    for (const match of matches) {
+      // Extract IP from URL - có thể là group 1 hoặc từ toàn bộ match
+      const ipMatch = match[1] || match[0].match(/(\d+\.\d+\.\d+\.\d+)/);
+      if (ipMatch) {
+        const ip = typeof ipMatch === 'string' ? ipMatch : ipMatch[1];
+        if (ip) ips.push(ip);
+      }
     }
+    // Trả về IP đầu tiên tìm thấy (hoặc null nếu không có)
+    return ips.length > 0 ? ips[0] : null;
   } catch (error) {
     // File không tồn tại
     return null;
   }
-  return null;
 }
 
 // Kiểm tra IP trong tất cả các file
@@ -167,9 +185,18 @@ function updateIPInFile(filePath, patterns, newIP) {
     let updated = false;
     
     for (const pattern of patterns) {
-      const newContent = content.replace(pattern.regex, (match) => {
-        updated = true;
-        return pattern.replace(newIP);
+      // Reset regex lastIndex để đảm bảo match từ đầu
+      const regex = new RegExp(pattern.regex.source, pattern.regex.flags);
+      
+      const newContent = content.replace(regex, (match) => {
+        // Extract IP từ match hiện tại
+        const ipMatch = match.match(/(\d+\.\d+\.\d+\.\d+)/);
+        if (ipMatch && ipMatch[1] !== newIP) {
+          updated = true;
+          // Thay thế IP trong match
+          return match.replace(ipMatch[1], newIP);
+        }
+        return match;
       });
       
       if (newContent !== content) {

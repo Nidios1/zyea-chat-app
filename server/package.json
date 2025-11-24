@@ -12,6 +12,7 @@
     "full-setup": "npm run setup-db && npm run get-ip && npm start"
   },
   "dependencies": {
+    "@react-native-community/datetimepicker": "^8.5.0",
     "adm-zip": "^0.5.16",
     "bcryptjs": "^2.4.3",
     "compression": "^1.8.1",

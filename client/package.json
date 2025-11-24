@@ -30,6 +30,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "start:https": "set HTTPS=true&&set HOST=0.0.0.0&&react-scripts start",
     "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
     "build:win": "set DISABLE_ESLINT_PLUGIN=true && react-scripts build",
     "test": "react-scripts test",

@@ -56,23 +56,24 @@ const FeedTabBar = ({ activeTab, onTabChange }: FeedTabBarProps) => {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 12,
-    gap: 8,
+    gap: 6,
   },
   tab: {
     flex: 1,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 36,
   },
   tabActive: {
     backgroundColor: '#2c2c2c', // Dark background for active tab (works in both light and dark mode)
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
   },
   tabTextActive: {

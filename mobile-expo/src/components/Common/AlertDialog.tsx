@@ -1,13 +1,14 @@
 import React from 'react';
 import { Modal, View, Text, Pressable, StyleSheet } from 'react-native';
-import { Button } from 'react-native-paper';
+import { useTheme } from '../../contexts/ThemeContext';
 
-interface AlertDialogProps {
+export interface AlertDialogProps {
   visible: boolean;
   title: string;
   message: string;
   onConfirm?: () => void;
   confirmText?: string;
+  type?: 'error' | 'success' | 'info' | 'warning';
 }
 
 const AlertDialog: React.FC<AlertDialogProps> = ({
@@ -16,10 +17,27 @@ const AlertDialog: React.FC<AlertDialogProps> = ({
   message,
   onConfirm,
   confirmText = 'OK',
+  type = 'info',
 }) => {
+  const { isDarkMode, colors } = useTheme();
+
   const handleConfirm = () => {
     if (onConfirm) {
       onConfirm();
+    }
+  };
+
+  // Màu nút dựa trên type
+  const getButtonColor = () => {
+    switch (type) {
+      case 'error':
+        return '#007AFF'; // Blue như iOS
+      case 'success':
+        return '#34C759'; // Green
+      case 'warning':
+        return '#FF9500'; // Orange
+      default:
+        return '#007AFF'; // Blue mặc định
     }
   };
 
@@ -29,20 +47,56 @@ const AlertDialog: React.FC<AlertDialogProps> = ({
       transparent
       animationType="fade"
       onRequestClose={handleConfirm}
+      statusBarTranslucent
     >
-      <Pressable style={styles.modalOverlay} onPress={handleConfirm}>
-        <Pressable style={styles.alertDialog} onPress={(e) => e.stopPropagation()}>
-          <Text style={styles.alertTitle}>{title}</Text>
-          <Text style={styles.alertMessage}>{message}</Text>
-          <View style={styles.alertButtonContainer}>
-            <Button
-              mode="text"
+      <Pressable 
+        style={[
+          styles.modalOverlay,
+          { backgroundColor: 'rgba(0, 0, 0, 0.5)' } // Consistent overlay
+        ]} 
+        onPress={handleConfirm}
+      >
+        <Pressable 
+          style={[
+            styles.alertDialog,
+            { 
+              backgroundColor: isDarkMode ? '#2c2c2e' : '#2c2c2e', // Dark grey like in image
+            }
+          ]} 
+          onPress={(e) => e.stopPropagation()}
+        >
+          <View style={styles.contentContainer}>
+            <Text style={[
+              styles.alertTitle,
+              { color: '#ffffff' } // Always white like in image
+            ]}>
+              {title}
+            </Text>
+            <Text style={[
+              styles.alertMessage,
+              { color: '#ffffff' } // Always white like in image
+            ]}>
+              {message}
+            </Text>
+          </View>
+          <View style={[
+            styles.alertButtonContainer,
+            { borderTopColor: '#38383a' } // Dark border
+          ]}>
+            <Pressable
               onPress={handleConfirm}
-              style={styles.alertButton}
-              labelStyle={styles.alertButtonText}
+              style={({ pressed }) => [
+                styles.alertButton,
+                pressed && styles.alertButtonPressed
+              ]}
             >
-              {confirmText}
-            </Button>
+              <Text style={[
+                styles.alertButtonText,
+                { color: '#ffffff' } // White text like in image
+              ]}>
+                {confirmText}
+              </Text>
+            </Pressable>
           </View>
         </Pressable>
       </Pressable>
@@ -53,49 +107,56 @@ const AlertDialog: React.FC<AlertDialogProps> = ({
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
   },
   alertDialog: {
-    backgroundColor: '#FFFFFF',
     borderRadius: 14,
-    width: 280,
-    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 320,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 32,
-    elevation: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  contentContainer: {
+    paddingTop: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
   },
   alertTitle: {
     fontSize: 17,
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'center',
-    padding: 22,
-    paddingBottom: 8,
-    color: '#000000',
+    marginBottom: 8,
+    lineHeight: 22,
   },
   alertMessage: {
     fontSize: 14,
     textAlign: 'center',
-    padding: 4,
-    paddingHorizontal: 22,
-    color: '#6b6b6b',
     lineHeight: 20,
+    marginTop: 4,
   },
   alertButtonContainer: {
     borderTopWidth: 0.5,
-    borderTopColor: '#c7c7cc',
     flexDirection: 'column',
   },
   alertButton: {
-    paddingVertical: 13,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 50,
+  },
+  alertButtonPressed: {
+    opacity: 0.6,
   },
   alertButtonText: {
     fontSize: 17,
-    color: '#007AFF',
-    fontWeight: '400',
+    fontWeight: '600',
   },
 });
 

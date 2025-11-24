@@ -578,7 +578,7 @@ const MobileLogin = () => {
     }
   };
 
-  const appLogo = process.env.PUBLIC_URL + '/Zyea.jpg';
+  const appLogo = process.env.PUBLIC_URL + '/Zyea.jpg?v=3';
 
   return (
     <Container variant={step === 1 ? 'intro' : 'form'} $isDark={isDarkMode}>

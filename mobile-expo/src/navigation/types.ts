@@ -21,7 +21,7 @@ export type MainTabParamList = {
 
 export type ChatStackParamList = {
   ChatList: undefined;
-  ChatDetail: { conversationId: string; userName: string; subTitle?: string; otherUserId?: string; userAvatarUrl?: string; isOnline?: boolean; lastSeen?: string };
+  ChatDetail: { conversationId: string; userName: string; subTitle?: string; otherUserId?: string; userAvatarUrl?: string; isOnline?: boolean; lastSeen?: string; lastMessageTime?: string };
   VideoCall: { conversationId: string; userName: string; otherUserId: string; isVideo: boolean; userAvatarUrl?: string; isIncoming?: boolean; offer?: any };
 };
 
@@ -34,6 +34,7 @@ export type NewsFeedStackParamList = {
 
 export type ProfileStackParamList = {
   Profile: undefined;
+  MyProfile: undefined;
   EditProfile: undefined;
   Settings: undefined;
   InterfaceSettings: undefined;
@@ -47,9 +48,13 @@ export type ProfileStackParamList = {
   ResourceManagement: undefined;
   DeviceManagement: undefined;
   Security: undefined;
+  Privacy: undefined;
   AppInfo: undefined;
   SelfDestructPost: undefined;
   QRScanner: undefined;
+  AddPhone: undefined;
+  VerifyPhone: { phone: string };
+  SystemNotifications: undefined;
 };
 
 export type FriendsStackParamList = {

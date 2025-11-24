@@ -15,7 +15,7 @@ const SplashScreenEnhanced = ({ onComplete, isVisible = true, loadingProgress = 
   // Preload logo
   useEffect(() => {
     const img = new Image();
-    img.src = '/Zyea.jpg';
+    img.src = '/Zyea.jpg?v=3';
     img.onload = () => setLogoLoaded(true);
     img.onerror = () => setLogoLoaded(true);
   }, []);
@@ -106,7 +106,7 @@ const SplashScreenEnhanced = ({ onComplete, isVisible = true, loadingProgress = 
             >
               <div className="w-full h-full rounded-[20px] overflow-hidden shadow-2xl bg-white/20">
                 <motion.img
-                  src="/Zyea.jpg"
+                  src="/Zyea.jpg?v=3"
                   alt="Zyea+"
                   className="w-full h-full object-cover"
                   initial={{ opacity: 0 }}

@@ -2,6 +2,19 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
+const { getConnection } = require('../config/database');
+
+// Health check endpoint
+router.get('/health', async (req, res) => {
+  try {
+    // Kiểm tra kết nối database
+    const connection = getConnection();
+    await connection.execute('SELECT 1');
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  } catch (error) {
+    res.status(503).json({ status: 'error', message: 'Database connection failed' });
+  }
+});
 
 // Version hiện tại của app
 const APP_VERSION = '1.1.6'; // Force update - version badge removed
@@ -143,6 +156,73 @@ router.post('/deploy-update', async (req, res) => {
     }
     
     res.status(500).json({ error: 'Failed to deploy update' });
+  }
+});
+
+/**
+ * GET /api/app/sticker-packs
+ * Public endpoint để mobile app load sticker packs
+ */
+router.get('/sticker-packs', async (req, res) => {
+  try {
+    console.log('📦 API: Fetching sticker packs...');
+    const connection = getConnection();
+    
+    if (!connection) {
+      console.error('❌ API: Database connection is null');
+      return res.status(500).json({ error: 'Database connection not available' });
+    }
+    
+    const [packs] = await connection.execute(`
+      SELECT sp.id, sp.name, sp.title, sp.icon_url,
+             COUNT(s.id) as sticker_count
+      FROM sticker_packs sp
+      LEFT JOIN stickers s ON sp.id = s.pack_id
+      WHERE sp.is_active = TRUE
+      GROUP BY sp.id
+      ORDER BY sp.sort_order ASC, sp.created_at DESC
+    `);
+    
+    console.log('📦 API: Found', packs.length, 'packs');
+    
+    if (packs.length === 0) {
+      console.warn('⚠️ API: No active sticker packs found in database');
+      return res.json({ packs: [] });
+    }
+    
+    // Load stickers for each pack
+    const packsWithStickers = await Promise.all(
+      packs.map(async (pack) => {
+        const [stickers] = await connection.execute(
+          'SELECT id, image_url, file_format, is_animated FROM stickers WHERE pack_id = ? ORDER BY sort_order ASC, id ASC',
+          [pack.id]
+        );
+        console.log(`📦 API: Pack ${pack.id} (${pack.name}) has ${stickers.length} stickers`);
+        return {
+          id: String(pack.id), // Convert to string để match với packId trong message
+          name: pack.name,
+          title: pack.title,
+          icon_url: pack.icon_url,
+          sticker_count: pack.sticker_count,
+          stickers: stickers.map(s => ({
+            id: s.id,
+            url: s.image_url,
+            format: s.file_format,
+            isAnimated: s.is_animated
+          }))
+        };
+      })
+    );
+    
+    console.log('📦 API: Returning', packsWithStickers.length, 'packs with stickers');
+    res.json({ packs: packsWithStickers });
+  } catch (error) {
+    console.error('❌ API: Error getting sticker packs:', error);
+    console.error('❌ API: Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Failed to get sticker packs',
+      message: error.message 
+    });
   }
 });
 

@@ -43,19 +43,25 @@ const useSocket = () => {
 
     console.log('🔌 Initializing socket connection...');
     
-    // Initialize socket with reconnection settings
+    // Initialize socket with optimized reconnection settings for instant connection
     const newSocket = io(SOCKET_URL, {
       auth: {
         token,
       },
-      transports: ['websocket', 'polling'], // Try both transports
+      transports: ['websocket', 'polling'], // Try websocket first, fallback to polling
       reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
+      reconnectionDelay: 100, // Instant reconnect (100ms for instant feel)
+      reconnectionDelayMax: 1000, // Reduced max delay (1s max) - no delay
       reconnectionAttempts: maxReconnectAttempts,
-      timeout: 20000,
+      timeout: 3000, // Reduced timeout to 3s for faster connection detection
       forceNew: false,
       autoConnect: true,
+      upgrade: true, // Enable transport upgrade
+      // Additional optimizations for faster connection
+      rememberUpgrade: true, // Remember transport upgrade
+      randomizationFactor: 0.1, // Minimal randomization for instant reconnection
+      // Optimize for instant connection
+      withCredentials: false, // Faster connection without credentials check
     });
 
     socketRef.current = newSocket;

@@ -23,12 +23,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { feedbackAPI, uploadAPI } from '../../utils/api';
 import { launchImageLibrary } from '../../utils/imagePicker';
 import { Video, ResizeMode } from 'expo-av';
+import { MAX_VIDEO_DURATION, MAX_VIDEO_SIZE, formatVideoDuration, formatVideoSize } from '../../config/videoConstants';
 
 type FeedbackScreenNavigationProp = StackNavigationProp<ProfileStackParamList, 'Feedback'>;
-
-// Giới hạn video: 30 giây và 50MB
-const MAX_VIDEO_DURATION = 30; // seconds
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
 
 const FeedbackScreen = () => {
   const navigation = useNavigation<FeedbackScreenNavigationProp>();
@@ -117,7 +114,7 @@ const FeedbackScreen = () => {
           if (durationSeconds > MAX_VIDEO_DURATION) {
             Alert.alert(
               'Video quá dài',
-              `Video không được vượt quá ${MAX_VIDEO_DURATION} giây. Video của bạn dài ${Math.round(durationSeconds)} giây.`
+              `Video không được vượt quá ${formatVideoDuration(MAX_VIDEO_DURATION)}. Video của bạn dài ${formatVideoDuration(durationSeconds)}.`
             );
             setSelectedMedia(null);
             return;

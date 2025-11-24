@@ -10,21 +10,23 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const TermsScreen = () => {
   const navigation = useNavigation();
+  const { isDarkMode, colors } = useTheme();
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
+      <View style={[styles.header, { backgroundColor: colors.surface }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
-          <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
+          <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Điều khoản sử dụng</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Điều khoản sử dụng</Text>
       </View>
 
       <ScrollView
@@ -33,8 +35,8 @@ const TermsScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>1. Chấp nhận điều khoản</Text>
-          <Text style={styles.sectionContent}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>1. Chấp nhận điều khoản</Text>
+          <Text style={[styles.sectionContent, { color: colors.textSecondary }]}>
             Bằng việc sử dụng Zyea+, bạn đồng ý tuân thủ và chịu ràng buộc bởi các điều khoản sử dụng này. 
             Nếu bạn không đồng ý với bất kỳ phần nào của điều khoản, vui lòng không sử dụng dịch vụ.
           </Text>
@@ -46,7 +48,7 @@ const TermsScreen = () => {
             Zyea+ là một nền tảng mạng xã hội và ứng dụng nhắn tin cho phép người dùng:
           </Text>
           <View style={styles.list}>
-            <Text style={styles.listItem}>• Gửi và nhận tin nhắn văn bản</Text>
+            <Text style={[styles.listItem, { color: colors.textSecondary }]}>• Gửi và nhận tin nhắn văn bản</Text>
             <Text style={styles.listItem}>• Thực hiện cuộc gọi video và audio</Text>
             <Text style={styles.listItem}>• Chia sẻ hình ảnh và tệp tin</Text>
             <Text style={styles.listItem}>• Tương tác với bạn bè qua News Feed</Text>
@@ -138,14 +140,12 @@ const TermsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
   },
   backButton: {
     padding: 6,
@@ -154,7 +154,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#2b2b2b',
   },
   scrollView: {
     flex: 1,
@@ -170,13 +169,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     marginBottom: 12,
-    color: '#1c1e21',
   },
   sectionContent: {
     fontSize: 14,
     lineHeight: 22,
     marginBottom: 12,
-    color: '#65676b',
   },
   list: {
     marginLeft: 20,
@@ -186,7 +183,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     marginBottom: 8,
-    color: '#65676b',
   },
 });
 

@@ -20,6 +20,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getInitials, getImageURL, getAvatarURL } from '../../utils/imageUtils';
 import ExpandableText from '../../components/Common/ExpandableText';
 import PostImagesCarousel from '../../components/NewsFeed/PostImagesCarousel';
+import { spacing, typography, borderRadius, borderWidth, touchTargets } from '../../config/designTokens';
 
 type CommentsScreenRouteParams = {
   postId: string | number;
@@ -56,16 +57,16 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md + 2,
+    borderBottomWidth: borderWidth.hairline,
     borderBottomColor: colors.border,
     backgroundColor: colors.surface,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
     flex: 1,
   },
   headerPostInfo: {
@@ -78,66 +79,66 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     marginRight: 0,
   },
   headerPostName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.semibold,
     color: colors.text,
   },
   headerPostTime: {
-    fontSize: 14,
+    fontSize: typography.fontSize.base,
     color: colors.textSecondary,
   },
   headerRight: {
-    width: 40,
+    width: Math.max(40, touchTargets.md),
     alignItems: 'flex-end',
   },
   sortDropdown: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md + 2,
+    borderBottomWidth: borderWidth.hairline,
     borderBottomColor: colors.border,
     backgroundColor: colors.surface,
   },
   sortText: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: typography.fontSize.md - 1,
+    fontWeight: typography.fontWeight.semibold,
     color: colors.primary,
-    marginLeft: 6,
+    marginLeft: spacing.sm - 2,
   },
   sortIcon: {
     marginLeft: 4,
   },
   postContainer: {
     backgroundColor: colors.surface,
-    paddingTop: 12,
-    paddingBottom: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: borderWidth.hairline,
     borderBottomColor: colors.border || (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)'),
   },
   postContent: {
-    fontSize: 16,
+    fontSize: typography.fontSize.md,
     color: colors.text,
-    lineHeight: 22,
-    paddingHorizontal: 16,
+    lineHeight: typography.fontSize.md * typography.lineHeight.relaxed,
+    paddingHorizontal: spacing.base,
     paddingTop: 0,
     paddingBottom: 0,
   },
   postImages: {
     width: '100%',
-    marginTop: 8,
-    marginBottom: 4,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   commentsList: {
     flexGrow: 1,
   },
   commentItem: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
   },
   commentAvatar: {
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   commentBody: {
     flex: 1,

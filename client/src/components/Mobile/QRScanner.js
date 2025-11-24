@@ -240,14 +240,17 @@ const QRScanner = ({ onClose }) => {
           return;
         }
 
-        // Check if protocol is secure (except localhost)
-        const isLocalhost = window.location.hostname === 'localhost' || 
-                           window.location.hostname === '127.0.0.1' ||
-                           window.location.hostname === '[::1]';
+        // Check if protocol is secure (except localhost and local IP)
+        const hostname = window.location.hostname;
+        const isLocalhost = hostname === 'localhost' || 
+                           hostname === '127.0.0.1' ||
+                           hostname === '[::1]';
+        // Cho phép local IP (192.168.x.x, 10.x.x.x, 172.x.x.x) cho camera
+        const isLocalIP = hostname.match(/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/);
         const isSecure = window.location.protocol === 'https:';
         
-        if (!isSecure && !isLocalhost) {
-          setError(`⚠️ Camera chỉ hoạt động với HTTPS hoặc localhost.\n\nBạn đang truy cập: ${window.location.protocol}//${window.location.host}\n\nVui lòng truy cập: http://localhost:${window.location.port || '3000'}`);
+        if (!isSecure && !isLocalhost && !isLocalIP) {
+          setError(`⚠️ Camera chỉ hoạt động với HTTPS, localhost hoặc IP local.\n\nBạn đang truy cập: ${window.location.protocol}//${window.location.host}\n\nVui lòng truy cập qua IP WiFi: http://192.168.x.x:${window.location.port || '3000'}`);
           return;
         }
 
@@ -308,7 +311,12 @@ const QRScanner = ({ onClose }) => {
           } else if (err.message?.includes('OverconstrainedError') || err.name === 'OverconstrainedError') {
             setError('Camera không hỗ trợ yêu cầu. Thử với thiết bị khác.');
           } else if (err.message?.includes('SecurityError') || err.name === 'SecurityError') {
-            setError(`🔒 Lỗi bảo mật: Camera chỉ hoạt động với HTTPS hoặc localhost.\n\nĐang truy cập: ${window.location.protocol}//${window.location.host}\n\nVui lòng truy cập: http://localhost:${window.location.port || '3000'}`);
+            const hostname = window.location.hostname;
+            const isLocalIP = hostname.match(/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/);
+            const suggestedUrl = isLocalIP 
+              ? `http://${hostname}:${window.location.port || '3000'}`
+              : `http://192.168.x.x:${window.location.port || '3000'}`;
+            setError(`🔒 Lỗi bảo mật: Camera chỉ hoạt động với HTTPS, localhost hoặc IP local.\n\nĐang truy cập: ${window.location.protocol}//${window.location.host}\n\nVui lòng truy cập qua IP WiFi: ${suggestedUrl}`);
           } else {
             setError(`Không thể khởi động camera.\n\nLỗi: ${err.name || 'Unknown'}\nChi tiết: ${err.message || 'Không có thông tin'}\n\nVui lòng thử:\n1. Reload trang (swipe xuống)\n2. Đóng và mở lại Safari\n3. Khởi động lại điện thoại`);
           }

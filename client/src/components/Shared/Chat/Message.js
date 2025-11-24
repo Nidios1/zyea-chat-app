@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 import { FiCheck, FiCheckCircle, FiArrowLeft } from 'react-icons/fi';
 import { getInitials } from '../../../utils/nameUtils';
-import { getAvatarURL, getUploadedImageURL } from '../../../utils/imageUtils';
+import { getAvatarURL, getUploadedImageURL, getStickerURL } from '../../../utils/imageUtils';
+import { stickerAPI } from '../../../utils/api';
 import MessageContextMenu from './MessageContextMenu';
 
 const MessageContainer = styled.div`
@@ -39,7 +40,7 @@ const MessageContent = styled.div`
 const MessageBubble = styled.div`
   background: ${props => props.isOwn ? 'var(--primary-color, #0068ff)' : 'var(--bg-primary, white)'};
   color: ${props => props.isOwn ? 'white' : 'var(--text-primary, #333)'};
-  padding: ${props => props.isImage ? '0' : '0.75rem 1rem'};
+  padding: ${props => (props.isImage || props.isSticker) ? '0' : '0.75rem 1rem'};
   border-radius: 18px;
   box-shadow: 0 1px 2px var(--shadow-color, rgba(0, 0, 0, 0.1));
   word-wrap: break-word;
@@ -47,6 +48,9 @@ const MessageBubble = styled.div`
   max-width: 300px;
   transition: opacity 0.2s ease;
   user-select: ${props => !props.isOwn ? 'none' : 'text'};
+  display: flex;
+  flex-direction: column;
+  align-items: ${props => props.isOwn ? 'flex-end' : 'flex-start'};
 
   ${props => props.isOwn && `
     border-bottom-right-radius: 4px;
@@ -72,6 +76,19 @@ const MessageImage = styled.img`
   
   &:hover {
     transform: scale(1.02);
+  }
+`;
+
+const StickerImage = styled.img`
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: default;
+  transition: transform 0.2s ease;
+  
+  &:hover {
+    transform: scale(1.05);
   }
 `;
 
@@ -295,6 +312,68 @@ const Message = ({ message, isOwn, showAvatar, showTime, onReply, onForward, onR
   const [localReactions, setLocalReactions] = useState(parseReactions(message.reactions));
   const swipeStartRef = useRef(null);
   const longPressPositionRef = useRef({ x: 0, y: 0 });
+  const [stickerPacks, setStickerPacks] = useState([]);
+  const [stickerUrl, setStickerUrl] = useState(null);
+  const [isStickerMessage, setIsStickerMessage] = useState(false);
+
+  // Check if message is a sticker and load sticker packs
+  useEffect(() => {
+    const checkAndLoadSticker = async () => {
+      if (!message.content) {
+        setIsStickerMessage(false);
+        setStickerUrl(null);
+        return;
+      }
+
+      // Try to parse as sticker JSON
+      try {
+        const parsed = JSON.parse(message.content);
+        if (parsed && (parsed.packId || parsed.packid || parsed.pack_id) && 
+            (parsed.stickerIndex !== undefined || parsed.stickerindex !== undefined || parsed.sticker_index !== undefined)) {
+          setIsStickerMessage(true);
+          
+          const packId = parsed.packId || parsed.packid || parsed.pack_id;
+          const stickerIndex = parsed.stickerIndex !== undefined 
+            ? parsed.stickerIndex 
+            : (parsed.stickerindex !== undefined ? parsed.stickerindex : parsed.sticker_index);
+
+          // Load sticker packs if not loaded
+          if (stickerPacks.length === 0) {
+            try {
+              const response = await stickerAPI.getStickerPacks();
+              const packs = response.data.packs || [];
+              setStickerPacks(packs);
+              
+              // Find the pack and sticker
+              const pack = packs.find(p => String(p.id) === String(packId) || p.name === packId);
+              if (pack && pack.stickers && pack.stickers[stickerIndex]) {
+                const sticker = pack.stickers[stickerIndex];
+                setStickerUrl(getStickerURL(sticker.url || sticker.image_url));
+              }
+            } catch (error) {
+              console.error('Error loading sticker packs:', error);
+            }
+          } else {
+            // Packs already loaded, find sticker
+            const pack = stickerPacks.find(p => String(p.id) === String(packId) || p.name === packId);
+            if (pack && pack.stickers && pack.stickers[stickerIndex]) {
+              const sticker = pack.stickers[stickerIndex];
+              setStickerUrl(getStickerURL(sticker.url || sticker.image_url));
+            }
+          }
+        } else {
+          setIsStickerMessage(false);
+          setStickerUrl(null);
+        }
+      } catch (e) {
+        // Not a JSON sticker, treat as normal message
+        setIsStickerMessage(false);
+        setStickerUrl(null);
+      }
+    };
+
+    checkAndLoadSticker();
+  }, [message.content, stickerPacks]);
 
   // Parse reply content - "Re: {original message}\n\n{new message}"
   const parseReply = (content) => {
@@ -623,6 +702,7 @@ const Message = ({ message, isOwn, showAvatar, showTime, onReply, onForward, onR
           ref={bubbleRef}
           isOwn={isOwn} 
           isImage={message.message_type === 'image'}
+          isSticker={isStickerMessage && stickerUrl}
           isPress={isPress}
           style={{ cursor: isOwn ? 'default' : 'context-menu' }}
         >
@@ -640,6 +720,15 @@ const Message = ({ message, isOwn, showAvatar, showTime, onReply, onForward, onR
               src={getUploadedImageURL(message.content)} 
               alt="Message image"
               onClick={() => window.open(getUploadedImageURL(message.content), '_blank')}
+            />
+          ) : isStickerMessage && stickerUrl ? (
+            <StickerImage
+              src={stickerUrl}
+              alt="Sticker"
+              onError={(e) => {
+                console.error('Error loading sticker:', stickerUrl);
+                e.target.style.display = 'none';
+              }}
             />
           ) : parsedReply.isReply ? (
             <span>{parsedReply.newContent}</span>

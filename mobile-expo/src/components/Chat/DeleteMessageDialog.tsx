@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -24,15 +24,31 @@ const DeleteMessageDialog: React.FC<DeleteMessageDialogProps> = ({
   onDeleteForEveryone,
 }) => {
   const { isDarkMode, colors } = useTheme();
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   return (
     <Modal
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={() => {
+        if (isMountedRef.current) {
+          onClose();
+        }
+      }}
     >
-      <TouchableWithoutFeedback onPress={onClose}>
+      <TouchableWithoutFeedback onPress={() => {
+        if (isMountedRef.current) {
+          onClose();
+        }
+      }}>
         <View style={styles.overlay}>
           {/* Blur Background */}
           <BlurView
@@ -47,7 +63,7 @@ const DeleteMessageDialog: React.FC<DeleteMessageDialogProps> = ({
               { backgroundColor: isDarkMode ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.3)' },
             ]}
           />
-          <TouchableWithoutFeedback>
+          <TouchableWithoutFeedback onPress={(e) => {}}>
             <View
               style={[
                 styles.container,
@@ -69,8 +85,9 @@ const DeleteMessageDialog: React.FC<DeleteMessageDialogProps> = ({
                   },
                 ]}
                 onPress={() => {
+                  if (!isMountedRef.current) return;
+                  console.log('Delete for me pressed');
                   onDeleteForMe();
-                  onClose();
                 }}
                 activeOpacity={0.7}
               >
@@ -82,8 +99,9 @@ const DeleteMessageDialog: React.FC<DeleteMessageDialogProps> = ({
               <TouchableOpacity
                 style={styles.option}
                 onPress={() => {
+                  if (!isMountedRef.current) return;
+                  console.log('Delete for everyone pressed');
                   onDeleteForEveryone();
-                  onClose();
                 }}
                 activeOpacity={0.7}
               >
@@ -104,7 +122,11 @@ const DeleteMessageDialog: React.FC<DeleteMessageDialogProps> = ({
 
               <TouchableOpacity
                 style={styles.cancelButton}
-                onPress={onClose}
+                onPress={() => {
+                  if (isMountedRef.current) {
+                    onClose();
+                  }
+                }}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.cancelText, { color: colors.text }]}>Hủy</Text>

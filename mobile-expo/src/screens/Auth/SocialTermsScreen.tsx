@@ -10,21 +10,23 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const SocialTermsScreen = () => {
   const navigation = useNavigation();
+  const { isDarkMode, colors } = useTheme();
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
+      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={colors.surface} />
+      <View style={[styles.header, { backgroundColor: colors.surface }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
-          <MaterialCommunityIcons name="chevron-left" size={24} color="#2b2b2b" />
+          <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Điều khoản Mạng xã hội</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Điều khoản Mạng xã hội</Text>
       </View>
 
       <ScrollView
@@ -33,8 +35,8 @@ const SocialTermsScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>1. Khái niệm</Text>
-          <Text style={styles.sectionContent}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>1. Khái niệm</Text>
+          <Text style={[styles.sectionContent, { color: colors.textSecondary }]}>
             Zyea+ là một nền tảng mạng xã hội cho phép người dùng kết nối, chia sẻ và tương tác 
             với bạn bè, gia đình và cộng đồng. Điều khoản mạng xã hội này quy định cách sử dụng 
             các tính năng cộng đồng của chúng tôi.
@@ -47,7 +49,7 @@ const SocialTermsScreen = () => {
             Thông tin công khai trong hồ sơ của bạn có thể bao gồm:
           </Text>
           <View style={styles.list}>
-            <Text style={styles.listItem}>• Tên, ảnh đại diện và ảnh bìa</Text>
+            <Text style={[styles.listItem, { color: colors.textSecondary }]}>• Tên, ảnh đại diện và ảnh bìa</Text>
             <Text style={styles.listItem}>• Trạng thái hoạt động</Text>
             <Text style={styles.listItem}>• Bài viết trên News Feed với quyền riêng tư công khai</Text>
             <Text style={styles.listItem}>• Danh sách bạn bè (nếu cho phép công khai)</Text>
@@ -184,14 +186,12 @@ const SocialTermsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
   },
   backButton: {
     padding: 6,
@@ -200,7 +200,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#2b2b2b',
   },
   scrollView: {
     flex: 1,
@@ -216,13 +215,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     marginBottom: 12,
-    color: '#1c1e21',
   },
   sectionContent: {
     fontSize: 14,
     lineHeight: 22,
     marginBottom: 12,
-    color: '#65676b',
   },
   list: {
     marginLeft: 20,
@@ -232,7 +229,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     marginBottom: 8,
-    color: '#65676b',
   },
 });
 

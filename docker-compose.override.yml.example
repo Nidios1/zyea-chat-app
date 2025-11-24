@@ -1,0 +1,26 @@
+# File này là ví dụ cho docker-compose.override.yml
+# Copy file này thành docker-compose.override.yml để override các cấu hình mặc định
+# File override sẽ tự động được docker-compose load
+#
+# Lưu ý: Nếu bạn thay đổi các giá trị ở đây, nhớ cập nhật server/config.env cho khớp!
+
+version: '3.8'
+
+services:
+  mysql:
+    environment:
+      # Mật khẩu root (mặc định: root)
+      MYSQL_ROOT_PASSWORD: root
+      # Tên database (mặc định: zalo_clone)
+      MYSQL_DATABASE: zalo_clone
+      # User cho ứng dụng (mặc định: zalo_user)
+      MYSQL_USER: zalo_user
+      # Mật khẩu cho user (mặc định: zalo_password)
+      MYSQL_PASSWORD: zalo_password
+    ports:
+      - "3306:3306"
+
+  redis:
+    ports:
+      - "6379:6379"
+

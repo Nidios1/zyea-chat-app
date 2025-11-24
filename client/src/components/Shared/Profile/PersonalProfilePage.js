@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useContext, useMemo, useCallback } from 'react';
 import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
 import { 
   FiUser, 
   FiFileText,
@@ -19,11 +20,12 @@ import {
   FiHelpCircle,
   FiLogOut,
   FiCamera,
-  FiCheck
+  FiCheck,
+  FiSettings
 } from 'react-icons/fi';
 import { BiQrScan } from 'react-icons/bi';
 import AuthContext from '../../../contexts/AuthContext';
-import { chatAPI } from '../../../utils/api';
+import { chatAPI, profileAPI } from '../../../utils/api';
 import { getInitials } from '../../../utils/nameUtils';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { getAvatarURL, getUploadedImageURL } from '../../../utils/imageUtils';
@@ -738,6 +740,7 @@ const ThemeModeCheck = styled.div`
 const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange }) => {
   const authContext = useContext(AuthContext);
   const { themeMode, themeColor, setTheme, setColor } = useTheme();
+  const navigate = useNavigate();
   
   // Ưu tiên dùng user từ AuthContext, fallback sang prop
   const user = authContext?.user || userProp;
@@ -756,7 +759,49 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
     return '';
   };
   
-  const [activityStatus, setActivityStatus] = useState(true);
+  // Load activity status from server (with localStorage fallback)
+  const getInitialActivityStatus = () => {
+    try {
+      const saved = localStorage.getItem('activityStatusEnabled');
+      return saved !== null ? saved === 'true' : true;
+    } catch (e) {
+      return true;
+    }
+  };
+  
+  const [activityStatus, setActivityStatus] = useState(getInitialActivityStatus());
+  
+  // Load activity status from server on mount
+  useEffect(() => {
+    const loadActivityStatusFromServer = async () => {
+      try {
+        const profileResponse = await profileAPI.getProfile();
+        const serverValue = profileResponse.data?.activity_status_enabled;
+        // Xử lý cả trường hợp false (0, false, 'false')
+        if (serverValue !== undefined && serverValue !== null) {
+          // Chuyển đổi sang boolean: true nếu là true/1, false nếu là false/0
+          const isServerEnabled = serverValue === true || serverValue === 1 || serverValue === 'true';
+          localStorage.setItem('activityStatusEnabled', String(isServerEnabled));
+          setActivityStatus(isServerEnabled);
+          console.log('✅ Loaded activity status from server:', isServerEnabled);
+        } else {
+          // Nếu server không có giá trị, load từ localStorage
+          const saved = localStorage.getItem('activityStatusEnabled');
+          const isCurrentlyEnabled = saved === 'true';
+          setActivityStatus(isCurrentlyEnabled);
+          console.log('⚠️ Server value is null/undefined, using localStorage:', isCurrentlyEnabled);
+        }
+      } catch (error) {
+        console.log('Could not load activity status from server, using localStorage:', error);
+        // Fallback to localStorage if server fails
+        const saved = localStorage.getItem('activityStatusEnabled');
+        const isCurrentlyEnabled = saved === 'true';
+        setActivityStatus(isCurrentlyEnabled);
+        console.log('⚠️ Using localStorage due to API error:', isCurrentlyEnabled);
+      }
+    };
+    loadActivityStatusFromServer();
+  }, []);
   const [isScrolled, setIsScrolled] = useState(false);
   const [showActivityStatusPage, setShowActivityStatusPage] = useState(false);
   const [showInterfaceSettings, setShowInterfaceSettings] = useState(false);
@@ -945,14 +990,68 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
       setShowTimeOptions(true);
     } else {
       // Khi bật, trực tiếp bật lại
-      setActivityStatus(true);
+      const newValue = true;
+      // Sync với server trước
+      profileAPI.updateProfile({ activity_status_enabled: true })
+        .then(() => {
+          console.log('✅ Synced activity status to server: true');
+          // Lưu vào localStorage sau khi sync server thành công
+          localStorage.setItem('activityStatusEnabled', String(newValue));
+          setActivityStatus(newValue);
+          // Trigger custom event để các component khác cập nhật ngay (same window)
+          window.dispatchEvent(new CustomEvent('activityStatusChanged', {
+            detail: {
+              key: 'activityStatusEnabled',
+              newValue: String(newValue)
+            }
+          }));
+        })
+        .catch(error => {
+          console.error('❌ Error syncing activity status to server:', error);
+          // Vẫn lưu local nếu server fail
+          localStorage.setItem('activityStatusEnabled', String(newValue));
+          setActivityStatus(newValue);
+          window.dispatchEvent(new CustomEvent('activityStatusChanged', {
+            detail: {
+              key: 'activityStatusEnabled',
+              newValue: String(newValue)
+            }
+          }));
+        });
     }
   }, []);
 
   const handleTimeOptionSelect = useCallback((option) => {
     console.log(`Tắt trạng thái hoạt động trong: ${option}`);
-    setActivityStatus(false);
+    const newValue = false;
     setShowTimeOptions(false);
+    // Sync với server trước
+    profileAPI.updateProfile({ activity_status_enabled: false })
+      .then(() => {
+        console.log('✅ Synced activity status to server: false');
+        // Lưu vào localStorage sau khi sync server thành công
+        localStorage.setItem('activityStatusEnabled', String(newValue));
+        setActivityStatus(newValue);
+        // Trigger custom event để các component khác cập nhật ngay (same window)
+        window.dispatchEvent(new CustomEvent('activityStatusChanged', {
+          detail: {
+            key: 'activityStatusEnabled',
+            newValue: String(newValue)
+          }
+        }));
+      })
+      .catch(error => {
+        console.error('❌ Error syncing activity status to server:', error);
+        // Vẫn lưu local nếu server fail
+        localStorage.setItem('activityStatusEnabled', String(newValue));
+        setActivityStatus(newValue);
+        window.dispatchEvent(new CustomEvent('activityStatusChanged', {
+          detail: {
+            key: 'activityStatusEnabled',
+            newValue: String(newValue)
+          }
+        }));
+      });
     // TODO: Implement logic to schedule turning back on after selected time
   }, []);
 
@@ -999,6 +1098,11 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
       case 'help':
         console.log('Hướng dẫn sử dụng clicked');
         break;
+      case 'admin':
+        console.log('Admin Panel clicked');
+        navigate('/admin');
+        onBack(); // Close profile page
+        break;
       case 'logout':
         console.log('Đăng xuất clicked');
         if (window.confirm('Bạn có chắc chắn muốn đăng xuất?')) {
@@ -1010,7 +1114,7 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
       default:
         console.log(`Menu item ${menuId} clicked`);
     }
-  }, []);
+  }, [navigate, onBack]);
 
   // Memoize menu groups to prevent recreation on every render
   const menuGroups = useMemo(() => [
@@ -1107,6 +1211,11 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
           icon: FiHelpCircle,
           title: 'Hướng dẫn sử dụng',
         },
+        ...(user?.role === 'admin' ? [{
+          id: 'admin',
+          icon: FiSettings,
+          title: 'Admin Panel',
+        }] : []),
         {
           id: 'logout',
           icon: FiLogOut,
@@ -1114,7 +1223,7 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
         },
       ]
     },
-  ], [themeMode]);
+  ], [themeMode, user?.role]);
 
   return (
     <>

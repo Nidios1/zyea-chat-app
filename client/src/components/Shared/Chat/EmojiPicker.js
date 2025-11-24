@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { FiSmile, FiX } from 'react-icons/fi';
+import StickerPicker from './StickerPicker';
 
 const EmojiToggleButton = styled.button.attrs({ type: 'button' })`
   width: 40px;
@@ -32,7 +33,7 @@ const EmojiPickerContainer = styled.div`
   bottom: 60px;
   left: 0;
   width: 320px;
-  height: 280px;
+  height: 400px;
   background: white;
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
@@ -62,6 +63,7 @@ const EmojiHeader = styled.div`
   padding: 0.75rem 1rem;
   border-bottom: 1px solid #e1e5e9;
   background: #f8f9fa;
+  position: relative;
 `;
 
 const EmojiTitle = styled.h3`
@@ -135,7 +137,39 @@ const EmojiButton = styled.button`
   }
 `;
 
-const EmojiPicker = ({ onEmojiSelect, isOpen, onClose }) => {
+const TabContainer = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid #e1e5e9;
+  background: #f8f9fa;
+  justify-content: flex-end;
+`;
+
+const TabButton = styled.button`
+  padding: 0.5rem 1rem;
+  border: none;
+  background: ${props => props.active ? '#0068ff' : 'transparent'};
+  color: ${props => props.active ? 'white' : '#666'};
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: ${props => props.active ? '600' : '400'};
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: ${props => props.active ? '#0056cc' : '#e9ecef'};
+  }
+`;
+
+const ContentContainer = styled.div`
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+`;
+
+const EmojiPicker = ({ onEmojiSelect, onStickerSelect, isOpen, onClose }) => {
   const [emojis] = useState([
     '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂',
     '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍', '🤩',
@@ -163,6 +197,7 @@ const EmojiPicker = ({ onEmojiSelect, isOpen, onClose }) => {
     '🕳️', '💣', '💬', '👁️‍🗨️', '🗨️', '🗯️', '💭', '💤'
   ]);
 
+  const [activeTab, setActiveTab] = useState('emoji');
   const pickerRef = useRef(null);
 
   useEffect(() => {
@@ -185,27 +220,61 @@ const EmojiPicker = ({ onEmojiSelect, isOpen, onClose }) => {
     onEmojiSelect(emoji);
   };
 
+  const handleStickerSelect = (packId, stickerIndex, sticker) => {
+    console.log('🎨 EmojiPicker - handleStickerSelect called:', { packId, stickerIndex, sticker });
+    if (onStickerSelect) {
+      console.log('🎨 Calling onStickerSelect callback');
+      onStickerSelect(packId, stickerIndex, sticker);
+    } else {
+      console.warn('⚠️ EmojiPicker - onStickerSelect callback not provided');
+    }
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   return (
     <EmojiPickerContainer ref={pickerRef} isOpen={isOpen}>
       <EmojiHeader>
-        <EmojiTitle>Emoji</EmojiTitle>
+        <EmojiTitle>{activeTab === 'emoji' ? 'Emoji' : 'Sticker'}</EmojiTitle>
+        <TabContainer style={{ border: 'none', padding: 0, background: 'transparent', gap: '0.25rem' }}>
+          <TabButton
+            active={activeTab === 'emoji'}
+            onClick={() => setActiveTab('emoji')}
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+          >
+            😊
+          </TabButton>
+          <TabButton
+            active={activeTab === 'sticker'}
+            onClick={() => setActiveTab('sticker')}
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.8rem' }}
+          >
+            🎨
+          </TabButton>
+        </TabContainer>
         <CloseButton onClick={onClose}>
           <FiX size={16} />
         </CloseButton>
       </EmojiHeader>
-      <EmojiGrid>
-        {emojis.map((emoji, index) => (
-          <EmojiButton
-            key={index}
-            onClick={() => handleEmojiClick(emoji)}
-            title={emoji}
-          >
-            {emoji}
-          </EmojiButton>
-        ))}
-      </EmojiGrid>
+
+      <ContentContainer>
+        {activeTab === 'emoji' ? (
+          <EmojiGrid>
+            {emojis.map((emoji, index) => (
+              <EmojiButton
+                key={index}
+                onClick={() => handleEmojiClick(emoji)}
+                title={emoji}
+              >
+                {emoji}
+              </EmojiButton>
+            ))}
+          </EmojiGrid>
+        ) : (
+          <StickerPicker onSelectSticker={handleStickerSelect} />
+        )}
+      </ContentContainer>
     </EmojiPickerContainer>
   );
 };

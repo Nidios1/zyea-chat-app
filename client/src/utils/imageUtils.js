@@ -61,10 +61,42 @@ export const getAPIURL = () => {
   return '/api'; // Proxy in development
 };
 
+/**
+ * Get Sticker URL from database path
+ * @param {string} stickerPath - Sticker path from database
+ * @returns {string} Full sticker URL
+ */
+export const getStickerURL = (stickerPath) => {
+  if (!stickerPath) {
+    return '';
+  }
+
+  // If already a full URL
+  if (stickerPath.startsWith('http://') || stickerPath.startsWith('https://')) {
+    return stickerPath;
+  }
+
+  // Get base URL from API URL
+  const apiUrl = getAPIURL();
+  const baseUrl = apiUrl.replace('/api', '');
+  
+  // Normalize path
+  let normalizedPath = stickerPath.trim();
+  
+  // Remove leading slash if present (we'll add it)
+  if (normalizedPath.startsWith('/')) {
+    normalizedPath = normalizedPath.substring(1);
+  }
+  
+  // Construct full URL
+  return `${baseUrl}/${normalizedPath}`;
+};
+
 export default {
   getServerURL,
   getImageURL,
   getAvatarURL,
   getUploadedImageURL,
-  getAPIURL
+  getAPIURL,
+  getStickerURL
 };

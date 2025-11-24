@@ -44,8 +44,22 @@ api.interceptors.response.use(
     // CRITICAL: Only remove token on 401 if it's NOT a profile check during initial load
     // This prevents accidental logout when app is starting
     if (error.response?.status === 401 && !error.config?.url?.includes('/users/profile')) {
-      console.log('🔒 Unauthorized on API request, removing token');
-      localStorage.removeItem('token');
+      console.log('🔒 Unauthorized on API request, removing token and triggering logout');
+      
+      // Check if token exists before removing (avoid duplicate events)
+      const hasToken = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (hasToken) {
+        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
+        
+        // Trigger custom event to notify app to logout immediately
+        // Use setTimeout to avoid blocking and prevent UI freeze
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('session-revoked', {
+            detail: { reason: 'unauthorized', url: error.config?.url }
+          }));
+        }, 50);
+      }
     }
     // For /users/profile endpoint, don't remove token - let App.js handle it
     return Promise.reject(error);
@@ -237,6 +251,22 @@ export const notificationAPI = {
   rejectFriendRequest: (notificationId) => 
     api.post(`/notifications/${notificationId}/reject-friend-request`),
   getUnreadCount: () => api.get('/notifications/unread-count')
+};
+
+export const stickerAPI = {
+  getStickerPacks: () => api.get('/app/sticker-packs'),
+  
+  // Admin: Create new sticker pack
+  createStickerPack: (name, description) =>
+    api.post('/app/sticker-packs', { name, description }),
+  
+  // Admin: Delete sticker from pack
+  deleteSticker: (packId, stickerIndex) =>
+    api.delete(`/app/sticker-packs/${packId}/stickers/${stickerIndex}`),
+  
+  // Admin: Delete sticker pack
+  deleteStickerPack: (packId) =>
+    api.delete(`/app/sticker-packs/${packId}`),
 };
 
 export default api;

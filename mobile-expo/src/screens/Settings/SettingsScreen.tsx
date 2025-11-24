@@ -6,6 +6,7 @@ import { useUpdates } from '../../hooks/useUpdates';
 import { getCurrentUpdateInfo, formatUpdateVersion } from '../../utils/updateUtils';
 import { UpdateModal } from '../../components/Common/UpdateModal';
 import appJson from '../../../app.json';
+import { spacing, typography, borderRadius } from '../../config/designTokens';
 
 const SettingsScreen = () => {
   const theme = useTheme();
@@ -122,7 +123,7 @@ const SettingsScreen = () => {
                 <Text style={[styles.settingLabel, { color: theme.colors.onBackground }]}>
                   Update ID
                 </Text>
-                <Text style={[styles.settingValue, { color: theme.colors.onSurfaceVariant, fontSize: 11 }]}>
+                <Text style={[styles.settingValue, { color: theme.colors.onSurfaceVariant, fontSize: typography.fontSize.xs }]}>
                   {formatUpdateVersion(currentVersion)}
                 </Text>
               </View>
@@ -189,41 +190,41 @@ const styles = StyleSheet.create({
     margin: 16,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 16,
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.bold,
+    marginBottom: spacing.base,
   },
   settingItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
   },
   settingLabel: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: typography.fontSize.md,
+    fontWeight: typography.fontWeight.medium,
   },
   settingDescription: {
-    fontSize: 13,
-    marginTop: 4,
+    fontSize: typography.fontSize.sm + 1,
+    marginTop: spacing.xs,
   },
   settingValue: {
-    fontSize: 14,
+    fontSize: typography.fontSize.base,
   },
   divider: {
-    marginVertical: 8,
+    marginVertical: spacing.sm,
   },
   settingInfo: {
     flex: 1,
   },
   updateActions: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   checkButton: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
   testButton: {
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
 });
 

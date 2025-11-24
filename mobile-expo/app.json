@@ -4,7 +4,7 @@
     "slug": "zyea-mobile",
     "version": "1.0.4",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/Zyea.png",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -26,7 +26,7 @@
       "displayName": "Zyea+",
       "supportsTablet": true,
       "requireFullScreen": false,
-      "icon": "./assets/icon.png",
+      "icon": "./assets/Zyea.png",
       "infoPlist": {
         "CFBundleName": "Zyea+",
         "CFBundleDisplayName": "Zyea+",
@@ -57,8 +57,8 @@
       "eas": {
         "projectId": "fa5c683f-f9c5-459e-85a5-98f1856c4d2d"
       },
-      "apiUrl": "http://192.168.0.100:5000/api",
-      "socketUrl": "http://192.168.0.100:5000"
+      "apiUrl": "http://192.168.0.103:5000/api",
+      "socketUrl": "http://192.168.0.103:5000"
     },
     "owner": "hieukka"
   }
