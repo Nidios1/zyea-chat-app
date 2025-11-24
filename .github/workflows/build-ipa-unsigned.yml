@@ -123,7 +123,7 @@ jobs:
           echo "📋 Build command:"
           echo "xcodebuild build -workspace \"$WORKSPACE\" -scheme \"$SCHEME\" -configuration Release -sdk iphoneos -derivedDataPath build/DerivedData CODE_SIGN_IDENTITY=\"\" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM=\"\" ONLY_ACTIVE_ARCH=NO ARCHS=\"arm64\""
           
-          # Build with better error handling
+          # Build with better error handling and verbose output
           BUILD_OUTPUT=$(mktemp)
           set +e
           xcodebuild build \
@@ -137,23 +137,57 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
             ONLY_ACTIVE_ARCH=NO \
-            ARCHS="arm64" 2>&1 | tee "$BUILD_OUTPUT"
+            ARCHS="arm64" \
+            -showBuildSettings 2>&1 | head -20 || true
+          
+          echo ""
+          echo "🏗️ Starting actual build..."
+          xcodebuild build \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="arm64" \
+            2>&1 | tee "$BUILD_OUTPUT"
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
           set -e
           
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo "❌ Build failed with exit code: $BUILD_EXIT_CODE"
-            echo "📋 Last 50 lines of build output:"
-            tail -50 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
             echo ""
+            echo "📋 Searching for error messages in build output..."
+            echo "=========================================="
+            grep -i "error:" "$BUILD_OUTPUT" | tail -30 || echo "No 'error:' found"
+            echo "=========================================="
+            grep -i "failed" "$BUILD_OUTPUT" | tail -30 || echo "No 'failed' found"
+            echo "=========================================="
+            grep -i "warning:" "$BUILD_OUTPUT" | tail -20 || echo "No 'warning:' found"
+            echo "=========================================="
+            echo ""
+            echo "📋 Last 100 lines of build output:"
+            tail -100 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
+            echo ""
+            echo "📋 Full build output saved to: $BUILD_OUTPUT"
             echo "📋 Checking for build logs..."
             if [ -d "build/DerivedData/Logs/Build" ]; then
               echo "📂 Build log files:"
               ls -la build/DerivedData/Logs/Build/ 2>/dev/null || true
               echo ""
-              echo "📋 Recent build log:"
-              find build/DerivedData/Logs/Build -name "*.xcactivitylog" -type f | head -1 | xargs -I {} sh -c 'gunzip -c "{}" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null | tail -100 || echo "Could not read log"' || true
+              echo "📋 Trying to extract errors from build logs..."
+              find build/DerivedData/Logs/Build -name "*.xcactivitylog" -type f | head -1 | xargs -I {} sh -c 'gunzip -c "{}" 2>/dev/null | strings | grep -i "error\|failed" | tail -50 || echo "Could not read log"' || true
             fi
+            echo ""
+            echo "💡 Common issues to check:"
+            echo "   - Code signing errors (even with CODE_SIGNING_REQUIRED=NO)"
+            echo "   - Missing dependencies or frameworks"
+            echo "   - Build settings conflicts"
+            echo "   - Xcode version compatibility"
             rm -f "$BUILD_OUTPUT"
             exit 1
           fi
@@ -178,6 +212,7 @@ jobs:
           if [ -z "$APP_IN_DERIVED" ]; then
             echo "⚠️ .app not found in DerivedData/Build/Products, trying archive method..."
             # Try archive as fallback
+            ARCHIVE_OUTPUT=$(mktemp)
             set +e
             xcodebuild archive \
               -workspace "$WORKSPACE" \
@@ -190,17 +225,18 @@ jobs:
               CODE_SIGNING_ALLOWED=NO \
               DEVELOPMENT_TEAM="" \
               SKIP_INSTALL=NO \
-              ARCHS="arm64" 2>&1 | tee "$BUILD_OUTPUT"
+              ARCHS="arm64" 2>&1 | tee "$ARCHIVE_OUTPUT"
             ARCHIVE_EXIT_CODE=${PIPESTATUS[0]}
             set -e
             
             if [ $ARCHIVE_EXIT_CODE -ne 0 ]; then
               echo "❌ Archive also failed with exit code: $ARCHIVE_EXIT_CODE"
-              tail -50 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
-              rm -f "$BUILD_OUTPUT"
+              echo "📋 Archive errors:"
+              grep -i "error:" "$ARCHIVE_OUTPUT" | tail -20 || tail -50 "$ARCHIVE_OUTPUT"
+              rm -f "$ARCHIVE_OUTPUT"
               exit 1
             fi
-            rm -f "$BUILD_OUTPUT"
+            rm -f "$ARCHIVE_OUTPUT"
             echo "✅ Archive completed"
           else
             echo "✅ Found .app in DerivedData: $APP_IN_DERIVED"
