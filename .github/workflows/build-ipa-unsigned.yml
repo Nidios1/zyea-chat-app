@@ -78,7 +78,7 @@ jobs:
       - name: 📦 Install CocoaPods dependencies
         working-directory: ./mobile-expo/ios
         run: |
-          pod install
+          pod install --repo-update || pod install
 
       - name: 🏗️ Build IPA (unsigned) with expo run:ios
         working-directory: ./mobile-expo
@@ -109,6 +109,7 @@ jobs:
           echo "✅ App target: $APP_TARGET"
           
           echo "🧹 Cleaning build..."
+          rm -rf build/DerivedData || true
           xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release || true
           
           echo "🏗️ Building app target first (unsigned)..."
@@ -121,10 +122,13 @@ jobs:
             -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-
+            CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
-            ONLY_ACTIVE_ARCH=NO || {
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="arm64" || {
             echo "❌ Build failed!"
+            echo "📋 Build log:"
+            cat build/DerivedData/Logs/Build/*.xcactivitylog 2>/dev/null | tail -100 || echo "No build log available"
             exit 1
           }
           
@@ -142,9 +146,10 @@ jobs:
               -sdk iphoneos \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
-
+              CODE_SIGNING_ALLOWED=NO \
               DEVELOPMENT_TEAM="" \
-              SKIP_INSTALL=NO || {
+              SKIP_INSTALL=NO \
+              ARCHS="arm64" || {
               echo "❌ Archive also failed!"
               exit 1
             }
