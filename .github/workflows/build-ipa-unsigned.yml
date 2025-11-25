@@ -209,7 +209,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa-unsigned
-          path: mobile-expo/build.ipa
+          path: mobile-expo/ios/build.ipa
           retention-days: 30
           if-no-files-found: error
 
