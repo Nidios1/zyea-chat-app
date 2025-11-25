@@ -159,33 +159,49 @@ jobs:
           mkdir -p build
           xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release || true
           
-          # Create archive
-          echo "🏗️ Creating archive (this may take 10-15 minutes)..."
-          xcodebuild archive \
+          # First, build the app to generate .app file
+          echo "🏗️ Building app first (this may take 10-15 minutes)..."
+          xcodebuild build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
-            -archivePath build/app.xcarchive \
             -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
-            SKIP_INSTALL=NO \
             ONLY_ACTIVE_ARCH=NO \
-            ARCHS="arm64" \
-            -allowProvisioningUpdates
+            ARCHS="arm64"
           
-          # Verify archive was created
-          if [ ! -d "build/app.xcarchive" ]; then
-            echo "❌ ERROR: Archive was not created!"
-            echo "📂 Build directory contents:"
-            ls -la build/ || true
+          # Find the .app file from build
+          echo "🔍 Looking for .app file in build output..."
+          APP_PATH=$(find build/DerivedData/Build/Products/Release-iphoneos -name "*.app" -type d 2>/dev/null | head -1)
+          
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "❌ ERROR: Could not find .app file after build!"
+            echo "📂 Searching in DerivedData:"
+            find build/DerivedData -name "*.app" -type d 2>/dev/null | head -10 || echo "No .app files found"
             exit 1
           fi
           
-          echo "✅ Archive created successfully!"
+          echo "✅ Found .app at: $APP_PATH"
+          
+          # Create archive manually by copying .app into archive structure
+          echo "📦 Creating archive structure..."
+          mkdir -p build/app.xcarchive/Products/Applications
+          APP_NAME=$(basename "$APP_PATH")
+          cp -r "$APP_PATH" "build/app.xcarchive/Products/Applications/$APP_NAME"
+          
+          # Copy Info.plist if available
+          if [ -f "../$SCHEME/Info.plist" ]; then
+            cp "../$SCHEME/Info.plist" "build/app.xcarchive/Info.plist" || true
+          fi
+          
+          echo "✅ Archive structure created!"
           echo "📂 Archive location: build/app.xcarchive"
+          echo "📂 Archive contents:"
+          ls -la build/app.xcarchive/Products/Applications/ || true
 
       - name: 📦 Export IPA from Archive
         working-directory: ./mobile-expo
