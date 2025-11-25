@@ -57,6 +57,16 @@ jobs:
         working-directory: ./mobile-expo
         run: npm install --legacy-peer-deps || npm install
 
+      - name: 🔨 Prebuild iOS project
+        working-directory: ./mobile-expo
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx expo prebuild --platform ios --clean
+
+      - name: 📦 Install CocoaPods dependencies
+        working-directory: ./mobile-expo/ios
+        run: pod install --repo-update || pod install
+
       - name: 🏗️ EAS Build iOS (Local)
         working-directory: ./mobile-expo
         env:
@@ -67,14 +77,29 @@ jobs:
           
           # EAS Build with --local flag builds on GitHub Actions runner
           # and creates IPA file in ios/build/AppName.ipa
+          set +e
           eas build -p ios \
             --profile unsigned \
             --local \
             --output build.tar.gz \
-            --non-interactive
+            --non-interactive 2>&1 | tee eas-build.log
+          BUILD_EXIT=${PIPESTATUS[0]}
+          set -e
+          
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo "❌ EAS Build failed!"
+            echo "📋 Last 100 lines of build log:"
+            tail -100 eas-build.log || cat eas-build.log
+            echo ""
+            echo "📋 Searching for errors:"
+            grep -i "error\|failed\|fatal" eas-build.log | tail -30 || echo "No specific errors found"
+            exit 1
+          fi
           
           if [ ! -f "build.tar.gz" ]; then
             echo "❌ Build failed: build.tar.gz not found"
+            echo "📋 Build log:"
+            cat eas-build.log || echo "No build log available"
             exit 1
           fi
           
