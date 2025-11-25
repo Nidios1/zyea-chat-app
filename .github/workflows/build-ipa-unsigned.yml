@@ -104,13 +104,13 @@ jobs:
           echo "🧹 Cleaning..."
           xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release || true
           
-          # Build the specific target (this ensures app target is built)
-          echo "🏗️ Building target: $TARGET"
+          # Build scheme (cannot use -target with workspace)
+          # The scheme should build the app target automatically
+          echo "🏗️ Building scheme: $SCHEME"
           set +e
           xcodebuild build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
-            -target "$TARGET" \
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build/DerivedData \
@@ -120,27 +120,45 @@ jobs:
             DEVELOPMENT_TEAM="" \
             ARCHS="arm64" \
             ONLY_ACTIVE_ARCH=NO \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=NO 2>&1 | tee build.log
+            BUILD_LIBRARY_FOR_DISTRIBUTION=NO \
+            -destination "generic/platform=iOS" 2>&1 | tee build.log
           BUILD_EXIT=${PIPESTATUS[0]}
           set -e
           
           if [ $BUILD_EXIT -ne 0 ]; then
             echo "❌ Build failed!"
             echo "📋 Errors:"
-            grep -i "error:" build.log | tail -30 || tail -50 build.log
+            grep -i "error:" build.log | tail -30 || echo "No 'error:' found"
+            echo ""
+            echo "📋 Last 100 lines:"
+            tail -100 build.log || cat build.log
             exit 1
           fi
           
-          echo "✅ Build completed"
+          echo "✅ Build completed successfully"
+          
+          # Check build log for success message
+          if grep -i "BUILD SUCCEEDED" build.log > /dev/null; then
+            echo "✅ Build log confirms: BUILD SUCCEEDED"
+          fi
+          
+          # Check if app target was mentioned in build
+          if grep -i "$TARGET\|\.app" build.log | grep -i "succeeded\|built" > /dev/null; then
+            echo "✅ App target appears to have been built"
+          fi
           
           # Immediately check for .app
           echo ""
-          echo "🔍 Checking for .app immediately..."
+          echo "🔍 Checking for .app immediately after build..."
           APP_FOUND=$(find build/DerivedData -name "*.app" -type d 2>/dev/null | head -1)
           if [ -n "$APP_FOUND" ]; then
-            echo "✅ Found .app: $APP_FOUND"
+            echo "✅ Found .app immediately: $APP_FOUND"
           else
-            echo "⚠️ .app not found yet, will search later"
+            echo "⚠️ .app not found immediately, will search comprehensively later"
+            echo "📂 Checking Products directory structure:"
+            if [ -d "build/DerivedData/Build/Products" ]; then
+              find build/DerivedData/Build/Products -type d -maxdepth 2 2>/dev/null | head -20 || true
+            fi
           fi
 
       - name: 📦 Find .app and Create IPA
