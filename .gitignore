@@ -18,6 +18,22 @@ client/ios/App/*.xcodeproj
 # Keep iOS config files
 !client/ios/App/exportOptions.plist
 
+# mobile-expo iOS - Keep native folder but ignore build artifacts
+mobile-expo/ios/build/
+mobile-expo/ios/Pods/
+mobile-expo/ios/*.xcworkspace
+mobile-expo/ios/*.xcodeproj
+mobile-expo/ios/DerivedData/
+
+# But keep the ios/ folder structure itself
+!mobile-expo/ios/
+!mobile-expo/ios/**/*.plist
+!mobile-expo/ios/**/*.pbxproj
+!mobile-expo/ios/**/*.h
+!mobile-expo/ios/**/*.m
+!mobile-expo/ios/**/*.swift
+!mobile-expo/ios/**/*.xcconfig
+
 # IDE
 .vscode/
 .idea/

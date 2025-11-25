@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "ios": "expo start --ios",
     "ios:dev": "expo run:ios",
+    "prebuild:ios": "node prebuild-ios.js",
     "build": "build.bat",
     "build:ipa": "build-ipa.bat",
     "build:ipa:unsigned": "eas build --platform ios --profile unsigned --non-interactive",
