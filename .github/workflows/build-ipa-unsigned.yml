@@ -89,6 +89,7 @@ jobs:
           xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release || true
           
           # Build app (creates .app in DerivedData)
+          set +e
           xcodebuild build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
@@ -100,9 +101,22 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
             ARCHS="arm64" \
-            ONLY_ACTIVE_ARCH=NO
+            ONLY_ACTIVE_ARCH=NO 2>&1 | tee build.log
+          BUILD_EXIT=${PIPESTATUS[0]}
+          set -e
           
-          echo "✅ Build completed"
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo "❌ Build failed with exit code: $BUILD_EXIT"
+            echo "📋 Last 50 lines of build output:"
+            tail -50 build.log || cat build.log
+            exit 1
+          fi
+          
+          echo "✅ Build completed successfully"
+          
+          # Verify .app was created
+          echo "🔍 Checking for .app file immediately after build..."
+          find build/DerivedData -name "*.app" -type d 2>/dev/null | head -5 || echo "⚠️ No .app found yet"
 
       - name: 📦 Create IPA from Build
         working-directory: ./mobile-expo
@@ -146,23 +160,53 @@ jobs:
           
           if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
             echo "❌ Could not find .app file"
-            echo "📂 Debugging:"
-            echo "Current directory: $(pwd)"
             echo ""
-            echo "📂 ios/build structure:"
-            ls -la ios/build/ 2>/dev/null || true
+            echo "📂 Current directory: $(pwd)"
             echo ""
-            echo "📂 DerivedData structure:"
-            find ios/build/DerivedData -type d -maxdepth 3 2>/dev/null | head -20 || true
+            echo "📂 Checking ios/build structure:"
+            if [ -d "ios/build" ]; then
+              ls -la ios/build/ 2>/dev/null || true
+            else
+              echo "ios/build does not exist!"
+            fi
             echo ""
-            echo "📂 Products directory:"
-            ls -la ios/build/DerivedData/Build/Products/ 2>/dev/null || true
+            echo "📂 Checking DerivedData structure:"
+            if [ -d "ios/build/DerivedData" ]; then
+              echo "DerivedData exists"
+              find ios/build/DerivedData -type d -maxdepth 3 2>/dev/null | head -30 || true
+            else
+              echo "DerivedData does not exist!"
+            fi
             echo ""
-            echo "📂 Release-iphoneos:"
-            ls -la ios/build/DerivedData/Build/Products/Release-iphoneos/ 2>/dev/null || true
+            echo "📂 Checking Build directory:"
+            if [ -d "ios/build/DerivedData/Build" ]; then
+              ls -la ios/build/DerivedData/Build/ 2>/dev/null || true
+            else
+              echo "Build directory does not exist!"
+            fi
             echo ""
-            echo "🔍 All .app files:"
-            find ios/build -name "*.app" -type d 2>/dev/null || echo "No .app files found"
+            echo "📂 Checking Products directory:"
+            if [ -d "ios/build/DerivedData/Build/Products" ]; then
+              ls -la ios/build/DerivedData/Build/Products/ 2>/dev/null || true
+              echo ""
+              echo "📂 All subdirectories in Products:"
+              find ios/build/DerivedData/Build/Products -type d -maxdepth 2 2>/dev/null || true
+            else
+              echo "Products directory does not exist!"
+            fi
+            echo ""
+            echo "📂 Checking Release-iphoneos:"
+            if [ -d "ios/build/DerivedData/Build/Products/Release-iphoneos" ]; then
+              ls -la ios/build/DerivedData/Build/Products/Release-iphoneos/ 2>/dev/null || true
+            else
+              echo "Release-iphoneos directory does not exist!"
+            fi
+            echo ""
+            echo "🔍 Searching for ALL .app files recursively:"
+            find ios -name "*.app" -type d 2>/dev/null | head -10 || echo "No .app files found anywhere in ios/"
+            echo ""
+            echo "🔍 Searching in entire mobile-expo directory:"
+            find . -name "*.app" -type d 2>/dev/null | head -10 || echo "No .app files found anywhere"
             exit 1
           fi
           
