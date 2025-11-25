@@ -55,7 +55,7 @@ const getApiUrl = (): string => {
   // - Your server's public IP address
   // - Or a domain name (e.g., https://api.yourdomain.com/api)
   // - Or a VPS/server URL (e.g., http://123.45.67.89:5000/api)
-  cachedApiUrl = 'http://192.168.0.103:5000/api';
+  cachedApiUrl = 'http://192.168.0.102:5000/api';
   return cachedApiUrl;
 };
 
@@ -86,7 +86,7 @@ const getSocketUrl = (): string => {
   
   // Priority 3: Fallback to default (development)
   // ⚠️ IMPORTANT: Update this to your production server URL before building IPA
-  cachedSocketUrl = 'http://192.168.0.103:5000';
+  cachedSocketUrl = 'http://192.168.0.102:5000';
   return cachedSocketUrl;
 };
 

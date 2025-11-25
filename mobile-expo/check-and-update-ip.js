@@ -17,6 +17,10 @@ const FILES_TO_CHECK = [
   {
     path: path.join(__dirname, 'src/config/constants.ts'),
     patterns: [
+      // Tìm IP trong cachedApiUrl assignment (fallback)
+      { regex: /cachedApiUrl = ['"]http:\/\/(\d+\.\d+\.\d+\.\d+):5000\/api['"]/g, replace: (ip) => `cachedApiUrl = 'http://${ip}:5000/api'` },
+      // Tìm IP trong cachedSocketUrl assignment (fallback)
+      { regex: /cachedSocketUrl = ['"]http:\/\/(\d+\.\d+\.\d+\.\d+):5000['"]/g, replace: (ip) => `cachedSocketUrl = 'http://${ip}:5000'` },
       // Tìm IP trong return statements của functions
       { regex: /return ['"]http:\/\/(\d+\.\d+\.\d+\.\d+):5000\/api['"]/g, replace: (ip) => `return 'http://${ip}:5000/api'` },
       { regex: /return ['"]http:\/\/(\d+\.\d+\.\d+\.\d+):5000['"]/g, replace: (ip) => `return 'http://${ip}:5000'` },

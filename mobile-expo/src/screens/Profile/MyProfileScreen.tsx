@@ -369,17 +369,23 @@ const MyProfileScreen = () => {
   }, [user?.avatar_url, handleEditProfile]);
 
   // Memoize header để tránh re-render khi scroll
-  const renderHeader = useCallback(() => (
-    <ProfileHeader
-      user={user}
-      stats={stats}
-      onEditPress={handleEditProfile}
-      onAvatarPress={handleAvatarPress}
-      activeTab={activeTab}
-      onTabChange={(tab) => setActiveTab(tab)}
-      isMe={true} // Đây là profile của chính mình
-    />
-  ), [user, stats, handleEditProfile, handleAvatarPress, activeTab]);
+  const renderHeader = useCallback(() => {
+    // Guard: Đảm bảo user tồn tại
+    if (!user) {
+      return null;
+    }
+    return (
+      <ProfileHeader
+        user={user}
+        stats={stats}
+        onEditPress={handleEditProfile}
+        onAvatarPress={handleAvatarPress}
+        activeTab={activeTab}
+        onTabChange={(tab) => setActiveTab(tab)}
+        isMe={true} // Đây là profile của chính mình
+      />
+    );
+  }, [user, stats, handleEditProfile, handleAvatarPress, activeTab]);
 
   // Handle scroll để hiện sticky header
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -420,6 +426,17 @@ const MyProfileScreen = () => {
   });
 
   const dynamicStyles = createStyles(colors, isDarkMode, insets);
+
+  // Guard: Nếu không có user, hiển thị loading hoặc error
+  if (!user) {
+    return (
+      <SafeAreaView style={dynamicStyles.container} edges={['top', 'bottom']}>
+        <View style={dynamicStyles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={dynamicStyles.container} edges={['top', 'bottom']}>

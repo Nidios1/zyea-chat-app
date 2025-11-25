@@ -464,9 +464,12 @@ const ProfileInformationScreen = () => {
             style={dynamicStyles.avatarContainer}
             activeOpacity={0.9}
             onPress={() => {
-              if (avatarUrl) {
+              // Nếu là own profile, mở action sheet
+              // Nếu không, có thể navigate đến profile của user đó
+              if (isOwnProfile) {
                 setShowAvatarActionSheet(true);
-              } else if (isOwnProfile) {
+              } else if (avatarUrl) {
+                // Nếu là profile của người khác, chỉ xem ảnh
                 setShowAvatarActionSheet(true);
               }
             }}
@@ -825,6 +828,35 @@ const ProfileInformationScreen = () => {
             <View style={[dynamicStyles.actionSheetHandle, { backgroundColor: colors.border }]} />
             
             {/* Options */}
+            {isOwnProfile && (
+              <TouchableOpacity
+                style={dynamicStyles.actionSheetOption}
+                onPress={() => {
+                  setShowAvatarActionSheet(false);
+                  try {
+                    // Dùng replace để thay thế ProfileInformationScreen bằng MyProfile
+                    // Tránh có 2 màn hình profile trong stack
+                    navigation.replace('MyProfile' as never);
+                  } catch (error) {
+                    console.error('Navigation error:', error);
+                    // Fallback: nếu replace không hoạt động, dùng navigate
+                    try {
+                      navigation.navigate('MyProfile' as never);
+                    } catch (navError) {
+                      console.error('Fallback navigation error:', navError);
+                    }
+                  }
+                }}
+              >
+                <View style={[dynamicStyles.actionSheetOptionIcon, { backgroundColor: colors.backgroundSecondary }]}>
+                  <MaterialCommunityIcons name="account-circle-outline" size={20} color={colors.text} />
+                </View>
+                <Text style={[dynamicStyles.actionSheetOptionText, { color: colors.text }]}>
+                  Xem hồ sơ
+                </Text>
+              </TouchableOpacity>
+            )}
+            
             {avatarUrl && (
               <TouchableOpacity
                 style={dynamicStyles.actionSheetOption}
@@ -1356,5 +1388,4 @@ const createStyles = (colors: typeof PWATheme.light) => StyleSheet.create({
   },
 });
 
-export default ProfileInformationScreen;
 export default ProfileInformationScreen;
