@@ -151,6 +151,51 @@ jobs:
             exit 1
           fi
 
+      - name: 🔧 Generate React Native Codegen files
+        working-directory: ./mobile-expo
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          echo "🔧 Generating React Native codegen files..."
+          echo "📂 Creating generated files directory structure..."
+          mkdir -p ios/build/generated/ios/safeareacontext
+          mkdir -p ios/build/generated/ios/rnworklets
+          
+          echo "🏗️ Running initial build to generate codegen files..."
+          cd ios
+          
+          WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+          if [ -z "$SCHEME" ]; then
+            APP_SLUG=$(node -e "console.log(require('../app.json').expo.slug)" 2>/dev/null || echo "")
+            SCHEME="${APP_SLUG:-zyea-mobile}"
+          fi
+          
+          echo "✅ Using scheme: $SCHEME"
+          
+          # Build ReactCodegen target first to generate files
+          echo "🔧 Building ReactCodegen target to generate files..."
+          set +e
+          xcodebuild build \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -target ReactCodegen \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="arm64" 2>&1 | grep -E "(error|warning|succeeded|failed)" | head -50 || true
+          set -e
+          
+          echo "📂 Checking generated files..."
+          find build -name "*generated*" -type f 2>/dev/null | head -10 || echo "No generated files found yet"
+          
+          cd ..
+          echo "✅ Codegen preparation completed"
+
       - name: 🏗️ Build IPA (unsigned) using Archive
         working-directory: ./mobile-expo
         env:
@@ -198,9 +243,24 @@ jobs:
             exit 1
           fi
           
-          echo "🧹 Cleaning previous builds..."
+          echo "🧹 Cleaning previous builds (but keeping generated files)..."
+          # Keep generated files directory
+          if [ -d "build/generated" ]; then
+            echo "📂 Preserving generated files..."
+            mkdir -p ../generated_backup
+            cp -r build/generated ../generated_backup/ || true
+          fi
+          
           rm -rf build/ || true
           mkdir -p build
+          
+          # Restore generated files if they exist
+          if [ -d "../generated_backup/generated" ]; then
+            echo "📂 Restoring generated files..."
+            cp -r ../generated_backup/generated build/ || true
+            rm -rf ../generated_backup || true
+          fi
+          
           xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release || true
           
           echo "🏗️ Creating Archive (this will take a while)..."
