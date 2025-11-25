@@ -15,10 +15,16 @@ jobs:
     name: Build Unsigned IPA
     runs-on: macos-14
     timeout-minutes: 90
+    permissions:
+      contents: write  # Required to commit ios/ folder back to repo
+      actions: read
     
     steps:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0  # Full history needed for commits
 
       - name: 🔐 Check for EXPO_TOKEN
         run: |
@@ -97,6 +103,36 @@ jobs:
           else
             echo "❌ ERROR: ios/ folder was not created by prebuild!"
             exit 1
+          fi
+
+      - name: 💾 Commit ios/ folder to repository (optional)
+        working-directory: ./mobile-expo
+        run: |
+          # Check if ios/ folder has changes
+          if git diff --quiet ios/ 2>/dev/null && git diff --cached --quiet ios/ 2>/dev/null; then
+            echo "ℹ️  ios/ folder has no changes, skipping commit"
+          else
+            echo "📝 ios/ folder has changes, committing..."
+            
+            # Configure git
+            git config --local user.email "github-actions[bot]@users.noreply.github.com"
+            git config --local user.name "github-actions[bot]"
+            
+            # Add ios/ folder (excluding build artifacts)
+            git add ios/ || true
+            
+            # Check if there are staged changes
+            if git diff --cached --quiet; then
+              echo "ℹ️  No changes to commit in ios/ folder"
+            else
+              # Commit the changes
+              git commit -m "chore: Auto-generate iOS native folder from prebuild [skip ci]" || echo "⚠️  Commit failed (may already be committed)"
+              
+              # Push the changes
+              git push origin HEAD:main || echo "⚠️  Push failed (may need manual push)"
+              
+              echo "✅ ios/ folder committed and pushed successfully"
+            fi
           fi
 
       - name: 📦 Install CocoaPods dependencies
