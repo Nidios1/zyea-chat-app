@@ -129,6 +129,30 @@ jobs:
             echo "✅ Build log confirms: BUILD SUCCEEDED"
           fi
           
+          # Check if app target was built
+          echo ""
+          echo "🔍 Checking if app target was built..."
+          if grep -i "\.app\|$SCHEME\.app\|BUILD.*\.app" build.log | grep -i "succeeded\|built\|created" > /dev/null; then
+            echo "✅ App target appears to have been built"
+          else
+            echo "⚠️ App target may not have been built"
+            echo "📋 Searching for app-related build messages:"
+            grep -i "\.app\|app target\|building.*app" build.log | tail -10 || echo "No app-related messages found"
+          fi
+          
+          # Check Release-iphoneos directory contents
+          echo ""
+          echo "🔍 Checking Release-iphoneos directory..."
+          if [ -d "build/DerivedData/Build/Products/Release-iphoneos" ]; then
+            echo "📂 Release-iphoneos contents:"
+            ls -la build/DerivedData/Build/Products/Release-iphoneos/ 2>/dev/null || true
+            echo ""
+            echo "🔍 Searching for .app in Release-iphoneos:"
+            find build/DerivedData/Build/Products/Release-iphoneos -name "*.app" -type d 2>/dev/null || echo "No .app found in Release-iphoneos"
+          else
+            echo "⚠️ Release-iphoneos directory does not exist"
+          fi
+          
           # Find .app in DerivedData
           echo ""
           echo "🔍 Searching for .app in DerivedData..."
