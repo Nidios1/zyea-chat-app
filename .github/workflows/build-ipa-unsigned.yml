@@ -138,7 +138,18 @@ jobs:
       - name: 📦 Install CocoaPods dependencies
         working-directory: ./mobile-expo/ios
         run: |
+          echo "📦 Installing CocoaPods dependencies..."
           pod install --repo-update || pod install
+          
+          echo "✅ CocoaPods installation completed"
+          echo "📂 Verifying Pods installation:"
+          if [ -d "Pods" ]; then
+            echo "✅ Pods directory exists"
+            ls -la Pods/ | head -10
+          else
+            echo "❌ Pods directory not found!"
+            exit 1
+          fi
 
       - name: 🏗️ Build IPA (unsigned) with expo run:ios
         working-directory: ./mobile-expo
@@ -160,13 +171,32 @@ jobs:
           
           echo "✅ Found workspace: $WORKSPACE"
           
+          echo "📋 Listing all available schemes:"
+          xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null || echo "Could not list schemes"
+          
           SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
           if [ -z "$SCHEME" ]; then
-            SCHEME="zyea-mobile"
-            echo "⚠️ Could not detect scheme, using default: $SCHEME"
+            # Try to get scheme from app.json slug or use default
+            APP_SLUG=$(node -e "console.log(require('../app.json').expo.slug)" 2>/dev/null || echo "")
+            if [ -n "$APP_SLUG" ]; then
+              SCHEME="$APP_SLUG"
+              echo "⚠️ Could not detect scheme, using app.json slug: $SCHEME"
+            else
+              SCHEME="zyea-mobile"
+              echo "⚠️ Could not detect scheme, using default: $SCHEME"
+            fi
           fi
           
           echo "✅ Using workspace: $WORKSPACE, scheme: $SCHEME"
+          
+          # Verify scheme exists
+          SCHEME_EXISTS=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -c "$SCHEME" || echo "0")
+          if [ "$SCHEME_EXISTS" -eq 0 ]; then
+            echo "❌ ERROR: Scheme '$SCHEME' not found in workspace!"
+            echo "📋 Available schemes:"
+            xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 20 "Schemes:" || echo "Could not list schemes"
+            exit 1
+          fi
           
           # Get app target name
           APP_TARGET=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 20 "Targets:" | grep -v "Targets:" | head -1 | xargs)
@@ -186,6 +216,28 @@ jobs:
           # Build with better error handling
           BUILD_OUTPUT=$(mktemp)
           set +e
+          
+          echo "🏗️ Starting xcodebuild..."
+          echo "📋 Full build command:"
+          echo "xcodebuild build -workspace \"$WORKSPACE\" -scheme \"$SCHEME\" -configuration Release -sdk iphoneos -derivedDataPath build/DerivedData CODE_SIGN_IDENTITY=\"\" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM=\"\" ONLY_ACTIVE_ARCH=NO ARCHS=\"arm64\""
+          echo ""
+          
+          xcodebuild build \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="arm64" \
+            -showBuildSettings 2>&1 | head -20 || true
+          
+          echo ""
+          echo "🏗️ Running actual build..."
           xcodebuild build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
@@ -202,20 +254,48 @@ jobs:
           set -e
           
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo ""
             echo "❌ Build failed with exit code: $BUILD_EXIT_CODE"
-            echo "📋 Last 50 lines of build output:"
-            tail -50 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
+            echo ""
+            echo "📋 Last 100 lines of build output:"
+            tail -100 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
+            echo ""
+            echo "📋 Searching for error patterns:"
+            grep -i "error:" "$BUILD_OUTPUT" | tail -20 || echo "No error patterns found"
+            echo ""
+            echo "📋 Searching for warning patterns:"
+            grep -i "warning:" "$BUILD_OUTPUT" | tail -10 || echo "No warning patterns found"
             echo ""
             echo "📋 Checking for build logs..."
             if [ -d "build/DerivedData/Logs/Build" ]; then
               echo "📂 Build log files:"
               ls -la build/DerivedData/Logs/Build/ 2>/dev/null || true
               echo ""
-              echo "📋 Recent build log:"
-              find build/DerivedData/Logs/Build -name "*.xcactivitylog" -type f | head -1 | xargs -I {} sh -c 'gunzip -c "{}" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null | tail -100 || echo "Could not read log"' || true
+              echo "📋 Recent build log (last 200 lines):"
+              find build/DerivedData/Logs/Build -name "*.xcactivitylog" -type f -mtime -1 | head -1 | xargs -I {} sh -c 'gunzip -c "{}" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null | tail -200 || echo "Could not read log"' || true
+            else
+              echo "⚠️ Build logs directory not found"
             fi
+            echo ""
+            echo "📋 Full build output saved to: $BUILD_OUTPUT"
+            echo ""
+            echo "💡 Trying alternative build method with expo run:ios..."
+            cd ..
+            set +e
+            npx expo run:ios --configuration Release --no-build-cache --device 2>&1 | tee "$BUILD_OUTPUT"
+            EXPO_BUILD_EXIT_CODE=${PIPESTATUS[0]}
+            set -e
+            
+            if [ $EXPO_BUILD_EXIT_CODE -ne 0 ]; then
+              echo "❌ Expo build also failed with exit code: $EXPO_BUILD_EXIT_CODE"
+              tail -50 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
+              rm -f "$BUILD_OUTPUT"
+              exit 1
+            fi
+            
+            echo "✅ Expo build succeeded, continuing..."
+            cd ios
             rm -f "$BUILD_OUTPUT"
-            exit 1
           fi
           
           rm -f "$BUILD_OUTPUT"
