@@ -67,102 +67,68 @@ jobs:
         working-directory: ./mobile-expo/ios
         run: pod install --repo-update || pod install
 
-      - name: 🏗️ Build iOS App
-        working-directory: ./mobile-expo/ios
+      - name: 🏗️ Build iOS App with Expo
+        working-directory: ./mobile-expo
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          echo "🏗️ Building iOS app..."
+          echo "🏗️ Building iOS app with expo run:ios..."
+          echo "📦 This will build the app and create .app in ios/build"
           
-          WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
-          if [ -z "$WORKSPACE" ]; then
-            echo "❌ No .xcworkspace found!"
-            exit 1
-          fi
-          
-          echo "✅ Found workspace: $WORKSPACE"
-          
-          # Get scheme
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
-          if [ -z "$SCHEME" ]; then
-            SCHEME="zyea-mobile"
-          fi
-          
-          echo "✅ Using scheme: $SCHEME"
-          
-          # Clean
-          echo "🧹 Cleaning..."
-          xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release || true
-          
-          # Build app (this creates .app in DerivedData)
-          echo "🏗️ Building app..."
+          # expo run:ios builds the app and creates .app in ios/build/Build/Products
+          # Use --configuration Release and --no-install to just build without installing
           set +e
-          xcodebuild build \
-            -workspace "$WORKSPACE" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath build/DerivedData \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" \
-            ARCHS="arm64" \
-            ONLY_ACTIVE_ARCH=NO \
-            BUILD_LIBRARY_FOR_DISTRIBUTION=NO \
-            -destination "generic/platform=iOS" 2>&1 | tee build.log
+          npx expo run:ios \
+            --configuration Release \
+            --device \
+            --no-install \
+            --no-build-cache 2>&1 | tee build.log
           BUILD_EXIT=${PIPESTATUS[0]}
           set -e
           
+          # expo run:ios may exit with non-zero if it can't find device, but build might still succeed
+          # Check if .app was created instead
           if [ $BUILD_EXIT -ne 0 ]; then
-            echo "❌ Build failed!"
-            echo "📋 Errors:"
-            grep -i "error:" build.log | tail -30 || echo "No 'error:' found"
-            echo ""
-            echo "📋 Last 100 lines:"
-            tail -100 build.log || cat build.log
-            exit 1
+            echo "⚠️ expo run:ios exited with code $BUILD_EXIT"
+            echo "📋 Checking if build actually succeeded by looking for .app..."
           fi
           
-          echo "✅ Build completed successfully"
-          
-          # Verify BUILD SUCCEEDED
-          if grep -i "BUILD SUCCEEDED" build.log > /dev/null; then
-            echo "✅ Build log confirms: BUILD SUCCEEDED"
-          fi
-          
-          # Check if app target was mentioned in build log
-          echo ""
-          echo "🔍 Checking if app target was built..."
-          if grep -i "\.app\|$SCHEME\|building.*app" build.log | grep -i "succeeded\|built\|created" > /dev/null; then
-            echo "✅ App target appears to have been built"
+          # Check if .app was created
+          APP_FOUND=$(find ios/build -name "*.app" -type d 2>/dev/null | head -1)
+          if [ -n "$APP_FOUND" ]; then
+            echo "✅ Found .app: $APP_FOUND"
+            echo "✅ Build succeeded (app was created)"
           else
-            echo "⚠️ App target may not have been built"
-            echo "📋 Searching for app-related build messages:"
-            grep -i "\.app\|app target\|building.*app\|$SCHEME" build.log | tail -20 || echo "No app-related messages found"
-          fi
-          
-          # List what was actually built
-          echo ""
-          echo "📂 Checking DerivedData immediately after build:"
-          if [ -d "build/DerivedData/Build/Products" ]; then
-            echo "Products directory exists"
-            ls -la build/DerivedData/Build/Products/ 2>/dev/null || true
+            echo "❌ Build failed: .app not found"
+            echo "📋 Build log errors:"
+            grep -i "error\|failed" build.log | tail -30 || echo "No errors found"
             echo ""
-            echo "All subdirectories:"
-            find build/DerivedData/Build/Products -type d -maxdepth 1 2>/dev/null || true
+            echo "📋 Last 50 lines:"
+            tail -50 build.log || cat build.log
+            exit 1
           fi
 
       - name: 📦 Find .app and Create IPA
-        working-directory: ./mobile-expo/ios
+        working-directory: ./mobile-expo
         run: |
           echo "📦 Finding .app and creating IPA..."
           
           APP_PATH=""
           
-          # Priority 1: Check DerivedData Products (build creates .app here)
-          if [ -d "build/DerivedData/Build/Products" ]; then
-            echo "📂 Checking DerivedData Products (Priority 1)..."
+          # Priority 1: Check ios/build (expo run:ios creates .app here)
+          if [ -d "ios/build" ]; then
+            echo "📂 Checking ios/build (Priority 1)..."
+            APP_PATH=$(find ios/build -name "*.app" -type d 2>/dev/null | head -1)
+            if [ -n "$APP_PATH" ]; then
+              echo "✅ Found in ios/build: $APP_PATH"
+            fi
+          fi
+          
+          # Priority 2: Check DerivedData Products (xcodebuild creates .app here)
+          if [ -z "$APP_PATH" ] && [ -d "ios/build/DerivedData/Build/Products" ]; then
+            echo "📂 Checking DerivedData Products (Priority 2)..."
             # Check all subdirectories in Products
-            for subdir in build/DerivedData/Build/Products/*/; do
+            for subdir in ios/build/DerivedData/Build/Products/*/; do
               if [ -d "$subdir" ]; then
                 FOUND=$(find "$subdir" -maxdepth 1 -name "*.app" -type d 2>/dev/null | head -1)
                 if [ -n "$FOUND" ]; then
@@ -174,19 +140,19 @@ jobs:
             done
             # If not found in subdirs, search recursively
             if [ -z "$APP_PATH" ]; then
-              APP_PATH=$(find build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
+              APP_PATH=$(find ios/build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
               if [ -n "$APP_PATH" ]; then
                 echo "✅ Found in Products (recursive): $APP_PATH"
               fi
             fi
           fi
           
-          # Priority 2: Search entire DerivedData
-          if [ -z "$APP_PATH" ] && [ -d "build/DerivedData" ]; then
-            echo "📂 Searching entire DerivedData (Priority 2)..."
-            APP_PATH=$(find build/DerivedData -name "*.app" -type d 2>/dev/null | head -1)
+          # Priority 3: Search entire ios/build
+          if [ -z "$APP_PATH" ] && [ -d "ios/build" ]; then
+            echo "📂 Searching entire ios/build (Priority 3)..."
+            APP_PATH=$(find ios/build -name "*.app" -type d 2>/dev/null | head -1)
             if [ -n "$APP_PATH" ]; then
-              echo "✅ Found in DerivedData: $APP_PATH"
+              echo "✅ Found in ios/build: $APP_PATH"
             fi
           fi
           
@@ -242,19 +208,22 @@ jobs:
           # Create IPA
           echo ""
           echo "📦 Creating IPA..."
-          mkdir -p build/Payload
+          mkdir -p ios/build/Payload
           APP_NAME=$(basename "$APP_PATH")
-          cp -r "$APP_PATH" "build/Payload/$APP_NAME"
+          cp -r "$APP_PATH" "ios/build/Payload/$APP_NAME"
           
-          cd build
+          cd ios/build
           zip -r ../build.ipa Payload
-          cd ..
-          rm -rf build/Payload
+          cd ../..
+          rm -rf ios/build/Payload
           
-          if [ ! -f "build.ipa" ]; then
+          if [ ! -f "ios/build.ipa" ]; then
             echo "❌ Failed to create IPA"
             exit 1
           fi
+          
+          # Move IPA to mobile-expo root for upload
+          mv ios/build.ipa build.ipa
           
           FILE_SIZE=$(stat -f%z build.ipa 2>/dev/null || stat -c%s build.ipa 2>/dev/null || echo "0")
           FILE_SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $FILE_SIZE/1024/1024}")
@@ -265,7 +234,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa-unsigned
-          path: mobile-expo/ios/build.ipa
+          path: mobile-expo/build.ipa
           retention-days: 30
           if-no-files-found: error
 
