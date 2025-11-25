@@ -157,6 +157,9 @@ jobs:
           
           # First, build the app to generate .app file
           echo "🏗️ Building app first (this may take 10-15 minutes)..."
+          BUILD_OUTPUT=$(mktemp)
+          set +e
+          
           xcodebuild build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
@@ -168,15 +171,45 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
             ONLY_ACTIVE_ARCH=NO \
-            ARCHS="arm64"
+            ARCHS="arm64" 2>&1 | tee "$BUILD_OUTPUT"
+          
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+          
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "❌ Build failed with exit code: $BUILD_EXIT_CODE"
+            echo ""
+            echo "📋 Last 100 lines of build output:"
+            tail -100 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
+            echo ""
+            echo "📋 Searching for error patterns:"
+            grep -i "error:" "$BUILD_OUTPUT" | tail -30 || echo "No error patterns found"
+            echo ""
+            echo "📋 Searching for warning patterns:"
+            grep -i "warning:" "$BUILD_OUTPUT" | tail -15 || echo "No warning patterns found"
+            rm -f "$BUILD_OUTPUT"
+            exit 1
+          fi
+          
+          rm -f "$BUILD_OUTPUT"
+          echo "✅ Build completed successfully!"
           
           # Find the .app file from build
           echo "🔍 Looking for .app file in build output..."
           APP_PATH=$(find build/DerivedData/Build/Products/Release-iphoneos -name "*.app" -type d 2>/dev/null | head -1)
           
           if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "⚠️ Not found in Release-iphoneos, searching in entire DerivedData..."
+            APP_PATH=$(find build/DerivedData -name "*.app" -type d 2>/dev/null | head -1)
+          fi
+          
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
             echo "❌ ERROR: Could not find .app file after build!"
-            echo "📂 Searching in DerivedData:"
+            echo "📂 Build directory structure:"
+            find build/DerivedData/Build/Products -type d -maxdepth 3 2>/dev/null | head -20 || echo "Products directory not found"
+            echo ""
+            echo "📂 Searching in entire DerivedData:"
             find build/DerivedData -name "*.app" -type d 2>/dev/null | head -10 || echo "No .app files found"
             exit 1
           fi
