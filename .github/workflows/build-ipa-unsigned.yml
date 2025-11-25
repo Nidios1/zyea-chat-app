@@ -85,169 +85,144 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          echo "🏗️ Building iOS app..."
-          cd ios
+          echo "🏗️ Building iOS app using expo run:ios..."
+          echo "📋 This method uses Expo's build system which handles code signing better"
           
-          WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
-          if [ -z "$WORKSPACE" ]; then
-            echo "❌ No .xcworkspace found!"
-            echo "📂 Current directory contents:"
-            ls -la
-            echo "📂 Searching for workspace files:"
-            find . -name "*.xcworkspace" -o -name "*.xcodeproj" 2>/dev/null || true
-            exit 1
-          fi
-          
-          echo "✅ Found workspace: $WORKSPACE"
-          
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
-          if [ -z "$SCHEME" ]; then
-            SCHEME="zyea-mobile"
-            echo "⚠️ Could not detect scheme, using default: $SCHEME"
-          fi
-          
-          echo "✅ Using workspace: $WORKSPACE, scheme: $SCHEME"
-          
-          # Get app target name
-          APP_TARGET=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 20 "Targets:" | grep -v "Targets:" | head -1 | xargs)
-          if [ -z "$APP_TARGET" ]; then
-            APP_TARGET="$SCHEME"
-          fi
-          echo "✅ App target: $APP_TARGET"
-          
-          echo "🧹 Cleaning build..."
-          rm -rf build/DerivedData || true
-          xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release || true
-          
-          echo "🏗️ Building app target (unsigned)..."
-          echo "📋 Build command:"
-          echo "xcodebuild build -workspace \"$WORKSPACE\" -scheme \"$SCHEME\" -configuration Release -sdk iphoneos -derivedDataPath build/DerivedData CODE_SIGN_IDENTITY=\"\" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM=\"\" ONLY_ACTIVE_ARCH=NO ARCHS=\"arm64\""
-          
-          # Build with better error handling and verbose output
-          BUILD_OUTPUT=$(mktemp)
+          # Try using expo run:ios first (recommended for Expo projects)
           set +e
-          xcodebuild build \
-            -workspace "$WORKSPACE" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath build/DerivedData \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" \
-            ONLY_ACTIVE_ARCH=NO \
-            ARCHS="arm64" \
-            -showBuildSettings 2>&1 | head -20 || true
-          
-          echo ""
-          echo "🏗️ Starting actual build..."
-          xcodebuild build \
-            -workspace "$WORKSPACE" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath build/DerivedData \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM="" \
-            ONLY_ACTIVE_ARCH=NO \
-            ARCHS="arm64" \
-            2>&1 | tee "$BUILD_OUTPUT"
-          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          npx expo run:ios \
+            --configuration Release \
+            --no-build-cache \
+            --device \
+            --no-install 2>&1 | tee expo-build.log
+          EXPO_BUILD_EXIT=${PIPESTATUS[0]}
           set -e
           
-          if [ $BUILD_EXIT_CODE -ne 0 ]; then
-            echo "❌ Build failed with exit code: $BUILD_EXIT_CODE"
-            echo ""
-            echo "📋 Searching for error messages in build output..."
-            echo "=========================================="
-            grep -i "error:" "$BUILD_OUTPUT" | tail -30 || echo "No 'error:' found"
-            echo "=========================================="
-            grep -i "failed" "$BUILD_OUTPUT" | tail -30 || echo "No 'failed' found"
-            echo "=========================================="
-            grep -i "warning:" "$BUILD_OUTPUT" | tail -20 || echo "No 'warning:' found"
-            echo "=========================================="
-            echo ""
-            echo "📋 Last 100 lines of build output:"
-            tail -100 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
-            echo ""
-            echo "📋 Full build output saved to: $BUILD_OUTPUT"
-            echo "📋 Checking for build logs..."
-            if [ -d "build/DerivedData/Logs/Build" ]; then
-              echo "📂 Build log files:"
-              ls -la build/DerivedData/Logs/Build/ 2>/dev/null || true
-              echo ""
-              echo "📋 Trying to extract errors from build logs..."
-              find build/DerivedData/Logs/Build -name "*.xcactivitylog" -type f | head -1 | xargs -I {} sh -c 'gunzip -c "{}" 2>/dev/null | strings | grep -i "error\|failed" | tail -50 || echo "Could not read log"' || true
+          if [ $EXPO_BUILD_EXIT -eq 0 ]; then
+            echo "✅ Expo build succeeded!"
+            echo "🔍 Looking for .app file..."
+            APP_PATH=$(find ios/build -name "*.app" -type d 2>/dev/null | head -1)
+            if [ -n "$APP_PATH" ]; then
+              echo "✅ Found .app via expo: $APP_PATH"
+            else
+              echo "⚠️ Expo build succeeded but .app not found in ios/build"
+              echo "📂 Searching in DerivedData..."
+              APP_PATH=$(find ios -path "*/DerivedData/*" -name "*.app" -type d 2>/dev/null | head -1)
+              if [ -n "$APP_PATH" ]; then
+                echo "✅ Found .app in DerivedData: $APP_PATH"
+              fi
             fi
+          else
+            echo "❌ Expo build failed with exit code: $EXPO_BUILD_EXIT"
             echo ""
-            echo "💡 Common issues to check:"
-            echo "   - Code signing errors (even with CODE_SIGNING_REQUIRED=NO)"
-            echo "   - Missing dependencies or frameworks"
-            echo "   - Build settings conflicts"
-            echo "   - Xcode version compatibility"
-            rm -f "$BUILD_OUTPUT"
-            exit 1
-          fi
-          
-          rm -f "$BUILD_OUTPUT"
-          echo "✅ Build command completed successfully"
-          
-          echo "🔍 Checking for .app file immediately after build..."
-          echo "📂 DerivedData structure:"
-          find build/DerivedData -type d -maxdepth 5 2>/dev/null | head -30 || true
-          echo ""
-          echo "📂 Build/Products directory:"
-          ls -la build/DerivedData/Build/Products/ 2>/dev/null || echo "Products directory does not exist"
-          echo ""
-          echo "📂 Looking for Release-iphoneos:"
-          ls -la build/DerivedData/Build/Products/Release-iphoneos/ 2>/dev/null || echo "Release-iphoneos directory does not exist"
-          echo ""
-          
-          # Check if .app was created in DerivedData
-          APP_IN_DERIVED=$(find build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
-          
-          if [ -z "$APP_IN_DERIVED" ]; then
-            echo "⚠️ .app not found in DerivedData/Build/Products, trying archive method..."
-            # Try archive as fallback
-            ARCHIVE_OUTPUT=$(mktemp)
+            echo "📋 Searching for errors in expo build output..."
+            echo "=========================================="
+            grep -i "error:" expo-build.log | tail -30 || echo "No 'error:' found"
+            echo "=========================================="
+            grep -i "failed" expo-build.log | tail -30 || echo "No 'failed' found"
+            echo "=========================================="
+            echo ""
+            echo "📋 Last 100 lines of expo build output:"
+            tail -100 expo-build.log || cat expo-build.log
+            echo ""
+            echo "🔄 Trying fallback method with xcodebuild..."
+            
+            # Fallback to xcodebuild
+            cd ios
+            WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
+            if [ -z "$WORKSPACE" ]; then
+              echo "❌ No .xcworkspace found for fallback!"
+              exit 1
+            fi
+            
+            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+            if [ -z "$SCHEME" ]; then
+              SCHEME="zyea-mobile"
+            fi
+            
+            echo "✅ Using workspace: $WORKSPACE, scheme: $SCHEME"
+            
+            BUILD_OUTPUT=$(mktemp)
             set +e
-            xcodebuild archive \
+            xcodebuild build \
               -workspace "$WORKSPACE" \
               -scheme "$SCHEME" \
               -configuration Release \
-              -archivePath build/app.xcarchive \
               -sdk iphoneos \
+              -derivedDataPath build/DerivedData \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               DEVELOPMENT_TEAM="" \
-              SKIP_INSTALL=NO \
-              ARCHS="arm64" 2>&1 | tee "$ARCHIVE_OUTPUT"
-            ARCHIVE_EXIT_CODE=${PIPESTATUS[0]}
+              ONLY_ACTIVE_ARCH=NO \
+              ARCHS="arm64" \
+              2>&1 | tee "$BUILD_OUTPUT"
+            BUILD_EXIT_CODE=${PIPESTATUS[0]}
             set -e
             
-            if [ $ARCHIVE_EXIT_CODE -ne 0 ]; then
-              echo "❌ Archive also failed with exit code: $ARCHIVE_EXIT_CODE"
-              echo "📋 Archive errors:"
-              grep -i "error:" "$ARCHIVE_OUTPUT" | tail -20 || tail -50 "$ARCHIVE_OUTPUT"
-              rm -f "$ARCHIVE_OUTPUT"
+            if [ $BUILD_EXIT_CODE -ne 0 ]; then
+              echo "❌ xcodebuild also failed with exit code: $BUILD_EXIT_CODE"
+              echo ""
+              echo "📋 Full xcodebuild output (showing all errors):"
+              cat "$BUILD_OUTPUT"
+              echo ""
+              echo "📋 Extracting specific errors:"
+              grep -iE "(error|failed|fatal|cannot)" "$BUILD_OUTPUT" | tail -50 || echo "No specific errors found"
+              rm -f "$BUILD_OUTPUT"
               exit 1
             fi
-            rm -f "$ARCHIVE_OUTPUT"
-            echo "✅ Archive completed"
-          else
-            echo "✅ Found .app in DerivedData: $APP_IN_DERIVED"
+            
+            rm -f "$BUILD_OUTPUT"
+            echo "✅ xcodebuild succeeded!"
+            
+            # Check for .app in DerivedData
+            APP_PATH=$(find build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
+            if [ -z "$APP_PATH" ]; then
+              echo "⚠️ .app not found, trying archive..."
+              ARCHIVE_OUTPUT=$(mktemp)
+              set +e
+              xcodebuild archive \
+                -workspace "$WORKSPACE" \
+                -scheme "$SCHEME" \
+                -configuration Release \
+                -archivePath build/app.xcarchive \
+                -sdk iphoneos \
+                CODE_SIGN_IDENTITY="" \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGNING_ALLOWED=NO \
+                DEVELOPMENT_TEAM="" \
+                SKIP_INSTALL=NO \
+                ARCHS="arm64" 2>&1 | tee "$ARCHIVE_OUTPUT"
+              ARCHIVE_EXIT_CODE=${PIPESTATUS[0]}
+              set -e
+              
+              if [ $ARCHIVE_EXIT_CODE -ne 0 ]; then
+                echo "❌ Archive failed:"
+                cat "$ARCHIVE_OUTPUT"
+                rm -f "$ARCHIVE_OUTPUT"
+                exit 1
+              fi
+              rm -f "$ARCHIVE_OUTPUT"
+            fi
+            
+            cd ..
           fi
           
-          echo "✅ Build process completed"
-          cd ..
+          # Ensure we're back in mobile-expo directory
+          cd "$(pwd | sed 's|/ios$||')"
+          if [ ! -f "package.json" ]; then
+            cd mobile-expo 2>/dev/null || cd .
+          fi
           
           echo "🔍 Finding .app file from mobile-expo directory..."
           pwd
-          APP_PATH=""
+          
+          # If APP_PATH was already found during build, use it
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            APP_PATH=""
+          else
+            echo "✅ Using previously found .app: $APP_PATH"
+          fi
           
           # Method 1: Check DerivedData/Build/Products first (where build puts it)
           if [ -d "ios/build/DerivedData/Build/Products" ]; then
