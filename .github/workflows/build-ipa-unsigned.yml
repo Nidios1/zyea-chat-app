@@ -128,6 +128,28 @@ jobs:
           if grep -i "BUILD SUCCEEDED" build.log > /dev/null; then
             echo "✅ Build log confirms: BUILD SUCCEEDED"
           fi
+          
+          # Check if app target was mentioned in build log
+          echo ""
+          echo "🔍 Checking if app target was built..."
+          if grep -i "\.app\|$SCHEME\|building.*app" build.log | grep -i "succeeded\|built\|created" > /dev/null; then
+            echo "✅ App target appears to have been built"
+          else
+            echo "⚠️ App target may not have been built"
+            echo "📋 Searching for app-related build messages:"
+            grep -i "\.app\|app target\|building.*app\|$SCHEME" build.log | tail -20 || echo "No app-related messages found"
+          fi
+          
+          # List what was actually built
+          echo ""
+          echo "📂 Checking DerivedData immediately after build:"
+          if [ -d "build/DerivedData/Build/Products" ]; then
+            echo "Products directory exists"
+            ls -la build/DerivedData/Build/Products/ 2>/dev/null || true
+            echo ""
+            echo "All subdirectories:"
+            find build/DerivedData/Build/Products -type d -maxdepth 1 2>/dev/null || true
+          fi
 
       - name: 📦 Find .app and Create IPA
         working-directory: ./mobile-expo/ios
