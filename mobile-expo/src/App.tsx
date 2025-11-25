@@ -3,8 +3,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { PaperProvider } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
-import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import { QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { queryClient } from './utils/queryClient';
+import { NavigationContainer, useNavigation, CommonActions, NavigationContainerRef } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -23,30 +24,6 @@ import MessageNotificationBanner from './components/Common/MessageNotificationBa
 import useSocket from './hooks/useSocket';
 import { chatAPI } from './utils/api';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 0, // 0 = data is immediately stale, always fetch fresh data for instant updates
-      gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for instant display while fetching
-      retry: 1, // Retry once for faster failure detection
-      retryDelay: (attemptIndex) => Math.min(300 * 2 ** attemptIndex, 3000), // Faster exponential backoff (max 3s)
-      refetchOnWindowFocus: false, // Don't refetch on focus to reduce unnecessary requests
-      refetchOnReconnect: true, // Refetch when network reconnects
-      refetchOnMount: true, // Always refetch on mount for fresh data (no delay)
-      refetchInterval: false, // Disable automatic polling (use socket for real-time updates)
-      // Enable structural sharing to prevent unnecessary re-renders
-      structuralSharing: true,
-      // Network mode optimization
-      networkMode: 'online', // Only refetch when online
-      // Optimize for instant data fetching
-      placeholderData: (previousData) => previousData, // Show cached data instantly while fetching
-    },
-    mutations: {
-      retry: 0, // Don't retry mutations - fail fast for better UX
-      networkMode: 'online',
-    },
-  },
-});
 
 // Wrapper component to pass theme to PaperProvider and update StatusBar
 const PaperWrapper = ({ children }: { children: React.ReactNode }) => {
@@ -65,6 +42,11 @@ const MessageNotificationHandler = () => {
   const { socket } = useSocket();
   const navigation = useNavigation<any>();
   
+  // Guard check: return null nếu không có user
+  if (!user || !user.id) {
+    return null;
+  }
+  
   const [notificationMessage, setNotificationMessage] = React.useState<{
     senderName: string;
     senderAvatar?: string;
@@ -81,12 +63,12 @@ const MessageNotificationHandler = () => {
       const res = await chatAPI.getConversations();
       return Array.isArray(res.data) ? res.data : (res.data?.data || []);
     },
-    enabled: !!user,
+    enabled: !!user && !!user.id,
   });
 
   // Listen for new messages via socket
   React.useEffect(() => {
-    if (!socket || !user) return;
+    if (!socket || !user || !user.id) return;
 
     const handleReceiveMessage = (data: any) => {
       // Chỉ hiển thị notification nếu không phải tin nhắn của chính mình
@@ -114,12 +96,16 @@ const MessageNotificationHandler = () => {
       }
     };
 
-    socket.on('receiveMessage', handleReceiveMessage);
+    if (socket) {
+      socket.on('receiveMessage', handleReceiveMessage);
+    }
 
     return () => {
-      socket.off('receiveMessage', handleReceiveMessage);
+      if (socket) {
+        socket.off('receiveMessage', handleReceiveMessage);
+      }
     };
-  }, [socket, user, conversations]);
+  }, [socket, user?.id, conversations]);
 
   const handleNotificationPress = () => {
     if (notificationMessage?.conversationId) {
@@ -168,7 +154,8 @@ const MessageNotificationHandler = () => {
 };
 
 const AppContent = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
+  const navigationRef = React.useRef<NavigationContainerRef<any>>(null);
   
   // Check for live updates (chỉ chạy trong production build)
   // Tự động check khi app mở, check lại mỗi 5 phút khi app ở foreground
@@ -188,7 +175,7 @@ const AppContent = () => {
 
   // Ensure loading and isAuthenticated are always boolean, not string
   const isLoading = Boolean(loading);
-  const authenticated = Boolean(isAuthenticated);
+  const authenticated = Boolean(isAuthenticated) && !!user; // Đảm bảo user tồn tại
 
   if (isLoading) {
     return null;
@@ -197,10 +184,15 @@ const AppContent = () => {
   return (
     <TabBarProvider>
       <NavigationContainer
+        ref={navigationRef}
         onReady={() => console.log('Navigation ready')}
         onStateChange={() => {}}
       >
-        {authenticated ? <MainNavigator /> : <AuthNavigator />}
+        {authenticated && user ? (
+          <MainNavigator key={`main-${user.id}`} />
+        ) : (
+          <AuthNavigator key="auth" />
+        )}
         <Toast position="bottom" />
         
         {/* Message Notification Banner - Hiển thị khi có tin nhắn mới */}

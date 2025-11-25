@@ -104,6 +104,8 @@ export const APP_VERSION = '1.0.0';
 export const STORAGE_KEYS = {
   TOKEN: '@auth_token',
   USER: '@user_data',
+  ACCOUNTS: '@accounts_list', // Danh sách các tài khoản đã đăng nhập
+  CURRENT_ACCOUNT_ID: '@current_account_id', // ID của tài khoản hiện tại
   THEME: '@theme_preference',
   LANGUAGE: '@language_preference',
 };

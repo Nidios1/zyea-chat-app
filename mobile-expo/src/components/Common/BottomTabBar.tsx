@@ -150,9 +150,9 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
   }
 
   // 3) Ẩn ở một số màn hình cụ thể trong Profile stack (nhưng hiển thị ở MyProfile và Profile chính)
-  const hiddenProfileScreens = ['EditProfile', 'Settings', 'InterfaceSettings', 'FontSizeSettings', 
-    'ProfileInformation', 'Feedback', 'Help', 'StatusFeed', 'ActivityStatus', 
-    'ResourceManagement', 'DeviceManagement', 'Security', 'Privacy', 'AppInfo', 
+  const hiddenProfileScreens = ['Profile', 'EditProfile', 'Settings', 'InterfaceSettings', 'FontSizeSettings', 
+    'Feedback', 'Help', 'StatusFeed', 'ActivityStatus', 
+    'DeviceManagement', 'Security', 'Privacy', 'AppInfo', 
     'SelfDestructPost', 'QRScanner', 'AddPhone', 'VerifyPhone', 'SystemNotifications'];
   if (currentRoute?.name === 'Profile' && hiddenProfileScreens.includes(nestedFocused || '')) {
     return null;

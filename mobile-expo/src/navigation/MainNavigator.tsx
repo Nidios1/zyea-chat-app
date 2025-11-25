@@ -11,7 +11,6 @@ import HomeScreen from '../screens/NewsFeed/HomeScreen';
 import ProfileScreen from '../screens/Profile/ProfileScreen';
 import MyProfileScreen from '../screens/Profile/MyProfileScreen';
 import EditProfileScreen from '../screens/Profile/EditProfileScreen';
-import ProfileInformationScreen from '../screens/Profile/ProfileInformationScreen';
 import FeedbackScreen from '../screens/Profile/FeedbackScreen';
 import HelpScreen from '../screens/Profile/HelpScreen';
 import SettingsScreen from '../screens/Settings/SettingsScreen';
@@ -19,7 +18,6 @@ import InterfaceSettingsScreen from '../screens/Settings/InterfaceSettingsScreen
 import FontSizeSettingsScreen from '../screens/Settings/FontSizeSettingsScreen';
 import StatusFeedScreen from '../screens/Profile/StatusFeedScreen';
 import ActivityStatusScreen from '../screens/Profile/ActivityStatusScreen';
-import ResourceManagementScreen from '../screens/Profile/ResourceManagementScreen';
 import DeviceManagementScreen from '../screens/Profile/DeviceManagementScreen';
 import SecurityScreen from '../screens/Profile/SecurityScreen';
 import PrivacyScreen from '../screens/Profile/PrivacyScreen';
@@ -104,26 +102,21 @@ const FeedStackNavigator = () => (
 
 // Profile Stack
 const ProfileStackNavigator = () => (
-  <ProfileStack.Navigator>
-    <ProfileStack.Screen
-      name="Profile"
-      component={ProfileScreen}
-      options={{ headerShown: false as boolean }}
-    />
+  <ProfileStack.Navigator initialRouteName="MyProfile">
     <ProfileStack.Screen
       name="MyProfile"
       component={MyProfileScreen}
       options={{ headerShown: false as boolean }}
     />
     <ProfileStack.Screen
-      name="ProfileInformation"
-      component={ProfileInformationScreen}
-      options={{ title: 'Hồ sơ thông tin', headerShown: false as boolean }}
+      name="Profile"
+      component={ProfileScreen}
+      options={{ headerShown: false as boolean }}
     />
     <ProfileStack.Screen
       name="EditProfile"
       component={EditProfileScreen}
-      options={{ title: 'Chỉnh sửa hồ sơ' }}
+      options={{ headerShown: false as boolean }}
     />
     <ProfileStack.Screen
       name="Settings"
@@ -158,11 +151,6 @@ const ProfileStackNavigator = () => (
     <ProfileStack.Screen
       name="ActivityStatus"
       component={ActivityStatusScreen}
-      options={{ headerShown: false as boolean }}
-    />
-    <ProfileStack.Screen
-      name="ResourceManagement"
-      component={ResourceManagementScreen}
       options={{ headerShown: false as boolean }}
     />
     <ProfileStack.Screen

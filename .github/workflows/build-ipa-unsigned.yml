@@ -151,20 +151,19 @@ jobs:
             exit 1
           fi
 
-      - name: 🔧 Generate React Native Codegen files
-        working-directory: ./mobile-expo
+      - name: 🔧 Pre-build to generate codegen files
+        working-directory: ./mobile-expo/ios
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          echo "🔧 Generating React Native codegen files..."
-          echo "📂 Creating generated files directory structure..."
-          mkdir -p ios/build/generated/ios/safeareacontext
-          mkdir -p ios/build/generated/ios/rnworklets
-          
-          echo "🏗️ Running initial build to generate codegen files..."
-          cd ios
+          echo "🔧 Running pre-build to generate React Native codegen files..."
           
           WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
+          if [ -z "$WORKSPACE" ]; then
+            echo "❌ No .xcworkspace found!"
+            exit 1
+          fi
+          
           SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
           if [ -z "$SCHEME" ]; then
             APP_SLUG=$(node -e "console.log(require('../app.json').expo.slug)" 2>/dev/null || echo "")
@@ -173,28 +172,60 @@ jobs:
           
           echo "✅ Using scheme: $SCHEME"
           
-          # Build ReactCodegen target first to generate files
-          echo "🔧 Building ReactCodegen target to generate files..."
+          # Create directory structure for generated files
+          mkdir -p build/generated/ios/safeareacontext
+          
+          # Run a build first to trigger codegen scripts
+          # This will generate all the required codegen files
+          echo "🏗️ Running build to generate codegen files..."
           set +e
+          
           xcodebuild build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
             -sdk iphoneos \
-            -target ReactCodegen \
+            -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
             ONLY_ACTIVE_ARCH=NO \
-            ARCHS="arm64" 2>&1 | grep -E "(error|warning|succeeded|failed)" | head -50 || true
+            ARCHS="arm64" \
+            GENERATE_INFOPLIST_FILE=YES 2>&1 | tee /tmp/build_output.log
+          
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
           set -e
           
-          echo "📂 Checking generated files..."
-          find build -name "*generated*" -type f 2>/dev/null | head -10 || echo "No generated files found yet"
+          # Find and copy generated files to expected location
+          echo "📂 Searching for generated codegen files..."
           
-          cd ..
-          echo "✅ Codegen preparation completed"
+          # Look for generated files in DerivedData
+          find build/DerivedData -type f \( -name "*safeareacontextJSI-generated.cpp" -o -name "*rnworkletsJSI-generated.cpp" -o -name "*safeareacontext-generated.mm" \) 2>/dev/null | while read file; do
+            if [[ "$file" == *"safeareacontext-generated.mm" ]]; then
+              echo "📋 Found: $file -> build/generated/ios/safeareacontext/"
+              cp "$file" build/generated/ios/safeareacontext/ 2>/dev/null || true
+            elif [[ "$file" == *"safeareacontextJSI-generated.cpp" ]] || [[ "$file" == *"rnworkletsJSI-generated.cpp" ]]; then
+              echo "📋 Found: $file -> build/generated/ios/"
+              cp "$file" build/generated/ios/ 2>/dev/null || true
+            fi
+          done
+          
+          # Verify files were copied
+          echo "📂 Verifying generated files..."
+          ls -la build/generated/ios/ 2>/dev/null || echo "Generated directory not found"
+          ls -la build/generated/ios/safeareacontext/ 2>/dev/null || echo "SafeAreaContext directory not found"
+          
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo "⚠️ Pre-build completed with exit code $BUILD_EXIT_CODE"
+            echo "📋 Checking for codegen-related errors..."
+            grep -i "codegen\|generated" /tmp/build_output.log | tail -20 || echo "No codegen errors found"
+            echo "ℹ️ Continuing with archive build - codegen files should be generated during archive"
+          else
+            echo "✅ Pre-build completed successfully"
+          fi
+          
+          rm -f /tmp/build_output.log
 
       - name: 🏗️ Build IPA (unsigned) using Archive
         working-directory: ./mobile-expo
@@ -243,24 +274,11 @@ jobs:
             exit 1
           fi
           
-          echo "🧹 Cleaning previous builds (but keeping generated files)..."
-          # Keep generated files directory
-          if [ -d "build/generated" ]; then
-            echo "📂 Preserving generated files..."
-            mkdir -p ../generated_backup
-            cp -r build/generated ../generated_backup/ || true
-          fi
+          echo "🧹 Cleaning previous archive (but keeping generated files and DerivedData)..."
+          # Preserve generated files and DerivedData (contains codegen files)
+          rm -rf build/app.xcarchive build/*.xcarchive 2>/dev/null || true
           
-          rm -rf build/ || true
-          mkdir -p build
-          
-          # Restore generated files if they exist
-          if [ -d "../generated_backup/generated" ]; then
-            echo "📂 Restoring generated files..."
-            cp -r ../generated_backup/generated build/ || true
-            rm -rf ../generated_backup || true
-          fi
-          
+          # Clean only the archive, not the build artifacts
           xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release || true
           
           echo "🏗️ Creating Archive (this will take a while)..."
@@ -272,6 +290,7 @@ jobs:
             -scheme "$SCHEME" \
             -configuration Release \
             -archivePath build/app.xcarchive \
+            -derivedDataPath build/DerivedData \
             -sdk iphoneos \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
@@ -279,7 +298,8 @@ jobs:
             DEVELOPMENT_TEAM="" \
             SKIP_INSTALL=NO \
             ONLY_ACTIVE_ARCH=NO \
-            ARCHS="arm64" 2>&1 | tee "$BUILD_OUTPUT"
+            ARCHS="arm64" \
+            GENERATE_INFOPLIST_FILE=YES 2>&1 | tee "$BUILD_OUTPUT"
           ARCHIVE_EXIT_CODE=${PIPESTATUS[0]}
           set -e
           

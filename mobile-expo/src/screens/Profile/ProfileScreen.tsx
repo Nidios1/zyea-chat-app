@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
 import { Text, Avatar, Divider, useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,9 +15,35 @@ type ProfileScreenNavigationProp = StackNavigationProp<ProfileStackParamList>;
 
 const ProfileScreen = () => {
   const theme = useTheme();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigation = useNavigation<ProfileScreenNavigationProp>();
   const { colors, isDarkMode } = useAppTheme();
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Đăng xuất',
+      'Bạn có chắc chắn muốn đăng xuất?',
+      [
+        {
+          text: 'Hủy',
+          style: 'cancel',
+        },
+        {
+          text: 'Đăng xuất',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await logout(true);
+            } catch (error) {
+              console.error('Logout error:', error);
+              Alert.alert('Lỗi', 'Không thể đăng xuất. Vui lòng thử lại.');
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
 
   const handleUserCardPress = () => {
     try {
@@ -27,19 +53,51 @@ const ProfileScreen = () => {
     }
   };
 
+  const handleQRScannerPress = (e: any) => {
+    e.stopPropagation(); // Ngăn trigger user card press
+    try {
+      navigation.navigate('QRScanner');
+    } catch (error) {
+      console.error('Navigation error:', error);
+    }
+  };
+
   // Nhóm menu items theo sections
   const menuSections = [
     {
-      id: 'profile',
+      id: 'management',
       items: [
         {
-          id: 'profileInfo',
-          icon: 'account-circle-outline',
-          label: 'Hồ sơ thông tin',
+          id: 'activityStatus',
+          icon: 'account-clock-outline',
+          label: 'Trạng thái hoạt động',
           onPress: () => {
             try {
-              // Navigate đến MyProfile thay vì ProfileInformation để tránh duplicate
-              navigation.navigate('MyProfile' as never);
+              navigation.navigate('ActivityStatus');
+            } catch (error) {
+              console.error('Navigation error:', error);
+            }
+          },
+        },
+        {
+          id: 'deviceManagement',
+          icon: 'devices',
+          label: 'Quản lý thiết bị',
+          onPress: () => {
+            try {
+              navigation.navigate('DeviceManagement');
+            } catch (error) {
+              console.error('Navigation error:', error);
+            }
+          },
+        },
+        {
+          id: 'statusFeed',
+          icon: 'newspaper-variant-outline',
+          label: 'Trạng thái feed',
+          onPress: () => {
+            try {
+              navigation.navigate('StatusFeed');
             } catch (error) {
               console.error('Navigation error:', error);
             }
@@ -101,76 +159,6 @@ const ProfileScreen = () => {
       ],
     },
     {
-      id: 'management',
-      items: [
-        {
-          id: 'activityStatus',
-          icon: 'account-clock-outline',
-          label: 'Trạng thái hoạt động',
-          onPress: () => {
-            try {
-              navigation.navigate('ActivityStatus');
-            } catch (error) {
-              console.error('Navigation error:', error);
-            }
-          },
-        },
-        {
-          id: 'resourceManagement',
-          icon: 'folder-outline',
-          label: 'Quản lý tài nguyên',
-          onPress: () => {
-            try {
-              navigation.navigate('ResourceManagement');
-            } catch (error) {
-              console.error('Navigation error:', error);
-            }
-          },
-        },
-        {
-          id: 'deviceManagement',
-          icon: 'devices',
-          label: 'Quản lý thiết bị',
-          onPress: () => {
-            try {
-              navigation.navigate('DeviceManagement');
-            } catch (error) {
-              console.error('Navigation error:', error);
-            }
-          },
-        },
-        {
-          id: 'statusFeed',
-          icon: 'newspaper-variant-outline',
-          label: 'Trạng thái feed',
-          onPress: () => {
-            try {
-              navigation.navigate('StatusFeed');
-            } catch (error) {
-              console.error('Navigation error:', error);
-            }
-          },
-        },
-      ],
-    },
-    {
-      id: 'tools',
-      items: [
-        {
-          id: 'qrScanner',
-          icon: 'qrcode-scan',
-          label: 'Quét mã QR',
-          onPress: () => {
-            try {
-              navigation.navigate('QRScanner');
-            } catch (error) {
-              console.error('Navigation error:', error);
-            }
-          },
-        },
-      ],
-    },
-    {
       id: 'support',
       items: [
         {
@@ -211,6 +199,18 @@ const ProfileScreen = () => {
         },
       ],
     },
+    {
+      id: 'logout',
+      items: [
+        {
+          id: 'logout',
+          icon: 'logout',
+          label: 'Đăng xuất',
+          onPress: handleLogout,
+          isDestructive: true,
+        },
+      ],
+    },
   ];
 
   return (
@@ -245,6 +245,17 @@ const ProfileScreen = () => {
                 </Text>
               )}
             </View>
+            <TouchableOpacity
+              style={styles.qrButton}
+              onPress={handleQRScannerPress}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons
+                name="qrcode-scan"
+                size={24}
+                color={colors.text}
+              />
+            </TouchableOpacity>
             <MaterialCommunityIcons
               name="chevron-right"
               size={24}
@@ -266,34 +277,41 @@ const ProfileScreen = () => {
               }
             ]}
           >
-            {section.items.map((item, itemIndex) => (
-              <React.Fragment key={item.id}>
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={item.onPress}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.menuItemLeft}>
-                    <MaterialCommunityIcons
-                      name={item.icon as any}
-                      size={24}
-                      color={colors.text}
-                    />
-                    <Text style={[styles.menuItemLabel, { color: colors.text }]}>
-                      {item.label}
-                    </Text>
-                  </View>
-                  <MaterialCommunityIcons
-                    name="chevron-right"
-                    size={20}
-                    color={colors.textSecondary}
-                  />
-                </TouchableOpacity>
-                {itemIndex < section.items.length - 1 && (
-                  <Divider style={[styles.divider, { backgroundColor: colors.border }]} />
-                )}
-              </React.Fragment>
-            ))}
+            {section.items.map((item, itemIndex) => {
+              const isDestructive = (item as any).isDestructive;
+              const itemColor = isDestructive ? (colors.error || '#ff4444') : colors.text;
+              
+              return (
+                <React.Fragment key={item.id}>
+                  <TouchableOpacity
+                    style={styles.menuItem}
+                    onPress={item.onPress}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.menuItemLeft}>
+                      <MaterialCommunityIcons
+                        name={item.icon as any}
+                        size={24}
+                        color={itemColor}
+                      />
+                      <Text style={[styles.menuItemLabel, { color: itemColor }]}>
+                        {item.label}
+                      </Text>
+                    </View>
+                    {!isDestructive && (
+                      <MaterialCommunityIcons
+                        name="chevron-right"
+                        size={20}
+                        color={colors.textSecondary}
+                      />
+                    )}
+                  </TouchableOpacity>
+                  {itemIndex < section.items.length - 1 && (
+                    <Divider style={[styles.divider, { backgroundColor: colors.border }]} />
+                  )}
+                </React.Fragment>
+              );
+            })}
           </View>
         ))}
       </ScrollView>
@@ -338,6 +356,10 @@ const styles = StyleSheet.create({
   },
   userHandle: {
     fontSize: typography.fontSize.base,
+  },
+  qrButton: {
+    padding: spacing.xs,
+    marginRight: spacing.sm,
   },
   menuContainer: {
     marginHorizontal: spacing.base,

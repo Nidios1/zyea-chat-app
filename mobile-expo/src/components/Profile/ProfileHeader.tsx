@@ -2,10 +2,11 @@ import React, { memo } from 'react';
 import { View, StyleSheet, Image, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { getAvatarURL } from '../../utils/imageUtils';
+import { getAvatarURL, getImageURL } from '../../utils/imageUtils';
 import { PWATheme } from '../../config/PWATheme';
 import { spacing, typography, borderRadius } from '../../config/designTokens';
 
@@ -14,6 +15,101 @@ const BANNER_HEIGHT = 150;
 const AVATAR_SIZE = 110; // Tăng từ 94 lên 110
 const AVATAR_OFFSET = 10;
 const AVATAR_TOP = 95; // Điều chỉnh để avatar vẫn chồng lên banner một nửa (150 - 55 = 95)
+
+// Default Banner Component với gradient đẹp
+const DefaultBanner = ({ colors, isDarkMode }: { colors: any; isDarkMode: boolean }) => {
+  // Gradient colors - tạo gradient đẹp từ primary color
+  const primaryColor = colors.primary || '#0084ff';
+  
+  // Helper để tạo màu với opacity
+  const withOpacity = (color: string, opacity: string) => {
+    // Nếu là hex color, chuyển sang rgba hoặc thêm opacity vào cuối
+    if (color.startsWith('#')) {
+      const hex = color.replace('#', '');
+      if (hex.length === 6) {
+        // Convert hex to rgba
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        const opacityMap: { [key: string]: number } = {
+          'FF': 1.0, 'EE': 0.93, 'DD': 0.87, 'BB': 0.73, '99': 0.6
+        };
+        const alpha = opacityMap[opacity] || 1.0;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+    }
+    return color;
+  };
+
+  const gradientColors = isDarkMode
+    ? [
+        primaryColor,
+        withOpacity(primaryColor, 'DD'),
+        withOpacity(primaryColor, 'BB'),
+        withOpacity(primaryColor, '99'),
+      ]
+    : [
+        primaryColor,
+        primaryColor,
+        withOpacity(primaryColor, 'EE'),
+        withOpacity(primaryColor, 'DD'),
+      ];
+
+  return (
+    <LinearGradient
+      colors={gradientColors}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={StyleSheet.absoluteFillObject}
+    >
+      {/* Decorative Pattern */}
+      <View style={defaultBannerStyles.patternContainer}>
+        {/* Circular decorative elements */}
+        <View style={[defaultBannerStyles.circle, { top: 20, left: SCREEN_WIDTH * 0.1, width: 60, height: 60 }]} />
+        <View style={[defaultBannerStyles.circle, { top: 80, right: SCREEN_WIDTH * 0.15, width: 40, height: 40 }]} />
+        <View style={[defaultBannerStyles.circle, { bottom: 30, left: SCREEN_WIDTH * 0.2, width: 50, height: 50 }]} />
+        
+        {/* Logo/Text in center */}
+        <View style={[defaultBannerStyles.logoContainer, { left: SCREEN_WIDTH / 2 - 40, top: BANNER_HEIGHT / 2 - 15 }]}>
+          <Text style={defaultBannerStyles.logoText}>Zyea+</Text>
+          <View style={defaultBannerStyles.decorativeLine} />
+        </View>
+      </View>
+    </LinearGradient>
+  );
+};
+
+const defaultBannerStyles = StyleSheet.create({
+  patternContainer: {
+    flex: 1,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  circle: {
+    position: 'absolute',
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    opacity: 0.6,
+  },
+  logoContainer: {
+    position: 'absolute',
+    alignItems: 'center',
+    width: 80,
+  },
+  logoText: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: 'rgba(255, 255, 255, 0.9)',
+    letterSpacing: 2,
+  },
+  decorativeLine: {
+    width: 60,
+    height: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginTop: 4,
+    borderRadius: 1,
+  },
+});
 
 interface ProfileHeaderProps {
   user: any;
@@ -38,6 +134,11 @@ export function ProfileHeader({ user, stats, onEditPress, onSettingsPress, onAva
   const { colors, isDarkMode } = useTheme();
   const { user: currentUser } = useAuth();
 
+  // Guard check: return null nếu user không tồn tại
+  if (!user) {
+    return null;
+  }
+
   const isMe = isMeProp !== undefined ? isMeProp : (currentUser?.id === user?.id);
   const hasSession = !!currentUser;
   // Trong social-app-main, Replies hiển thị khi hasSession, nhưng thực tế chỉ nên hiển thị khi xem profile của chính mình
@@ -46,7 +147,8 @@ export function ProfileHeader({ user, stats, onEditPress, onSettingsPress, onAva
   const userName = user?.full_name || user?.username || 'Người dùng';
   const userHandle = user?.username ? `@${user.username}` : '';
   const userBio = (user as any)?.bio || '';
-  const bannerUrl = (user as any)?.banner_url || null;
+  // Map cover_url (from server) to banner_url (client interface)
+  const bannerUrl = (user as any)?.banner_url || (user as any)?.cover_url || null;
 
   // Format stats đơn giản như trong hình (không format K/M)
   const formatCount = (count?: number) => {
@@ -61,13 +163,23 @@ export function ProfileHeader({ user, stats, onEditPress, onSettingsPress, onAva
       <View style={[dynamicStyles.bannerContainer, { height: BANNER_HEIGHT }]}>
         {bannerUrl ? (
           <Image
-            source={{ uri: getAvatarURL(bannerUrl) }}
+            source={{ uri: getImageURL(bannerUrl) }}
             style={dynamicStyles.banner}
             resizeMode="cover"
           />
         ) : (
-          <View style={[dynamicStyles.banner, { backgroundColor: colors.primary || '#0084ff' }]} />
+          <DefaultBanner colors={colors} isDarkMode={isDarkMode} />
         )}
+        {/* Back Button - Góc trên bên trái */}
+        <TouchableOpacity
+          style={dynamicStyles.backButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.8}
+        >
+          <View style={dynamicStyles.backButtonInner}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
+          </View>
+        </TouchableOpacity>
       </View>
 
       {/* Avatar - Chồng lên banner một nửa (giống social-app-main iOS) */}
@@ -336,9 +448,9 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     zIndex: 10,
   },
   backButtonInner: {
-    width: 31,
-    height: 31,
-    borderRadius: 15.5,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',

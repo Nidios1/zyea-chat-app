@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -9,11 +9,7 @@ import {
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { ProfileStackParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
-
-type InterfaceSettingsScreenNavigationProp = StackNavigationProp<ProfileStackParamList>;
 
 type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -25,8 +21,24 @@ interface ThemeModeOption {
 }
 
 const InterfaceSettingsScreen = () => {
-  const navigation = useNavigation<InterfaceSettingsScreenNavigationProp>();
-  const { colors, themeMode, setThemeMode } = useTheme();
+  const navigation = useNavigation();
+  const { colors, themeMode, setThemeMode, isDarkMode } = useTheme();
+
+  // Set header options động theo theme
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: 'Giao diện',
+      headerStyle: {
+        backgroundColor: colors.surface || (isDarkMode ? '#1E1E1E' : '#FFFFFF'),
+      },
+      headerTintColor: colors.text,
+      headerTitleStyle: {
+        color: colors.text,
+        fontWeight: '600' as const,
+      },
+      headerShadowVisible: false,
+    });
+  }, [navigation, colors, isDarkMode]);
 
   const themeModes: ThemeModeOption[] = [
     {
@@ -51,18 +63,6 @@ const InterfaceSettingsScreen = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text }]}>Giao diện</Text>
-        <View style={styles.headerRight} />
-      </View>
-
       {/* Content */}
       <ScrollView style={styles.content}>
         <View style={styles.section}>
@@ -121,29 +121,6 @@ const InterfaceSettingsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 16,
-    backgroundColor: 'transparent',
-  },
-  backButton: {
-    padding: 8,
-    backgroundColor: 'transparent',
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: '600',
-    flex: 1,
-    textAlign: 'center',
-    marginRight: 40,
-  },
-  headerRight: {
-    width: 40,
   },
   content: {
     flex: 1,

@@ -1,15 +1,29 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getStoredToken, storeToken, removeToken } from '../utils/auth';
+import { 
+  getStoredToken, 
+  storeToken, 
+  removeToken,
+  getStoredAccounts,
+  storeAccounts,
+  addAccount,
+  removeAccount,
+  getCurrentAccountId,
+  setCurrentAccountId,
+  type AccountData
+} from '../utils/auth';
 import apiClient from '../utils/api';
-import { API_BASE_URL } from '../config/constants';
+import { API_BASE_URL, STORAGE_KEYS } from '../config/constants';
+import { queryClient } from '../utils/queryClient';
 
 interface User {
   id: string;
   username: string;
   full_name: string;
   avatar_url?: string;
+  banner_url?: string; // User banner/cover image
   email?: string;
+  bio?: string; // User bio/description
   role?: string; // User role: 'admin', 'user', etc.
   is_admin?: boolean; // Admin flag
   isAdmin?: boolean; // Alternative admin flag (camelCase)
@@ -19,8 +33,13 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  accounts: AccountData[];
   login: (userData: User, token: string) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: (logoutAllAccounts?: boolean) => Promise<void>;
+  switchAccount: (account: AccountData) => Promise<void>;
+  removeAccountFromList: (accountId: string) => Promise<void>;
+  updateUser: (userData: Partial<User>) => void;
+  refreshUser: () => Promise<void>;
   loading: boolean;
 }
 
@@ -29,6 +48,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<AccountData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -48,6 +68,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, MAX_INIT_TIMEOUT);
     
     try {
+      // Load accounts list - đảm bảo luôn là array
+      const storedAccounts = await getStoredAccounts();
+      setAccounts(Array.isArray(storedAccounts) ? storedAccounts : []);
+      
       const storedToken = await getStoredToken();
       
       if (storedToken) {
@@ -135,22 +159,123 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (userData: User, authToken: string) => {
     try {
-      await storeToken(authToken);
+      // Set user và token trước để component có thể sử dụng ngay
       setToken(authToken);
       setUser(userData);
+      await storeToken(authToken);
+      
+      // Đảm bảo loading state được clear
+      setLoading(false);
     } catch (error) {
       console.error('Login error:', error);
+      // Clear state nếu có lỗi
+      setToken(null);
+      setUser(null);
+      setLoading(false);
       throw error;
     }
   };
 
-  const logout = async () => {
+  const logout = async (logoutAllAccounts: boolean = false) => {
     try {
+      // Clear query cache trước để tránh component cố truy cập data sau khi logout
+      try {
+        queryClient.clear();
+      } catch (error) {
+        console.error('Error clearing query cache:', error);
+      }
+      
+      // Clear token và user state (quan trọng nhất)
       await removeToken();
       setToken(null);
       setUser(null);
+      setLoading(false);
     } catch (error) {
       console.error('Logout error:', error);
+      // Đảm bảo state được clear ngay cả khi có lỗi
+      try {
+        queryClient.clear();
+      } catch (clearError) {
+        console.error('Error clearing query cache on error:', clearError);
+      }
+      setToken(null);
+      setUser(null);
+      setLoading(false);
+    }
+  };
+
+  const switchAccount = async (account: AccountData) => {
+    try {
+      // Clear query cache trước khi switch account
+      try {
+        queryClient.clear();
+      } catch (error) {
+        console.error('Error clearing query cache on switch account:', error);
+      }
+      
+      await storeToken(account.token);
+      setToken(account.token);
+      setUser({
+        id: account.id,
+        username: account.username,
+        full_name: account.full_name,
+        avatar_url: account.avatar_url,
+        email: account.email,
+      });
+      await setCurrentAccountId(account.id);
+      setLoading(false);
+      
+      // Update account last login
+      const updatedAccounts = await getStoredAccounts();
+      const accountIndex = updatedAccounts.findIndex(acc => acc.id === account.id);
+      if (accountIndex !== -1) {
+        updatedAccounts[accountIndex].lastLogin = new Date().toISOString();
+        await storeAccounts(updatedAccounts);
+        setAccounts(Array.isArray(updatedAccounts) ? updatedAccounts : []);
+      }
+      
+      // Verify token
+      await verifyToken(account.token);
+    } catch (error) {
+      console.error('Switch account error:', error);
+      // Clear state nếu có lỗi
+      setToken(null);
+      setUser(null);
+      setLoading(false);
+      throw error;
+    }
+  };
+
+  const removeAccountFromList = async (accountId: string) => {
+    try {
+      await removeAccount(accountId);
+      const updatedAccounts = await getStoredAccounts();
+      setAccounts(Array.isArray(updatedAccounts) ? updatedAccounts : []);
+      
+      // If removed account is current account, logout
+      if (user?.id === accountId) {
+        await logout(true);
+      }
+    } catch (error) {
+      console.error('Remove account error:', error);
+      throw error;
+    }
+  };
+
+  const updateUser = (userData: Partial<User>) => {
+    if (user) {
+      setUser({ ...user, ...userData });
+    }
+  };
+
+  const refreshUser = async () => {
+    try {
+      const currentToken = await getStoredToken();
+      if (currentToken) {
+        await verifyToken(currentToken);
+      }
+    } catch (error) {
+      console.error('Error refreshing user:', error);
     }
   };
 
@@ -160,8 +285,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         user,
         token,
         isAuthenticated: Boolean(user && token),
+        accounts,
         login,
         logout,
+        switchAccount,
+        removeAccountFromList,
+        updateUser,
+        refreshUser,
         loading: Boolean(loading),
       }}
     >

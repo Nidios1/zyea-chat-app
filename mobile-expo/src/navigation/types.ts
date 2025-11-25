@@ -40,12 +40,10 @@ export type ProfileStackParamList = {
   InterfaceSettings: undefined;
   FontSizeSettings: undefined;
   PersonalProfile: { userId: string };
-  ProfileInformation: { userId?: string } | undefined;
   Feedback: undefined;
   Help: undefined;
   StatusFeed: undefined;
   ActivityStatus: undefined;
-  ResourceManagement: undefined;
   DeviceManagement: undefined;
   Security: undefined;
   Privacy: undefined;

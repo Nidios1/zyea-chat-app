@@ -95,6 +95,15 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean, insets
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
     },
+    stickyMenuButtonSmall: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: colors.border || (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'),
+    },
     loadingContainer: {
         flex: 1,
         alignItems: 'center',
@@ -472,11 +481,43 @@ const OtherUserProfileScreen = () => {
         );
     }
 
+    // Handle scroll để hiện sticky header
     const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
         const currentScrollY = event.nativeEvent.contentOffset.y;
-        setIsScrolledDown(currentScrollY > 150);
+        const scrollDifference = currentScrollY - lastScrollY.current;
+
+        if (Math.abs(scrollDifference) > 10) {
+            if (currentScrollY > 200) {
+                // Scroll xuống quá 200px - hiện sticky header
+                if (!isScrolledDown) {
+                    setIsScrolledDown(true);
+                }
+            } else {
+                // Scroll lên trên 200px - ẩn sticky header
+                if (isScrolledDown) {
+                    setIsScrolledDown(false);
+                }
+            }
+        }
+
         lastScrollY.current = currentScrollY;
+
+        // Update animated value
+        scrollY.setValue(currentScrollY);
     };
+
+    // Sticky header opacity
+    const stickyHeaderOpacity = scrollY.interpolate({
+        inputRange: [150, 250],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+    });
+
+    const stickyHeaderTranslateY = scrollY.interpolate({
+        inputRange: [150, 250],
+        outputRange: [-60, 0],
+        extrapolate: 'clamp',
+    });
 
     const renderHeader = () => (
         <ProfileHeader
@@ -611,6 +652,80 @@ const OtherUserProfileScreen = () => {
 
     return (
         <SafeAreaView style={[dynamicStyles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
+            {/* Sticky Header - Hiện khi scroll xuống (giống MyProfileScreen) */}
+            {isScrolledDown && (
+                <Animated.View
+                    style={[
+                        dynamicStyles.stickyHeader,
+                        {
+                            opacity: stickyHeaderOpacity,
+                            transform: [{ translateY: stickyHeaderTranslateY }],
+                            paddingTop: insets.top + spacing.sm,
+                        },
+                    ]}
+                >
+                    <View style={dynamicStyles.stickyHeaderContent}>
+                        {/* Left: Back button */}
+                        <TouchableOpacity
+                            style={dynamicStyles.stickyMenuButton}
+                            onPress={() => navigation.goBack()}
+                        >
+                            <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
+                        </TouchableOpacity>
+
+                        {/* Center: Name and Handle */}
+                        <View style={dynamicStyles.stickyHeaderCenter}>
+                            <Text style={[dynamicStyles.stickyName, { color: colors.text }]}>
+                                {userProfile?.full_name || userProfile?.username || 'Người dùng'}
+                            </Text>
+                            <View style={dynamicStyles.stickyHandleRow}>
+                                <MaterialCommunityIcons
+                                    name="white-balance-sunny"
+                                    size={14}
+                                    color={colors.textSecondary}
+                                    style={{ marginRight: 4 }}
+                                />
+                                <Text style={[dynamicStyles.stickyHandle, { color: colors.textSecondary }]}>
+                                    {userProfile?.username || ''}
+                                </Text>
+                            </View>
+                        </View>
+
+                        {/* Right: Action Buttons */}
+                        <View style={dynamicStyles.stickyHeaderRight}>
+                            <TouchableOpacity
+                                style={[
+                                    dynamicStyles.stickyFollowButton,
+                                    { backgroundColor: isFollowing ? (colors.surface || (isDarkMode ? '#1E1E1E' : '#F5F5F5')) : (colors.primary || '#0084ff') },
+                                    isFollowing && { borderWidth: 1, borderColor: colors.border }
+                                ]}
+                                onPress={handleFollow}
+                                disabled={isLoadingFollow}
+                            >
+                                <Text style={[
+                                    dynamicStyles.stickyFollowButtonText,
+                                    { color: isFollowing ? colors.text : '#FFFFFF' }
+                                ]}>
+                                    {isLoadingFollow ? '...' : (isFollowing ? 'Đang theo dõi' : 'Theo dõi')}
+                                </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[dynamicStyles.stickyMenuButtonSmall, { backgroundColor: colors.surface || (isDarkMode ? '#1E1E1E' : '#F5F5F5') }]}
+                                onPress={handleMessage}
+                            >
+                                <MaterialCommunityIcons name="message-text-outline" size={18} color={colors.text} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[dynamicStyles.stickyMenuButtonSmall, { backgroundColor: colors.surface || (isDarkMode ? '#1E1E1E' : '#F5F5F5') }]}
+                                onPress={() => { }}
+                            >
+                                <MaterialCommunityIcons name="dots-horizontal" size={18} color={colors.text} />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </Animated.View>
+            )}
+
             <>
                 {isLoadingPosts ? (
                     <View style={dynamicStyles.loadingContainer}>
@@ -639,7 +754,13 @@ const OtherUserProfileScreen = () => {
                         updateCellsBatchingPeriod={50}
                         windowSize={10}
                         initialNumToRender={10}
-                        onScroll={handleScroll}
+                        onScroll={(e) => {
+                            handleScroll(e);
+                            Animated.event(
+                                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                                { useNativeDriver: false }
+                            )(e);
+                        }}
                         scrollEventThrottle={16}
                     />
                 )}

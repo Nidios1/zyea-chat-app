@@ -40,6 +40,11 @@ const MyProfileScreen = () => {
   const navigation = useNavigation<MyProfileScreenNavigationProp>();
   const { colors, isDarkMode } = useTheme();
   const insets = useSafeAreaInsets();
+  
+  // Guard check: return null nếu user không tồn tại
+  if (!user || !user.id) {
+    return null;
+  }
   const [activeTab, setActiveTab] = useState<'posts' | 'replies' | 'media' | 'videos' | 'likes'>('posts');
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
   const [showImageViewer, setShowImageViewer] = useState(false);
@@ -368,6 +373,15 @@ const MyProfileScreen = () => {
     }
   }, [user?.avatar_url, handleEditProfile]);
 
+  // Handle navigate to settings
+  const handleSettingsPress = useCallback(() => {
+    try {
+      navigation.navigate('Profile');
+    } catch (error) {
+      console.error('Navigation error:', error);
+    }
+  }, [navigation]);
+
   // Memoize header để tránh re-render khi scroll
   const renderHeader = useCallback(() => {
     // Guard: Đảm bảo user tồn tại
@@ -379,13 +393,14 @@ const MyProfileScreen = () => {
         user={user}
         stats={stats}
         onEditPress={handleEditProfile}
+        onSettingsPress={handleSettingsPress}
         onAvatarPress={handleAvatarPress}
         activeTab={activeTab}
         onTabChange={(tab) => setActiveTab(tab)}
         isMe={true} // Đây là profile của chính mình
       />
     );
-  }, [user, stats, handleEditProfile, handleAvatarPress, activeTab]);
+  }, [user, stats, handleEditProfile, handleSettingsPress, handleAvatarPress, activeTab]);
 
   // Handle scroll để hiện sticky header
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -453,12 +468,12 @@ const MyProfileScreen = () => {
           ]}
         >
           <View style={dynamicStyles.stickyHeaderContent}>
-            {/* Left: Hamburger menu */}
+            {/* Left: Back button */}
             <TouchableOpacity
               style={dynamicStyles.stickyMenuButton}
               onPress={() => navigation.goBack()}
             >
-              <MaterialCommunityIcons name="menu" size={24} color={colors.text} />
+              <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
             </TouchableOpacity>
 
             {/* Center: Name and Handle */}
