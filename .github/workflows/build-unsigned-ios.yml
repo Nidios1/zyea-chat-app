@@ -215,22 +215,60 @@ jobs:
           fi
           
           echo "✅ Found .app at: $APP_PATH"
+          echo "📦 App details:"
+          ls -lh "$APP_PATH" | head -5
           
           # Create archive manually by copying .app into archive structure
           echo "📦 Creating archive structure..."
           mkdir -p build/app.xcarchive/Products/Applications
+          
           APP_NAME=$(basename "$APP_PATH")
-          cp -r "$APP_PATH" "build/app.xcarchive/Products/Applications/$APP_NAME"
+          echo "📋 Copying $APP_NAME to archive..."
+          
+          # Use absolute path for copy
+          ABS_APP_PATH=$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")
+          ABS_ARCHIVE_PATH=$(pwd)/build/app.xcarchive/Products/Applications
+          
+          echo "📋 Source: $ABS_APP_PATH"
+          echo "📋 Destination: $ABS_ARCHIVE_PATH/$APP_NAME"
+          
+          # Copy with verbose output
+          cp -rv "$ABS_APP_PATH" "$ABS_ARCHIVE_PATH/" || {
+            echo "❌ Copy failed, trying alternative method..."
+            cp -r "$APP_PATH" "build/app.xcarchive/Products/Applications/" || {
+              echo "❌ Alternative copy also failed!"
+              exit 1
+            }
+          }
+          
+          # Verify copy was successful
+          if [ ! -d "build/app.xcarchive/Products/Applications/$APP_NAME" ]; then
+            echo "❌ ERROR: .app file was not copied to archive!"
+            echo "📂 Archive Products/Applications contents:"
+            ls -la build/app.xcarchive/Products/Applications/ || true
+            echo "📂 Source app path:"
+            ls -la "$APP_PATH" || true
+            exit 1
+          fi
           
           # Copy Info.plist if available
           if [ -f "../$SCHEME/Info.plist" ]; then
             cp "../$SCHEME/Info.plist" "build/app.xcarchive/Info.plist" || true
           fi
           
-          echo "✅ Archive structure created!"
+          echo "✅ Archive structure created successfully!"
           echo "📂 Archive location: build/app.xcarchive"
-          echo "📂 Archive contents:"
-          ls -la build/app.xcarchive/Products/Applications/ || true
+          echo "📂 Archive Products/Applications contents:"
+          ls -lah build/app.xcarchive/Products/Applications/ || true
+          echo ""
+          echo "📂 Verifying .app file in archive:"
+          if [ -d "build/app.xcarchive/Products/Applications/$APP_NAME" ]; then
+            echo "✅ .app file verified in archive!"
+            ls -lh "build/app.xcarchive/Products/Applications/$APP_NAME" | head -5
+          else
+            echo "❌ .app file NOT found in archive!"
+            exit 1
+          fi
 
       - name: 📦 Export IPA from Archive
         working-directory: ./mobile-expo
