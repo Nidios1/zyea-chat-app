@@ -285,42 +285,60 @@ jobs:
           BUILD_OUTPUT=$(mktemp)
           set +e
           
-          xcodebuild archive \
+          # Build first to ensure .app is created
+          echo "🏗️ Building app first..."
+          xcodebuild build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
             -configuration Release \
-            -archivePath build/app.xcarchive \
-            -derivedDataPath build/DerivedData \
             -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
-            SKIP_INSTALL=NO \
             ONLY_ACTIVE_ARCH=NO \
             ARCHS="arm64" \
             GENERATE_INFOPLIST_FILE=YES 2>&1 | tee "$BUILD_OUTPUT"
-          ARCHIVE_EXIT_CODE=${PIPESTATUS[0]}
-          set -e
           
-          if [ $ARCHIVE_EXIT_CODE -ne 0 ]; then
-            echo ""
-            echo "❌ Archive failed with exit code: $ARCHIVE_EXIT_CODE"
-            echo ""
-            echo "📋 Last 100 lines of build output:"
-            tail -100 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
-            echo ""
-            echo "📋 Searching for error patterns:"
-            grep -i "error:" "$BUILD_OUTPUT" | tail -30 || echo "No error patterns found"
-            echo ""
-            echo "📋 Searching for warning patterns:"
-            grep -i "warning:" "$BUILD_OUTPUT" | tail -15 || echo "No warning patterns found"
-            rm -f "$BUILD_OUTPUT"
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo "❌ Build failed with exit code: $BUILD_EXIT_CODE"
+            tail -50 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
             exit 1
           fi
           
+          # Find .app from build
+          APP_PATH=$(find build/DerivedData/Build/Products/Release-iphoneos -name "*.app" -type d 2>/dev/null | head -1)
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find build/DerivedData -name "*.app" -type d 2>/dev/null | head -1)
+          fi
+          
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "❌ ERROR: Could not find .app file after build!"
+            echo "📂 Searching for .app:"
+            find build/DerivedData -name "*.app" -type d 2>/dev/null || echo "No .app found"
+            exit 1
+          fi
+          
+          echo "✅ Found .app at: $APP_PATH"
+          APP_NAME=$(basename "$APP_PATH")
+          
+          # Create archive structure manually
+          echo "📦 Creating archive structure..."
+          mkdir -p build/app.xcarchive/Products/Applications
+          cp -r "$APP_PATH" "build/app.xcarchive/Products/Applications/$APP_NAME"
+          
+          # Copy Info.plist if available
+          if [ -f "../$SCHEME/Info.plist" ]; then
+            cp "../$SCHEME/Info.plist" "build/app.xcarchive/Info.plist" || true
+          fi
+          
+          # Create archive Info.plist
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n  <key>ApplicationProperties</key>\n  <dict>\n    <key>ApplicationPath</key>\n    <string>Applications/%s</string>\n    <key>CFBundleIdentifier</key>\n    <string>com.zyea.mobile</string>\n    <key>CFBundleShortVersionString</key>\n    <string>1.0.4</string>\n    <key>CFBundleVersion</key>\n    <string>4</string>\n  </dict>\n  <key>Name</key>\n  <string>%s</string>\n  <key>SchemeName</key>\n  <string>%s</string>\n</dict>\n</plist>\n' "$APP_NAME" "$SCHEME" "$SCHEME" > build/app.xcarchive/Info.plist
+          
+          echo "✅ Archive created with .app file"
           rm -f "$BUILD_OUTPUT"
-          echo "✅ Archive created successfully!"
           
           # Verify archive exists
           if [ ! -d "build/app.xcarchive" ]; then
@@ -330,12 +348,20 @@ jobs:
             exit 1
           fi
           
-          echo "📂 Archive structure:"
+          # Verify archive structure
+          echo "📂 Verifying archive structure:"
           ls -la build/app.xcarchive/ || true
           echo ""
           echo "📂 Products/Applications:"
           ls -la build/app.xcarchive/Products/Applications/ || true
           
+          # Verify .app exists
+          if [ ! -d "build/app.xcarchive/Products/Applications/$APP_NAME" ]; then
+            echo "❌ ERROR: .app file not found in archive!"
+            exit 1
+          fi
+          
+          echo "✅ Archive created successfully with .app file!"
           cd ..
           
       - name: 📦 Export IPA from Archive
