@@ -86,12 +86,14 @@ jobs:
           # --non-interactive to avoid prompts
           # --wait to wait for build completion
           # --json to get build info
+          # --skip-credentials-check to skip credentials for unsigned build
           echo "🚀 Starting EAS Build..."
           BUILD_OUTPUT=$(eas build --platform ios \
             --profile unsigned \
             --non-interactive \
             --wait \
-            --json)
+            --skip-credentials-check \
+            --json 2>&1)
           
           BUILD_EXIT_CODE=$?
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
