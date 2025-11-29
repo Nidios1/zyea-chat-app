@@ -86,26 +86,34 @@ jobs:
           echo "✅ Workspace: $WORKSPACE"
           echo ""
           
-          # List all schemes and find the app scheme (not EASClient or Pods)
+          # List all schemes and targets
           echo "📋 Available schemes:"
-          xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 20 "Schemes:" || echo "Could not list schemes"
+          xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 30 "Schemes:" || echo "Could not list schemes"
+          echo ""
+          echo "📋 Available targets:"
+          xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 30 "Targets:" || echo "Could not list targets"
           echo ""
           
-          # Get app scheme (usually the first one that's not EASClient or Pods)
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 20 "Schemes:" | grep -v "Schemes:" | grep -v "EASClient" | grep -v "Pods" | head -1 | xargs)
+          # Get app scheme - exclude EASClient, Pods, EXApplication
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 30 "Schemes:" | grep -v "Schemes:" | grep -v "EASClient" | grep -v "Pods" | grep -v "EXApplication" | head -1 | xargs)
           
           if [ -z "$SCHEME" ]; then
-            # Fallback: try to find scheme matching app name
-            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 20 "Schemes:" | grep -v "Schemes:" | grep -i "zyea\|mobile" | head -1 | xargs)
+            # Try to find scheme matching app name (zyea-mobile)
+            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 30 "Schemes:" | grep -v "Schemes:" | grep -i "zyea\|mobile" | head -1 | xargs)
           fi
           
           if [ -z "$SCHEME" ]; then
-            # Last resort: use first scheme
-            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+            # Try to find target name and use it as scheme
+            TARGET=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 30 "Targets:" | grep -v "Targets:" | grep -v "Pods" | grep -v "EASClient" | grep -v "EXApplication" | head -1 | xargs)
+            if [ -n "$TARGET" ]; then
+              SCHEME="$TARGET"
+              echo "⚠️ Using target as scheme: $SCHEME"
+            fi
           fi
           
           if [ -z "$SCHEME" ]; then
             SCHEME="zyea-mobile"
+            echo "⚠️ Using default scheme: $SCHEME"
           fi
           
           echo "✅ Using scheme: $SCHEME"
