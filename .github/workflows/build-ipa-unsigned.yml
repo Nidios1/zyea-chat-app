@@ -83,13 +83,32 @@ jobs:
             exit 1
           fi
           
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+          echo "✅ Workspace: $WORKSPACE"
+          echo ""
+          
+          # List all schemes and find the app scheme (not EASClient or Pods)
+          echo "📋 Available schemes:"
+          xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 20 "Schemes:" || echo "Could not list schemes"
+          echo ""
+          
+          # Get app scheme (usually the first one that's not EASClient or Pods)
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 20 "Schemes:" | grep -v "Schemes:" | grep -v "EASClient" | grep -v "Pods" | head -1 | xargs)
+          
+          if [ -z "$SCHEME" ]; then
+            # Fallback: try to find scheme matching app name
+            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 20 "Schemes:" | grep -v "Schemes:" | grep -i "zyea\|mobile" | head -1 | xargs)
+          fi
+          
+          if [ -z "$SCHEME" ]; then
+            # Last resort: use first scheme
+            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+          fi
+          
           if [ -z "$SCHEME" ]; then
             SCHEME="zyea-mobile"
           fi
           
-          echo "✅ Workspace: $WORKSPACE"
-          echo "✅ Scheme: $SCHEME"
+          echo "✅ Using scheme: $SCHEME"
           echo ""
           
           # Clean
@@ -98,6 +117,7 @@ jobs:
           
           # Build
           echo "🚀 Building app..."
+          set +e
           xcodebuild build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
@@ -109,10 +129,19 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
             ONLY_ACTIVE_ARCH=NO \
-            ARCHS="arm64"
+            ARCHS="arm64" 2>&1 | tee /tmp/build.log
           
-          if [ $? -ne 0 ]; then
-            echo "❌ Build failed!"
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          set -e
+          
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo "❌ Build failed with exit code: $BUILD_EXIT_CODE"
+            echo ""
+            echo "📋 Searching for errors in build log..."
+            grep -i "error:" /tmp/build.log | tail -20 || echo "No errors found"
+            echo ""
+            echo "📋 Last 50 lines of build log:"
+            tail -50 /tmp/build.log
             exit 1
           fi
           
