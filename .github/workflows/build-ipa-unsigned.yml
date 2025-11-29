@@ -102,17 +102,24 @@ jobs:
           xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 30 "Targets:" || echo "Could not list targets"
           echo ""
           
-          # Get app scheme - exclude EASClient, Pods, EXApplication
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 30 "Schemes:" | grep -v "Schemes:" | grep -v "EASClient" | grep -v "Pods" | grep -v "EXApplication" | head -1 | xargs)
+          # Get app scheme - exclude all EX* schemes, EASClient, Pods
+          # First, get all schemes and filter out unwanted ones
+          ALL_SCHEMES=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 30 "Schemes:" | grep -v "Schemes:" | xargs)
+          echo "📋 All schemes found: $ALL_SCHEMES"
+          echo ""
+          
+          # Filter out EX*, EASClient, Pods schemes
+          SCHEME=$(echo "$ALL_SCHEMES" | tr ' ' '\n' | grep -v "^EX" | grep -v "EASClient" | grep -v "Pods" | head -1 | xargs)
           
           if [ -z "$SCHEME" ]; then
             # Try to find scheme matching app name (zyea-mobile)
-            SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 30 "Schemes:" | grep -v "Schemes:" | grep -i "zyea\|mobile" | head -1 | xargs)
+            SCHEME=$(echo "$ALL_SCHEMES" | tr ' ' '\n' | grep -i "zyea\|mobile" | head -1 | xargs)
           fi
           
           if [ -z "$SCHEME" ]; then
             # Try to find target name and use it as scheme
-            TARGET=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 30 "Targets:" | grep -v "Targets:" | grep -v "Pods" | grep -v "EASClient" | grep -v "EXApplication" | head -1 | xargs)
+            ALL_TARGETS=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 30 "Targets:" | grep -v "Targets:" | xargs)
+            TARGET=$(echo "$ALL_TARGETS" | tr ' ' '\n' | grep -v "^EX" | grep -v "Pods" | grep -v "EASClient" | head -1 | xargs)
             if [ -n "$TARGET" ]; then
               SCHEME="$TARGET"
               echo "⚠️ Using target as scheme: $SCHEME"
@@ -156,15 +163,24 @@ jobs:
           if [ $BUILD_EXIT_CODE -ne 0 ] || [ -z "$BUILD_SUCCEEDED" ]; then
             echo "❌ Build failed or did not complete successfully!"
             echo "Build exit code: $BUILD_EXIT_CODE"
+            echo "BUILD SUCCEEDED found: $([ -n "$BUILD_SUCCEEDED" ] && echo "Yes" || echo "No")"
             echo ""
-            echo "📋 Searching for errors in build log..."
-            grep -i "error:" /tmp/build.log | tail -30 || echo "No errors found"
+            echo "📋 Searching for compilation errors..."
+            grep -i "error:" /tmp/build.log | grep -v "note:" | tail -50 || echo "No errors found"
             echo ""
-            echo "📋 Checking for BUILD SUCCEEDED message..."
+            echo "📋 Searching for failed targets..."
+            grep -i "failed\|failure" /tmp/build.log | tail -20 || echo "No failures found"
+            echo ""
+            echo "📋 Checking for BUILD messages..."
             grep -i "BUILD" /tmp/build.log | tail -10
             echo ""
-            echo "📋 Last 100 lines of build log:"
-            tail -100 /tmp/build.log
+            echo "📋 Last 150 lines of build log:"
+            tail -150 /tmp/build.log
+            echo ""
+            echo "💡 Common issues:"
+            echo "   - Wrong scheme selected (should not be EX*, EASClient, Pods)"
+            echo "   - Missing dependencies or codegen issues"
+            echo "   - Code signing problems"
             exit 1
           fi
           
