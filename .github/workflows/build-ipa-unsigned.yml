@@ -71,24 +71,45 @@ jobs:
         run: |
           pod install --repo-update || pod install
 
-      - name: 🏗️ Build iOS app with expo run:ios
-        working-directory: ./mobile-expo
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: 🏗️ Build iOS app with xcodebuild
+        working-directory: ./mobile-expo/ios
         run: |
-          echo "🏗️ Building iOS app with expo run:ios..."
-          echo "📋 This will build Release configuration for device..."
+          echo "🏗️ Building iOS app with xcodebuild..."
+          
+          # Find workspace and scheme
+          WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
+          if [ -z "$WORKSPACE" ]; then
+            echo "❌ No .xcworkspace found!"
+            exit 1
+          fi
+          
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+          if [ -z "$SCHEME" ]; then
+            SCHEME="zyea-mobile"
+          fi
+          
+          echo "✅ Workspace: $WORKSPACE"
+          echo "✅ Scheme: $SCHEME"
           echo ""
           
-          # Build using expo run:ios - this handles React Native/Expo properly
-          # Use --no-install to skip device installation
-          # Use --configuration Release for production build
-          # Use --device to build for physical device (creates .app)
-          npx expo run:ios \
-            --configuration Release \
-            --no-install \
-            --device \
-            --no-build-cache
+          # Clean previous builds
+          echo "🧹 Cleaning previous builds..."
+          rm -rf build/DerivedData || true
+          
+          # Build with xcodebuild - this creates .app in DerivedData
+          echo "🚀 Building app (unsigned)..."
+          xcodebuild build \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="arm64"
           
           BUILD_EXIT_CODE=$?
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
@@ -98,11 +119,19 @@ jobs:
           
           echo ""
           echo "✅ Build completed successfully!"
+          
+          # Verify .app was created
+          APP_PATH=$(find build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
+          if [ -n "$APP_PATH" ] && [ -d "$APP_PATH" ]; then
+            echo "✅ .app file found at: $APP_PATH"
+          else
+            echo "⚠️ .app file not found yet, will search in next step"
+          fi
 
       - name: 📦 Find .app and create IPA
         working-directory: ./mobile-expo
         run: |
-          echo "🔍 Searching for .app file after expo run:ios build..."
+          echo "🔍 Searching for .app file after xcodebuild..."
           echo "Current directory: $(pwd)"
           echo ""
           
