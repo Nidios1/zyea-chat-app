@@ -71,42 +71,65 @@ jobs:
         run: |
           pod install --repo-update || pod install
 
-      - name: 🏗️ Build IPA with EAS Build (unsigned)
+      - name: 🏗️ Build IPA with EAS Build Cloud (unsigned)
         working-directory: ./mobile-expo
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          echo "🏗️ Building IPA with EAS Build (unsigned profile)..."
-          echo "📋 Using EAS Build with profile 'unsigned' (withoutCredentials: true)"
+          echo "🏗️ Building IPA with EAS Build Cloud (unsigned profile)..."
+          echo "📋 Using EAS Build Cloud with profile 'unsigned' (withoutCredentials: true)"
+          echo "📋 This will build on Expo's cloud servers..."
           echo ""
           
-          # Build with EAS Build - this handles React Native/Expo properly
-          # --local flag builds on GitHub Actions runner (macOS)
+          # Build with EAS Build Cloud - this handles React Native/Expo properly
+          # No --local flag = builds on Expo cloud
           # --non-interactive to avoid prompts
-          # --output to specify output file
-          eas build --platform ios \
+          # --wait to wait for build completion
+          # --json to get build info
+          echo "🚀 Starting EAS Build..."
+          BUILD_OUTPUT=$(eas build --platform ios \
             --profile unsigned \
-            --local \
             --non-interactive \
-            --output build.ipa
+            --wait \
+            --json)
           
           BUILD_EXIT_CODE=$?
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo "❌ EAS Build failed with exit code: $BUILD_EXIT_CODE"
+            echo "📋 Build output:"
+            echo "$BUILD_OUTPUT"
             exit 1
           fi
           
           echo ""
           echo "✅ EAS Build completed successfully!"
           
-          # Verify IPA was created
+          # Extract download URL from JSON output
+          DOWNLOAD_URL=$(echo "$BUILD_OUTPUT" | grep -o '"artifacts":{"buildUrl":"[^"]*"' | grep -o 'https://[^"]*' | head -1)
+          
+          if [ -z "$DOWNLOAD_URL" ]; then
+            # Try alternative JSON parsing
+            DOWNLOAD_URL=$(echo "$BUILD_OUTPUT" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('artifacts', {}).get('buildUrl', ''))" 2>/dev/null || echo "")
+          fi
+          
+          if [ -z "$DOWNLOAD_URL" ]; then
+            echo "⚠️ Could not extract download URL from build output"
+            echo "📋 Build output:"
+            echo "$BUILD_OUTPUT" | head -50
+            echo ""
+            echo "💡 You can download the IPA from Expo dashboard"
+            exit 1
+          fi
+          
+          echo "📥 Downloading IPA from: $DOWNLOAD_URL"
+          curl -L -o build.ipa "$DOWNLOAD_URL"
+          
+          # Verify IPA was downloaded
           if [ -f "build.ipa" ]; then
-            echo "✅ IPA file created at: build.ipa"
+            echo "✅ IPA file downloaded at: build.ipa"
             ls -lh build.ipa
           else
-            echo "❌ IPA file not found!"
-            echo "📂 Checking for build artifacts..."
-            find . -name "*.ipa" -type f 2>/dev/null | head -5 || echo "No IPA files found"
+            echo "❌ IPA file download failed!"
             exit 1
           fi
 
