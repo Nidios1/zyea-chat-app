@@ -71,78 +71,95 @@ jobs:
         run: |
           pod install --repo-update || pod install
 
-      - name: 🏗️ Build IPA with EAS Build Cloud (unsigned)
-        working-directory: ./mobile-expo
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: 🏗️ Build and create IPA
+        working-directory: ./mobile-expo/ios
         run: |
-          echo "🏗️ Building IPA with EAS Build Cloud (unsigned profile)..."
-          echo "📋 Using EAS Build Cloud with profile 'unsigned' (withoutCredentials: true)"
-          echo "📋 This will build on Expo's cloud servers..."
+          echo "🏗️ Building iOS app and creating IPA..."
+          
+          # Find workspace and scheme
+          WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
+          if [ -z "$WORKSPACE" ]; then
+            echo "❌ No .xcworkspace found!"
+            exit 1
+          fi
+          
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
+          if [ -z "$SCHEME" ]; then
+            SCHEME="zyea-mobile"
+          fi
+          
+          echo "✅ Workspace: $WORKSPACE"
+          echo "✅ Scheme: $SCHEME"
           echo ""
           
-          # Build with EAS Build Cloud - this handles React Native/Expo properly
-          # No --local flag = builds on Expo cloud
-          # --non-interactive to avoid prompts
-          # --wait to wait for build completion
-          # --json to get build info
-          # --skip-credentials-check to skip credentials for unsigned build
-          echo "🚀 Starting EAS Build..."
-          BUILD_OUTPUT=$(eas build --platform ios \
-            --profile unsigned \
-            --non-interactive \
-            --wait \
-            --skip-credentials-check \
-            --json 2>&1)
+          # Clean
+          echo "🧹 Cleaning..."
+          rm -rf build || true
           
-          BUILD_EXIT_CODE=$?
-          if [ $BUILD_EXIT_CODE -ne 0 ]; then
-            echo "❌ EAS Build failed with exit code: $BUILD_EXIT_CODE"
-            echo "📋 Build output:"
-            echo "$BUILD_OUTPUT"
+          # Build
+          echo "🚀 Building app..."
+          xcodebuild build \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="arm64"
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Build failed!"
             exit 1
           fi
           
           echo ""
-          echo "✅ EAS Build completed successfully!"
+          echo "✅ Build completed!"
           
-          # Extract download URL from JSON output
-          DOWNLOAD_URL=$(echo "$BUILD_OUTPUT" | grep -o '"artifacts":{"buildUrl":"[^"]*"' | grep -o 'https://[^"]*' | head -1)
+          # Find .app - it should be in DerivedData/Build/Products/Release-iphoneos/
+          APP_PATH=$(find build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
           
-          if [ -z "$DOWNLOAD_URL" ]; then
-            # Try alternative JSON parsing
-            DOWNLOAD_URL=$(echo "$BUILD_OUTPUT" | python3 -c "import sys, json; data=json.load(sys.stdin); print(data.get('artifacts', {}).get('buildUrl', ''))" 2>/dev/null || echo "")
-          fi
-          
-          if [ -z "$DOWNLOAD_URL" ]; then
-            echo "⚠️ Could not extract download URL from build output"
-            echo "📋 Build output:"
-            echo "$BUILD_OUTPUT" | head -50
-            echo ""
-            echo "💡 You can download the IPA from Expo dashboard"
+          if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+            echo "❌ .app file not found!"
+            echo "📂 Searching in build directory..."
+            find build -name "*.app" -type d 2>/dev/null || echo "No .app found"
             exit 1
           fi
           
-          echo "📥 Downloading IPA from: $DOWNLOAD_URL"
-          curl -L -o build.ipa "$DOWNLOAD_URL"
+          echo "✅ Found .app at: $APP_PATH"
           
-          # Verify IPA was downloaded
+          # Create IPA
+          echo "📦 Creating IPA..."
+          cd "$(dirname "$APP_PATH")"
+          mkdir -p Payload
+          APP_NAME=$(basename "$APP_PATH")
+          cp -r "$APP_NAME" Payload/
+          zip -r ../../../build.ipa Payload
+          rm -rf Payload
+          cd ../../../
+          
           if [ -f "build.ipa" ]; then
-            echo "✅ IPA file downloaded at: build.ipa"
+            echo "✅ IPA created: build.ipa"
             ls -lh build.ipa
           else
-            echo "❌ IPA file download failed!"
+            echo "❌ Failed to create IPA"
             exit 1
           fi
 
 
-      - name: ✅ Verify IPA file
+      - name: ✅ Verify and move IPA
         working-directory: ./mobile-expo
         run: |
-          if [ ! -f "build.ipa" ]; then
+          if [ ! -f "ios/build.ipa" ]; then
             echo "❌ Error: build.ipa not found!"
             exit 1
           fi
+          
+          # Move IPA to mobile-expo root
+          mv ios/build.ipa build.ipa
           
           FILE_SIZE=$(stat -f%z build.ipa 2>/dev/null || stat -c%s build.ipa 2>/dev/null || echo "0")
           FILE_SIZE_MB=$(awk "BEGIN {printf \"%.2f\", $FILE_SIZE/1024/1024}")
