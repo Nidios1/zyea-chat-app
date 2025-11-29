@@ -58,13 +58,21 @@ jobs:
         run: |
           npm install --legacy-peer-deps || npm install
 
-      - name: 🔨 Prebuild iOS project
+      - name: 🔨 Prebuild iOS project (if needed)
         working-directory: ./mobile-expo
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          echo "🔨 Running prebuild..."
-          npx expo prebuild --platform ios --clean
+          if [ -d "ios" ] && [ -f "ios/*.xcworkspace" ] || [ -f "ios/*.xcodeproj" ]; then
+            echo "✅ ios/ folder already exists with native project"
+            echo "📂 Checking ios/ folder structure..."
+            ls -la ios/ | head -10
+            echo ""
+            echo "⏭️ Skipping prebuild - using existing ios/ folder"
+          else
+            echo "🔨 ios/ folder not found or incomplete, running prebuild..."
+            npx expo prebuild --platform ios --clean
+          fi
 
       - name: 📦 Install CocoaPods dependencies
         working-directory: ./mobile-expo/ios
