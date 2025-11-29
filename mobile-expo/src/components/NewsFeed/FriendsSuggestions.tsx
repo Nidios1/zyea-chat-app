@@ -7,12 +7,14 @@ import { getAvatarURL } from '../../utils/imageUtils';
 import { getInitials } from '../../utils/nameUtils';
 import { spacing, typography, borderRadius } from '../../config/designTokens';
 import { PWATheme } from '../../config/PWATheme';
+import { VerifiedBadge } from '../Common/VerifiedBadge';
 
 interface FriendSuggestion {
   id: string | number;
   full_name?: string;
   username?: string;
   avatar_url?: string;
+  is_verified?: boolean;
 }
 
 interface FriendsSuggestionsProps {
@@ -78,12 +80,18 @@ const FriendsSuggestions: React.FC<FriendsSuggestionsProps> = ({
                   style={dynamicStyles.avatar}
                 />
               )}
-              <Text
-                style={[dynamicStyles.name, { color: colors.text }]}
-                numberOfLines={1}
-              >
-                {suggestion.full_name || suggestion.username || 'Người dùng'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                <Text
+                  style={[dynamicStyles.name, { color: colors.text }]}
+                  numberOfLines={1}
+                >
+                  {suggestion.full_name || suggestion.username || 'Người dùng'}
+                </Text>
+                {/* Verified badge */}
+                {suggestion.is_verified && (
+                  <VerifiedBadge size={14} />
+                )}
+              </View>
               <Text
                 style={[dynamicStyles.username, { color: colors.textSecondary }]}
                 numberOfLines={1}
@@ -92,11 +100,21 @@ const FriendsSuggestions: React.FC<FriendsSuggestionsProps> = ({
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[dynamicStyles.followButton, { backgroundColor: colors.primary || '#0084ff' }]}
+              style={[
+                dynamicStyles.followButton, 
+                { 
+                  // Đảm bảo background luôn có màu rõ ràng, không phải trắng
+                  backgroundColor: (colors.primary && colors.primary !== '#FFFFFF' && colors.primary !== '#ffffff' && colors.primary !== colors.background) 
+                    ? colors.primary 
+                    : '#0084ff', // Fallback về màu xanh nếu primary là trắng hoặc trùng với background
+                }
+              ]}
               onPress={() => onFollow?.(suggestion.id)}
               activeOpacity={0.8}
             >
-              <Text style={dynamicStyles.followButtonText}>Theo dõi</Text>
+              <Text style={[dynamicStyles.followButtonText, { color: '#FFFFFF' }]}>
+                Theo dõi
+              </Text>
             </TouchableOpacity>
           </View>
         ))}
@@ -172,11 +190,13 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) =>
       borderRadius: borderRadius.md,
       alignItems: 'center',
       justifyContent: 'center',
+      minHeight: 36, // Đảm bảo chiều cao tối thiểu
     },
     followButtonText: {
-      color: '#FFFFFF',
+      color: '#FFFFFF', // Luôn dùng màu trắng cho chữ, background sẽ đảm bảo tương phản
       fontSize: typography.fontSize.base,
       fontWeight: typography.fontWeight.semibold,
+      textAlign: 'center',
     },
   });
 

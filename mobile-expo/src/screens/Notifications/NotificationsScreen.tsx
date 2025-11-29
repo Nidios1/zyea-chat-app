@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Text, FAB, IconButton } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { notificationsAPI } from '../../utils/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
@@ -98,10 +98,22 @@ const NotificationsScreen = () => {
         throw err;
       }
     },
-    staleTime: 0, // Always fetch fresh data on mount
+    staleTime: 60 * 1000, // 1 phút - socket sẽ update real-time nên không cần refetch liên tục
+    gcTime: 10 * 60 * 1000, // 10 phút cache
     refetchInterval: false, // No polling - use socket for real-time updates
     refetchOnWindowFocus: false, // Don't refetch on focus (reduces unnecessary requests)
-    refetchOnMount: true, // Always refetch on mount for fresh data (no delay)
+  });
+
+  // Mutation để mark notification as read
+  const markAsReadMutation = useMutation({
+    mutationFn: (notificationId: string | number) => 
+      notificationsAPI.markAsRead(notificationId),
+    onSuccess: () => {
+      // Invalidate queries để cập nhật UI
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      checkUnread();
+    },
   });
 
   // Log notifications khi data thay đổi
@@ -240,6 +252,11 @@ const NotificationsScreen = () => {
         ]}
         activeOpacity={0.7}
         onPress={() => {
+          // Mark as read nếu chưa đọc
+          if (!isRead && item.id) {
+            markAsReadMutation.mutate(item.id);
+          }
+
           // Navigate to post or profile based on type
           if (item.type === 'like' || item.type === 'comment' || item.type === 'share') {
             // Navigate to post comments screen

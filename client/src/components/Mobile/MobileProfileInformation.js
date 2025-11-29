@@ -919,6 +919,7 @@ const MobileProfileInformation = ({ user: userProp, onBack, onShowEdit }) => {
   const [avatarUrl, setAvatarUrl] = useState(getInitialAvatarUrl());
   const [coverUrl, setCoverUrl] = useState(getInitialCoverUrl());
   const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [notification, setNotification] = useState(null);

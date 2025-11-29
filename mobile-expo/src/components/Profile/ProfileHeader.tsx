@@ -41,19 +41,36 @@ const DefaultBanner = ({ colors, isDarkMode }: { colors: any; isDarkMode: boolea
     return color;
   };
 
-  const gradientColors = isDarkMode
-    ? [
+  // Tạo gradient đẹp với màu primary và màu bổ sung
+  // Nếu primary là blue (#0084ff), thêm purple/turquoise để tạo gradient đẹp
+  const getGradientColors = () => {
+    if (isDarkMode) {
+      // Dark mode: gradient từ primary sang darker
+      return [
         primaryColor,
         withOpacity(primaryColor, 'DD'),
         withOpacity(primaryColor, 'BB'),
         withOpacity(primaryColor, '99'),
-      ]
-    : [
-        primaryColor,
-        primaryColor,
-        withOpacity(primaryColor, 'EE'),
-        withOpacity(primaryColor, 'DD'),
       ];
+    } else {
+      // Light mode: gradient đẹp hơn với màu sáng hơn
+      // Tạo gradient từ primary sang màu sáng hơn một chút
+      if (primaryColor === '#0084ff' || primaryColor.includes('0084ff')) {
+        // Blue gradient
+        return ['#0084ff', '#0099ff', '#00aaff', '#00bbff'];
+      } else {
+        // Generic gradient - làm sáng màu primary
+        return [
+          primaryColor,
+          primaryColor,
+          withOpacity(primaryColor, 'EE'),
+          withOpacity(primaryColor, 'DD'),
+        ];
+      }
+    }
+  };
+
+  const gradientColors = getGradientColors();
 
   return (
     <LinearGradient
@@ -127,9 +144,14 @@ interface ProfileHeaderProps {
   onFollowPress?: () => void;
   onMessagePress?: () => void;
   isFollowing?: boolean;
+  isOnline?: boolean; // Online status indicator
+  isVerified?: boolean; // Verified badge
+  verifiedBy?: string | null; // Who verified this account
+  verifiedAt?: string | null; // When was it verified
+  onVerifiedBadgePress?: () => void; // Callback when verified badge is pressed
 }
 
-export function ProfileHeader({ user, stats, onEditPress, onSettingsPress, onAvatarPress, activeTab, onTabChange, isMe: isMeProp, onFollowPress, onMessagePress, isFollowing }: ProfileHeaderProps) {
+export function ProfileHeader({ user, stats, onEditPress, onSettingsPress, onAvatarPress, activeTab, onTabChange, isMe: isMeProp, onFollowPress, onMessagePress, isFollowing, isOnline, isVerified, verifiedBy, verifiedAt, onVerifiedBadgePress }: ProfileHeaderProps) {
   const navigation = useNavigation();
   const { colors, isDarkMode } = useTheme();
   const { user: currentUser } = useAuth();
@@ -170,16 +192,6 @@ export function ProfileHeader({ user, stats, onEditPress, onSettingsPress, onAva
         ) : (
           <DefaultBanner colors={colors} isDarkMode={isDarkMode} />
         )}
-        {/* Back Button - Góc trên bên trái */}
-        <TouchableOpacity
-          style={dynamicStyles.backButton}
-          onPress={() => navigation.goBack()}
-          activeOpacity={0.8}
-        >
-          <View style={dynamicStyles.backButtonInner}>
-            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFFFFF" />
-          </View>
-        </TouchableOpacity>
       </View>
 
       {/* Avatar - Chồng lên banner một nửa (giống social-app-main iOS) */}
@@ -196,6 +208,16 @@ export function ProfileHeader({ user, stats, onEditPress, onSettingsPress, onAva
                 style={dynamicStyles.avatar}
                 resizeMode="cover"
               />
+              {/* Online status indicator - chấm xanh ở góc dưới bên phải, nằm ngoài avatar border */}
+              {isOnline !== undefined && (
+                <View style={[
+                  dynamicStyles.onlineIndicator,
+                  {
+                    backgroundColor: isOnline ? '#00a651' : (colors.textSecondary || '#999999'),
+                    borderColor: colors.background || (isDarkMode ? '#000000' : '#FFFFFF'),
+                  }
+                ]} />
+              )}
             </View>
           ) : (
             <View style={[dynamicStyles.avatar, dynamicStyles.avatarPlaceholder]}>
@@ -213,6 +235,16 @@ export function ProfileHeader({ user, stats, onEditPress, onSettingsPress, onAva
                     color={colors.background || '#FFFFFF'}
                   />
                 </View>
+              )}
+              {/* Online status indicator cho placeholder avatar */}
+              {!isMe && isOnline !== undefined && (
+                <View style={[
+                  dynamicStyles.onlineIndicator,
+                  {
+                    backgroundColor: isOnline ? '#00a651' : (colors.textSecondary || '#999999'),
+                    borderColor: colors.background || (isDarkMode ? '#000000' : '#FFFFFF'),
+                  }
+                ]} />
               )}
             </View>
           )}
@@ -242,10 +274,16 @@ export function ProfileHeader({ user, stats, onEditPress, onSettingsPress, onAva
           <TouchableOpacity
             style={[
               dynamicStyles.followButton,
-              { backgroundColor: isFollowing ? (colors.surface || (isDarkMode ? '#1E1E1E' : '#F5F5F5')) : (colors.primary || '#0084ff') },
+              { 
+                backgroundColor: isFollowing 
+                  ? (colors.surface || (isDarkMode ? '#1E1E1E' : '#F5F5F5')) 
+                  : '#0084ff', // Luôn dùng màu xanh cho nút "Theo dõi", không dùng colors.primary vì có thể là trắng trong dark mode
+                opacity: onFollowPress ? 1 : 0.5, // Mờ nếu không có handler
+              },
               isFollowing && { borderWidth: 1, borderColor: colors.border }
             ]}
             onPress={onFollowPress}
+            disabled={!onFollowPress}
           >
             <Text style={[
               dynamicStyles.followButtonText,
@@ -277,6 +315,20 @@ export function ProfileHeader({ user, stats, onEditPress, onSettingsPress, onAva
             <Text style={[dynamicStyles.displayName, { color: colors.text }]}>
               {userName}
             </Text>
+            {/* Verified badge */}
+            {isVerified && (
+              <TouchableOpacity
+                onPress={onVerifiedBadgePress}
+                activeOpacity={0.7}
+                style={dynamicStyles.verifiedBadge}
+              >
+                <MaterialCommunityIcons
+                  name="check-decagram"
+                  size={20}
+                  color={colors.primary || "#0084ff"} // Primary color for verified badge
+                />
+              </TouchableOpacity>
+            )}
           </View>
           {userHandle && (
             <View style={dynamicStyles.handleRow}>
@@ -441,20 +493,6 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     width: '100%',
     height: '100%',
   },
-  backButton: {
-    position: 'absolute',
-    top: spacing.md,
-    left: spacing.base,
-    zIndex: 10,
-  },
-  backButtonInner: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   menuButton: {
     position: 'absolute',
     top: spacing.md,
@@ -516,7 +554,8 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.background || (isDarkMode ? '#000000' : '#FFFFFF'),
-    overflow: 'hidden', // Đảm bảo không có phần nào bị tràn ra ngoài
+    overflow: 'visible', // Đổi thành 'visible' để online indicator không bị cắt
+    position: 'relative', // Đảm bảo online indicator có thể position absolute
   },
   avatar: {
     width: AVATAR_SIZE - 8, // Trừ border (2px) và padding (2px mỗi bên = 4px)
@@ -528,8 +567,9 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     width: AVATAR_SIZE - 8,
     height: AVATAR_SIZE - 8,
     borderRadius: (AVATAR_SIZE - 8) / 2,
-    overflow: 'hidden',
+    overflow: 'visible', // Đổi thành 'visible' để online indicator không bị cắt
     backgroundColor: colors.surface || (isDarkMode ? '#1E1E1E' : '#F0F0F0'), // Background cho wrapper
+    position: 'relative', // Đảm bảo online indicator có thể position absolute
   },
   avatarPlaceholder: {
     backgroundColor: colors.surface || (isDarkMode ? '#1E1E1E' : '#F0F0F0'),
@@ -549,6 +589,16 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     justifyContent: 'center',
     borderWidth: 2,
     borderColor: colors.background || (isDarkMode ? '#000000' : '#FFFFFF'),
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 1, // Đặt sát avatar, chỉ cách 1px
+    right: 1, // Đặt sát avatar, chỉ cách 1px
+    width: 14, // Giảm kích thước xuống 14px để nhỏ gọn hơn
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 2.5,
+    zIndex: 20, // Đảm bảo nằm trên avatar
   },
   actionButtonsAbsolute: {
     position: 'absolute',

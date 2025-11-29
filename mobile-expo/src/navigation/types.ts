@@ -33,8 +33,7 @@ export type NewsFeedStackParamList = {
 };
 
 export type ProfileStackParamList = {
-  Profile: undefined;
-  MyProfile: undefined;
+  Profile: { userId?: string };
   EditProfile: undefined;
   Settings: undefined;
   InterfaceSettings: undefined;
@@ -53,6 +52,8 @@ export type ProfileStackParamList = {
   AddPhone: undefined;
   VerifyPhone: { phone: string };
   SystemNotifications: undefined;
+  Admin: undefined;
+  OtherUserProfile: { userId: string };
 };
 
 export type FriendsStackParamList = {

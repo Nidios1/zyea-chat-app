@@ -16,8 +16,9 @@ import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAvatarURL } from '../../utils/imageUtils';
 import { getInitials } from '../../utils/nameUtils';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { notificationsAPI } from '../../utils/api';
+import useSocket from '../../hooks/useSocket';
 
 interface TabItem {
   id: string;
@@ -67,9 +68,11 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
   const { isVisible } = useTabBar();
   const { isDarkMode, colors } = useAppTheme(); // Lấy từ ThemeContext thật
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { socket } = useSocket();
   
   // Fetch unread notification count
-  const { data: unreadCountData } = useQuery({
+  const { data: unreadCountData, refetch: refetchUnreadCount } = useQuery({
     queryKey: ['notifications', 'unread-count'],
     queryFn: async () => {
       try {
@@ -88,12 +91,40 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
       }
     },
     refetchInterval: false, // No polling - use socket for real-time badge updates
-    refetchOnWindowFocus: true, // Refetch khi quay lại app
-    refetchOnMount: true, // Always refetch on mount for fresh data (no delay)
+    refetchOnWindowFocus: false, // Không cần refetch khi focus - socket sẽ update
+    staleTime: 30 * 1000, // 30 giây - socket sẽ update real-time nên không cần refetch liên tục
+    gcTime: 5 * 60 * 1000, // 5 phút cache
     enabled: !!user, // Chỉ fetch khi đã login
   });
 
   const unreadCount = unreadCountData || 0;
+
+  // Listen for real-time notifications via socket để cập nhật badge ngay lập tức
+  useEffect(() => {
+    if (!socket || !user?.id) return;
+
+    const handleNewNotification = (notification: any) => {
+      console.log('🔔 [BottomTabBar] Received new notification via socket:', notification);
+      // Invalidate và refetch unread count ngay lập tức
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      refetchUnreadCount();
+    };
+
+    // Listen for notification events from socket
+    socket.on('notification', handleNewNotification);
+    
+    // Cũng listen cho các events khác có thể ảnh hưởng đến unread count
+    socket.on('notificationRead', () => {
+      console.log('🔔 [BottomTabBar] Notification read, updating count');
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+      refetchUnreadCount();
+    });
+
+    return () => {
+      socket.off('notification', handleNewNotification);
+      socket.off('notificationRead');
+    };
+  }, [socket, user?.id, queryClient, refetchUnreadCount]);
 
   // Helper: get focused nested route name for a tab
   const getFocusedNestedRouteName = (route: any): string | undefined => {
@@ -149,7 +180,7 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
     return null;
   }
 
-  // 3) Ẩn ở một số màn hình cụ thể trong Profile stack (nhưng hiển thị ở MyProfile và Profile chính)
+  // 3) Ẩn ở một số màn hình cụ thể trong Profile stack
   const hiddenProfileScreens = ['Profile', 'EditProfile', 'Settings', 'InterfaceSettings', 'FontSizeSettings', 
     'Feedback', 'Help', 'StatusFeed', 'ActivityStatus', 
     'DeviceManagement', 'Security', 'Privacy', 'AppInfo', 
@@ -169,7 +200,7 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
           styles.tabBarBackground,
           {
             paddingBottom: clamp(insets.bottom || 0, 15, 60), // Giống social-app-main
-            backgroundColor: colors.surface || colors.background, // Sử dụng theme colors
+            backgroundColor: isDarkMode ? colors.background || '#000000' : colors.surface || '#FFFFFF', // Đồng bộ với header
             borderTopColor: colors.border || '#E0E0E0',
           },
         ]}
@@ -187,19 +218,38 @@ const BottomTabBar = ({ state, descriptors, navigation }: BottomTabBarProps) => 
                 navigation.navigate(route.name);
               } else if (isFocused && route.name === 'NewsFeed') {
                 // If already on NewsFeed tab, scroll to top and refresh (like Facebook)
-                const feedStack = navigation.getParent();
-                if (feedStack) {
-                  // Navigate to Feed screen with refresh param
-                  feedStack.navigate('Feed', { 
-                    refresh: Date.now(),
-                    scrollToTop: true 
-                  });
-                } else {
-                  // Fallback: navigate with refresh param
-                  navigation.navigate(route.name, { 
-                    refresh: Date.now(),
-                    scrollToTop: true 
-                  });
+                // Navigate to Feed screen within NewsFeed stack with refresh param
+                try {
+                  const feedStack = navigation.getParent();
+                  if (feedStack) {
+                    // Get the Feed route from the stack
+                    const feedState = feedStack.getState();
+                    const feedRoute = feedState?.routes?.find((r: any) => r.name === 'Feed');
+                    
+                    if (feedRoute) {
+                      // Use setParams to update params on existing route
+                      feedStack.setParams({
+                        refresh: Date.now(),
+                        scrollToTop: true,
+                      } as never);
+                    } else {
+                      // Navigate to Feed screen with refresh param
+                      feedStack.navigate('Feed' as never, { 
+                        refresh: Date.now(),
+                        scrollToTop: true 
+                      } as never);
+                    }
+                  } else {
+                    // Fallback: navigate with refresh param directly
+                    navigation.navigate(route.name, { 
+                      refresh: Date.now(),
+                      scrollToTop: true 
+                    } as never);
+                  }
+                } catch (error) {
+                  console.log('Error navigating to Feed:', error);
+                  // Fallback: just navigate to the route
+                  navigation.navigate(route.name);
                 }
               }
               

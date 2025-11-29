@@ -217,10 +217,10 @@ const ChatListScreen = () => {
         throw error;
       }
     },
-    staleTime: 0, // Always fetch fresh data on mount
+    staleTime: 60 * 1000, // 1 phút - socket sẽ update real-time nên không cần refetch liên tục
+    gcTime: 10 * 60 * 1000, // 10 phút cache
     refetchInterval: false, // No polling - use socket for real-time updates
     refetchOnWindowFocus: false, // Don't refetch on focus
-    refetchOnMount: true, // Always refetch on mount for fresh data (no delay)
   });
 
   // Auto-update time display every minute (like Facebook)
@@ -233,20 +233,26 @@ const ChatListScreen = () => {
   }, []);
 
   // Fetch following list to show online friends in stories
-  const { data: followingList = [], refetch: refetchFollowing } = useQuery({
+  const { data: followingListData, refetch: refetchFollowing } = useQuery({
     queryKey: ['following'],
     queryFn: async () => {
       try {
         const res = await friendsAPI.getFollowing();
-        return Array.isArray(res.data) ? res.data : (res.data?.data || []);
+        const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+        // Ensure we always return an array
+        return Array.isArray(data) ? data : [];
       } catch (error) {
         console.error('Error fetching following list:', error);
         return [];
       }
     },
-    staleTime: 0, // Always fetch fresh data on mount
+    staleTime: 2 * 60 * 1000, // 2 phút - following list không thay đổi thường xuyên
+    gcTime: 10 * 60 * 1000, // 10 phút cache
     refetchInterval: false, // No polling - use socket for real-time updates
   });
+
+  // Ensure followingList is always an array
+  const followingList = Array.isArray(followingListData) ? followingListData : [];
 
   // Fetch latest system notification to show in inbox (always show latest one)
   const { data: systemNotificationData } = useQuery({
@@ -355,7 +361,7 @@ const ChatListScreen = () => {
       }
       
       // Find user info from following list
-      const userInfo = followingList.find((item: any) => {
+      const userInfo = (Array.isArray(followingList) ? followingList : []).find((item: any) => {
         const itemUserId = item.following_id || item.id || item.user_id;
         return String(itemUserId) === userId;
       });
@@ -453,6 +459,9 @@ const ChatListScreen = () => {
 
   // Sync pinned state from AsyncStorage to cache after conversations update
   // This ensures pinned state persists even after automatic refetch
+  // Use ref to track last synced conversation IDs to avoid infinite loop
+  const lastSyncedConversationIdsRef = useRef<string>('');
+  
   useEffect(() => {
     let isMounted = true;
     let timeoutId: NodeJS.Timeout;
@@ -460,11 +469,25 @@ const ChatListScreen = () => {
     const syncPinnedState = async () => {
       if (conversations.length === 0) return;
       
+      // Create a stable key from conversation IDs to detect actual changes
+      const conversationIds = conversations
+        .map((conv: any) => String(conv.id || conv.conversation_id))
+        .sort()
+        .join(',');
+      
+      // Skip if we've already synced for these exact conversations
+      if (lastSyncedConversationIdsRef.current === conversationIds) {
+        return;
+      }
+      
       try {
         const pinnedMap = await loadPinnedConversations();
         const hasPinnedConversations = Object.keys(pinnedMap).some(k => pinnedMap[k] === true);
         
-        if (!hasPinnedConversations) return;
+        if (!hasPinnedConversations) {
+          lastSyncedConversationIdsRef.current = conversationIds;
+          return;
+        }
         
         // Check if any conversation needs pinned state update
         const needsUpdate = conversations.some((conv: any) => {
@@ -497,8 +520,13 @@ const ChatListScreen = () => {
             });
           });
         }
+        
+        // Mark as synced for these conversations
+        lastSyncedConversationIdsRef.current = conversationIds;
       } catch (error) {
         console.error('Error syncing pinned state:', error);
+        // Mark as synced even on error to avoid retry loop
+        lastSyncedConversationIdsRef.current = conversationIds;
       }
     };
     
@@ -511,14 +539,15 @@ const ChatListScreen = () => {
       isMounted = false;
       clearTimeout(timeoutId);
     };
-  }, [conversations, loadPinnedConversations, queryClient]);
+  }, [conversations.length, loadPinnedConversations, queryClient]); // Use conversations.length to avoid infinite loop
 
   // Initialize online status map from following list and conversations
-  useEffect(() => {
+  // Use useMemo to compute status map and only update when actually changed
+  const computedStatusMap = useMemo(() => {
     const statusMap: Record<string, boolean> = {};
     
     // Initialize from following list (API returns status)
-    followingList.forEach((friend: any) => {
+    (Array.isArray(followingList) ? followingList : []).forEach((friend: any) => {
       const userId = friend.following_id || friend.id || friend.user_id;
       const userIdString = userId?.toString();
       if (userIdString && friend.status === 'online') {
@@ -535,15 +564,32 @@ const ChatListScreen = () => {
       }
     });
     
-    setOnlineStatusMap((prev) => {
-      // Merge with existing map, but prioritize new data
-      return { ...prev, ...statusMap };
-    });
+    return statusMap;
   }, [followingList, conversations]);
+
+  // Only update state when computed map actually changes
+  useEffect(() => {
+    setOnlineStatusMap((prev) => {
+      // Check if there are any actual changes
+      const hasChanges = Object.keys(computedStatusMap).some(
+        key => prev[key] !== computedStatusMap[key]
+      ) || Object.keys(prev).some(
+        key => computedStatusMap[key] === undefined && prev[key] !== undefined
+      );
+      
+      // Only update if there are actual changes to avoid infinite loop
+      if (!hasChanges) {
+        return prev;
+      }
+      
+      // Merge with existing map, but prioritize new data
+      return { ...prev, ...computedStatusMap };
+    });
+  }, [computedStatusMap]);
 
   // Filter online friends from following list
   const onlineFriends = useMemo(() => {
-    return followingList.filter((friend: any) => {
+    return (Array.isArray(followingList) ? followingList : []).filter((friend: any) => {
       const userId = friend.following_id || friend.id || friend.user_id;
       const userIdString = userId?.toString();
       
@@ -939,7 +985,24 @@ socket.on('userStoppedTyping', handleUserStoppedTyping);
 
   // Filter conversations based on search and active tab
   const filteredConversations = useMemo(() => {
-    let filtered = conversations;
+    // Chỉ hiển thị conversations có tin nhắn (có last_message hoặc lastMessage)
+    let filtered = conversations.filter((conv: any) => {
+      // Luôn hiển thị system notifications
+      if (conv.is_system_notification) {
+        return true;
+      }
+      
+      // Chỉ hiển thị conversations có tin nhắn thực sự
+      const hasLastMessage = !!(conv.last_message || conv.lastMessage);
+      const hasMessageContent = hasLastMessage && (
+        (conv.last_message?.content && conv.last_message.content.trim() !== '') ||
+        (conv.lastMessage?.content && conv.lastMessage.content.trim() !== '') ||
+        (typeof conv.last_message === 'string' && conv.last_message.trim() !== '') ||
+        (typeof conv.lastMessage === 'string' && conv.lastMessage.trim() !== '')
+      );
+      
+      return hasMessageContent;
+    });
 
     // Filter by search term
     if (searchQuery.trim()) {
@@ -2450,7 +2513,7 @@ socket.on('userStoppedTyping', handleUserStoppedTyping);
               {/* Members List */}
               <View style={{ flex: 1 }}>
                 <FlatList
-                  data={followingList.filter((item: any) => {
+                  data={(Array.isArray(followingList) ? followingList : []).filter((item: any) => {
                     const userId = item.following_id || item.id || item.user_id;
                     if (String(userId) === String(currentUserId)) {
                       return false;
@@ -2764,7 +2827,7 @@ socket.on('userStoppedTyping', handleUserStoppedTyping);
                 style={styles.selectedMembersPreviewList}
                 contentContainerStyle={{ paddingRight: 16 }}
               >
-                {followingList
+                {(Array.isArray(followingList) ? followingList : [])
                   .filter((item: any) => {
                     const userId = item.following_id || item.id || item.user_id;
                     return selectedMembers.includes(String(userId));

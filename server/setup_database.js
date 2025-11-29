@@ -180,8 +180,12 @@ async function setupDatabase() {
         id INT AUTO_INCREMENT PRIMARY KEY,
         user_id INT NOT NULL,
         content TEXT,
-        image_url VARCHAR(255),
+        image_url VARCHAR(500),
+        post_type ENUM('text', 'image') DEFAULT 'text',
         privacy ENUM('public', 'friends', 'private') DEFAULT 'public',
+        likes_count INT DEFAULT 0,
+        comments_count INT DEFAULT 0,
+        shares_count INT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

@@ -13,6 +13,7 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { FontSizeProvider } from './src/contexts/FontSizeContext';
 import { TabBarProvider } from './src/contexts/TabBarContext';
 import { LanguageProvider } from './src/contexts/LanguageContext';
+import { NetworkProvider } from './src/contexts/NetworkContext';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
 import SplashScreen from './src/components/Splash/SplashScreen';
@@ -23,17 +24,24 @@ import IncomingCallModal from './src/components/Chat/IncomingCallModal';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 0, // 0 = data is immediately stale, always fetch fresh data for instant updates
-      gcTime: 10 * 60 * 1000, // 10 minutes - keep in cache for instant display while fetching
+      // Tối ưu staleTime: Cache data trong 30s-2 phút tùy loại để giảm refetch không cần thiết
+      // Data vẫn hiển thị từ cache ngay lập tức, chỉ refetch khi cần
+      staleTime: 30 * 1000, // 30 giây - data vẫn fresh trong 30s, không refetch
+      gcTime: 15 * 60 * 1000, // 15 phút - giữ cache lâu hơn để hiển thị nhanh
       retry: 1, // Retry once for faster failure detection
-      retryDelay: (attemptIndex) => Math.min(300 * 2 ** attemptIndex, 3000), // Faster exponential backoff (max 3s)
+      retryDelay: (attemptIndex) => Math.min(200 * 2 ** attemptIndex, 2000), // Faster exponential backoff (max 2s)
       refetchOnWindowFocus: false, // Don't refetch on focus to reduce unnecessary requests
       refetchOnReconnect: true, // Refetch when network reconnects
-      refetchOnMount: true, // Always refetch on mount for fresh data (no delay)
       refetchInterval: false, // Disable automatic polling (use socket for real-time updates)
       structuralSharing: true, // Enable structural sharing to prevent unnecessary re-renders
       networkMode: 'online', // Only refetch when online
       placeholderData: (previousData) => previousData, // Show cached data instantly while fetching
+      // Tối ưu: Chỉ refetch khi data thực sự stale, không refetch mỗi lần mount
+      refetchOnMount: (query) => {
+        // Chỉ refetch nếu data đã stale (quá staleTime) hoặc chưa có data
+        return query.state.dataUpdatedAt === 0 || 
+               Date.now() - query.state.dataUpdatedAt > (query.options.staleTime as number || 30000);
+      },
     },
     mutations: {
       retry: 0, // Don't retry mutations - fail fast for better UX
@@ -147,11 +155,13 @@ const App = () => {
             <LanguageProvider>
               <ThemeProvider>
                 <FontSizeProvider>
-                  <PaperWrapper>
-                    <AuthProvider>
-                      <AppContent />
-                    </AuthProvider>
-                  </PaperWrapper>
+                  <NetworkProvider>
+                    <PaperWrapper>
+                      <AuthProvider>
+                        <AppContent />
+                      </AuthProvider>
+                    </PaperWrapper>
+                  </NetworkProvider>
                 </FontSizeProvider>
               </ThemeProvider>
             </LanguageProvider>

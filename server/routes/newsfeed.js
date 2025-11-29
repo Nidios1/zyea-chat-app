@@ -89,6 +89,7 @@ router.get('/posts', async (req, res) => {
           u.full_name,
           u.avatar_url,
           u.status,
+          COALESCE(u.is_verified, 0) as is_verified,
           CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked,
           pl.reaction_type as reactionType,
           COALESCE(like_counts.likes_count, 0) as likes_count,
@@ -122,6 +123,7 @@ router.get('/posts', async (req, res) => {
           u.full_name,
           u.avatar_url,
           u.status,
+          COALESCE(u.is_verified, 0) as is_verified,
           CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked,
           pl.reaction_type as reactionType,
           COALESCE(like_counts.likes_count, 0) as likes_count,
@@ -157,6 +159,7 @@ router.get('/posts', async (req, res) => {
           u.full_name,
           u.avatar_url,
           u.status,
+          COALESCE(u.is_verified, 0) as is_verified,
           CASE WHEN pl.user_id IS NOT NULL THEN 1 ELSE 0 END as isLiked,
           pl.reaction_type as reactionType,
           COALESCE(like_counts.likes_count, 0) as likes_count,
@@ -371,6 +374,7 @@ router.post('/posts', async (req, res) => {
         u.full_name,
         u.avatar_url,
         u.status,
+        COALESCE(u.is_verified, 0) as is_verified,
         0 as isLiked,
         COALESCE(like_counts.likes_count, 0) as likes_count,
         COALESCE(comment_counts.comments_count, 0) as comments_count,
@@ -747,6 +751,18 @@ router.post('/posts/:id/comment', async (req, res) => {
       return res.status(400).json({ message: 'Comment content is required' });
     }
 
+    // Get post owner info before adding comment
+    const [postData] = await getConnection().execute(`
+      SELECT user_id FROM posts WHERE id = ?
+    `, [postId]);
+    
+    if (!postData || postData.length === 0) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+    
+    const postOwnerId = postData[0]?.user_id;
+    const isOwnPost = postOwnerId === userId;
+
     // Add comment
     const [result] = await getConnection().execute(`
       INSERT INTO post_comments (post_id, user_id, content)
@@ -759,11 +775,37 @@ router.post('/posts/:id/comment', async (req, res) => {
         pc.*,
         u.username,
         u.full_name,
-        u.avatar_url
+        u.avatar_url,
+        COALESCE(u.is_verified, 0) as is_verified
       FROM post_comments pc
       JOIN users u ON pc.user_id = u.id
       WHERE pc.id = ?
     `, [result.insertId]);
+
+    // Tạo notification cho post owner (nếu không phải chính mình)
+    if (!isOwnPost && postOwnerId) {
+      try {
+        // Get user info for notification message
+        const [userInfo] = await getConnection().execute(`
+          SELECT username, full_name FROM users WHERE id = ?
+        `, [userId]);
+        
+        const userName = userInfo[0]?.full_name || userInfo[0]?.username || 'Người dùng';
+        const message = `${userName} đã bình luận bài viết của bạn`;
+        
+        await getConnection().execute(`
+          INSERT INTO notifications (user_id, from_user_id, type, message, post_id)
+          VALUES (?, ?, 'comment', ?, ?)
+        `, [postOwnerId, userId, message, postId]);
+        
+        console.log(`📬 [Notification] Created comment notification for user ${postOwnerId}`);
+      } catch (notifError) {
+        console.error('❌ [Notification] Error creating comment notification:', notifError);
+        // Không throw error để không ảnh hưởng đến comment action
+      }
+    } else {
+      console.log(`ℹ️ [Notification] Skipping comment notification - isOwnPost: ${isOwnPost}, postOwnerId: ${postOwnerId}`);
+    }
 
     res.status(201).json(comments[0]);
   } catch (error) {
@@ -845,7 +887,8 @@ router.get('/posts/:id/comments', async (req, res) => {
         pc.*,
         u.username,
         u.full_name,
-        u.avatar_url
+        u.avatar_url,
+        COALESCE(u.is_verified, 0) as is_verified
       FROM post_comments pc
       JOIN users u ON pc.user_id = u.id
       WHERE pc.post_id = ?

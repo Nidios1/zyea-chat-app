@@ -21,7 +21,7 @@ const isFormData = (data: any): boolean => {
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 5000, // 5 seconds timeout - faster response, no delay
+  timeout: 10000, // 10 seconds - tăng timeout để tránh timeout quá nhanh trên mạng chậm
   // Don't set default Content-Type here - set it conditionally in interceptor
   // Enable HTTP keep-alive for better connection reuse
   httpAgent: undefined, // Let axios use default agent
@@ -36,6 +36,11 @@ const apiClient: AxiosInstance = axios.create({
   maxBodyLength: 50 * 1024 * 1024,
   // Optimize for instant response
   adapter: undefined, // Use default adapter (fastest)
+  // Tối ưu: Thêm headers để tăng tốc độ
+  headers: {
+    'Accept': 'application/json',
+    'Accept-Encoding': 'gzip, deflate, br',
+  },
 });
 
 apiClient.interceptors.request.use(
@@ -373,18 +378,22 @@ export const notificationsAPI = {
   // Regular notifications
   getNotifications: () => apiClient.get('/notifications'),
 
+  markAsRead: (notificationId: string | number) =>
+    apiClient.post(`/notifications/${notificationId}/read`),
+
   getUnreadCount: () => apiClient.get('/notifications/unread-count'),
 
-  markAsRead: (notificationId: string) =>
-    apiClient.put(`/notifications/${notificationId}/read`),
+  markAsRead: (notificationId: string | number) =>
+    apiClient.post(`/notifications/${notificationId}/read`),
 
   markAllAsRead: () => apiClient.put('/notifications/read-all'),
 };
 
 export const newsfeedAPI = {
-  getPosts: (page = 1, type?: 'all' | 'following') => {
+  getPosts: (page = 1, type?: 'all' | 'following' | 'video') => {
     // Always use 'all' as default to show all posts from everyone
-    const typeParam = type || 'all';
+    // Note: 'video' type is handled client-side by filtering posts with video
+    const typeParam = type === 'video' ? 'all' : (type || 'all');
     // Build URL manually to ensure compatibility with React Native
     const url = `/newsfeed/posts?page=${page}&type=${encodeURIComponent(typeParam)}`;
     return apiClient.get(url);
@@ -419,10 +428,14 @@ export const newsfeedAPI = {
     apiClient.post(`/newsfeed/posts/${postId}/view`),
 
   commentPost: (postId: string, content: string) =>
-    apiClient.post(`/newsfeed/posts/${postId}/comments`, { content }),
+    apiClient.post(`/newsfeed/posts/${postId}/comment`, { content }),
 
-  getPostComments: (postId: string) =>
-    apiClient.get(`/newsfeed/posts/${postId}/comments`),
+  getPostComments: (postId: string, page: number = 1, limit: number = 50) => {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    return apiClient.get(`/newsfeed/posts/${postId}/comments?${params.toString()}`);
+  },
 
   deletePost: (postId: string) =>
     apiClient.delete(`/newsfeed/posts/${postId}`),
@@ -618,8 +631,176 @@ export const uploadAPI = {
 };
 
 export const feedbackAPI = {
-  submitFeedback: (content: string, type?: 'feedback' | 'report' | 'bug', mediaUrl?: string | null) =>
-    apiClient.post('/feedback', { content, type: type || 'feedback', mediaUrl }),
+  submitFeedback: (content: string, type?: 'feedback' | 'report' | 'bug', mediaUrl?: string | null, reportedUserId?: string | number | null) =>
+    apiClient.post('/feedback', { content, type: type || 'feedback', mediaUrl, reported_user_id: reportedUserId || null }),
+};
+
+// ==================== VERIFICATION API ====================
+export const verificationAPI = {
+  submitRequest: (data: {
+    full_name: string;
+    category?: 'individual' | 'organization' | 'brand' | 'public_figure' | 'other';
+    reason: string;
+    email: string;
+    id_card_image?: string | null;
+  }) => apiClient.post('/verification/request', data),
+  getStatus: () => apiClient.get('/verification/status'),
+  getUserVerification: (userId: string | number) => apiClient.get(`/verification/user/${userId}`),
+};
+
+export const adminAPI = {
+  // Dashboard Stats
+  getStats: () => apiClient.get('/admin/stats'),
+
+  // User Management
+  getUsers: (page = 1, limit = 20, search = '', role = '', status = '') => {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    if (search) params.append('search', search);
+    if (role) params.append('role', role);
+    if (status) params.append('status', status);
+    return apiClient.get(`/admin/users?${params.toString()}`);
+  },
+
+  getUser: (userId: string | number) => apiClient.get(`/admin/users/${userId}`),
+
+  updateUser: (userId: string | number, data: {
+    full_name?: string;
+    email?: string;
+    phone?: string;
+    role?: 'user' | 'admin';
+    status?: string;
+  }) => apiClient.put(`/admin/users/${userId}`, data),
+
+  deleteUser: (userId: string | number) => apiClient.delete(`/admin/users/${userId}`),
+
+  resetUserPassword: (userId: string | number, newPassword: string) =>
+    apiClient.post(`/admin/users/${userId}/reset-password`, { newPassword }),
+
+  // Post Management
+  getPosts: (page = 1, limit = 20, search = '', userId = '') => {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    if (search) params.append('search', search);
+    if (userId) params.append('userId', userId);
+    return apiClient.get(`/admin/posts?${params.toString()}`);
+  },
+
+  deletePost: (postId: string | number) => apiClient.delete(`/admin/posts/${postId}`),
+
+  // Activity
+  getActivity: (limit = 50) => apiClient.get(`/admin/activity?limit=${limit}`),
+
+  // Feedback Management
+  getFeedbacks: (page = 1, limit = 20, status = '', type = '') => {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    if (status) params.append('status', status);
+    if (type) params.append('type', type);
+    return apiClient.get(`/admin/feedbacks?${params.toString()}`);
+  },
+
+  getFeedback: (feedbackId: string | number) => apiClient.get(`/admin/feedbacks/${feedbackId}`),
+
+  updateFeedback: (feedbackId: string | number, data: {
+    status?: 'pending' | 'reviewed' | 'resolved' | 'rejected';
+    admin_response?: string;
+  }) => apiClient.put(`/admin/feedbacks/${feedbackId}`, data),
+
+  deleteFeedback: (feedbackId: string | number) => apiClient.delete(`/admin/feedbacks/${feedbackId}`),
+  getVerifications: (page = 1, limit = 20, status = '') => {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    if (status) params.append('status', status);
+    return apiClient.get(`/admin/verifications?${params.toString()}`);
+  },
+  getVerification: (verificationId: string | number) => apiClient.get(`/admin/verifications/${verificationId}`),
+  approveVerification: (verificationId: string | number, verified_by?: string) =>
+    apiClient.put(`/admin/verifications/${verificationId}/approve`, { verified_by }),
+  rejectVerification: (verificationId: string | number, admin_response?: string) =>
+    apiClient.put(`/admin/verifications/${verificationId}/reject`, { admin_response }),
+
+  // Send message to user from admin
+  sendMessageToUser: (userId: string | number, content: string, message_type = 'text') =>
+    apiClient.post(`/admin/users/${userId}/send-message`, { content, message_type }),
+
+  // Send message to all users from admin
+  sendMessageToAllUsers: (content: string, message_type = 'text', exclude_user_ids: number[] = []) =>
+    apiClient.post('/admin/users/send-message-all', { content, message_type, exclude_user_ids }),
+
+  // Sticker Packs Management
+  getStickerPacks: () => apiClient.get('/admin/sticker-packs'),
+
+  getStickerPack: (packId: string | number) => apiClient.get(`/admin/sticker-packs/${packId}`),
+
+  createStickerPack: (data: {
+    name: string;
+    title: string;
+    description?: string;
+    icon_url?: string;
+    sort_order?: number;
+  }) => apiClient.post('/admin/sticker-packs', data),
+
+  updateStickerPack: (packId: string | number, data: {
+    name?: string;
+    title?: string;
+    description?: string;
+    icon_url?: string;
+    is_active?: boolean;
+    sort_order?: number;
+  }) => apiClient.put(`/admin/sticker-packs/${packId}`, data),
+
+  deleteStickerPack: (packId: string | number) => apiClient.delete(`/admin/sticker-packs/${packId}`),
+
+  // Stickers Management
+  addSticker: (packId: string | number, data: {
+    image_url: string;
+    file_format?: string;
+    file_size?: number;
+    width?: number;
+    height?: number;
+    is_animated?: boolean;
+    sort_order?: number;
+  }) => apiClient.post(`/admin/sticker-packs/${packId}/stickers`, data),
+
+  updateSticker: (stickerId: string | number, data: {
+    image_url?: string;
+    file_format?: string;
+    file_size?: number;
+    width?: number;
+    height?: number;
+    is_animated?: boolean;
+    sort_order?: number;
+  }) => apiClient.put(`/admin/stickers/${stickerId}`, data),
+
+  deleteSticker: (stickerId: string | number) => apiClient.delete(`/admin/stickers/${stickerId}`),
+
+  reorderStickers: (packId: string | number, stickerOrders: Array<{ id: number; sort_order: number }>) =>
+    apiClient.put(`/admin/sticker-packs/${packId}/stickers/reorder`, { stickerOrders }),
+
+  // System Notifications
+  getSystemNotifications: (page = 1, limit = 20, category = '') => {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    if (category) params.append('category', category);
+    return apiClient.get(`/admin/system-notifications?${params.toString()}`);
+  },
+
+  createSystemNotification: (data: {
+    category?: string;
+    title: string;
+    description: string;
+    target_audience?: 'all' | 'specific';
+    target_user_ids?: number[];
+  }) => apiClient.post('/admin/system-notifications', data),
+
+  deleteSystemNotification: (notificationId: string | number) =>
+    apiClient.delete(`/admin/system-notifications/${notificationId}`),
 };
 
 export { apiClient };

@@ -9,7 +9,6 @@ import ChatDetailScreen from '../screens/Chat/ChatDetailScreen';
 import ContactsScreen from '../screens/Contacts/ContactsScreen';
 import HomeScreen from '../screens/NewsFeed/HomeScreen';
 import ProfileScreen from '../screens/Profile/ProfileScreen';
-import MyProfileScreen from '../screens/Profile/MyProfileScreen';
 import EditProfileScreen from '../screens/Profile/EditProfileScreen';
 import FeedbackScreen from '../screens/Profile/FeedbackScreen';
 import HelpScreen from '../screens/Profile/HelpScreen';
@@ -33,7 +32,7 @@ import CreatePostScreen from '../screens/NewsFeed/CreatePostScreen';
 import CreateStoryScreen from '../screens/NewsFeed/CreateStoryScreen';
 import CommentsScreen from '../screens/NewsFeed/CommentsScreen';
 import VideoFeedScreen from '../screens/Video/VideoFeedScreen';
-import OtherUserProfileScreen from '../screens/Profile/OtherUserProfileScreen';
+import AdminScreen from '../screens/Admin/AdminScreen';
 import BottomTabBar from '../components/Common/BottomTabBar';
 import { ChatStackParamList, MainTabParamList } from './types';
 
@@ -94,20 +93,24 @@ const FeedStackNavigator = () => (
     />
     <FeedStack.Screen
       name="OtherUserProfile"
-      component={OtherUserProfileScreen}
+      component={ProfileScreen}
       options={{ headerShown: false as boolean }}
+    />
+    <FeedStack.Screen
+      name="VideoFeed"
+      component={VideoFeedScreen}
+      options={{ 
+        headerShown: false as boolean,
+        // Ẩn bottom tab bar khi vào VideoFeed screen
+        tabBarStyle: { display: 'none' },
+      }}
     />
   </FeedStack.Navigator>
 );
 
 // Profile Stack
 const ProfileStackNavigator = () => (
-  <ProfileStack.Navigator initialRouteName="MyProfile">
-    <ProfileStack.Screen
-      name="MyProfile"
-      component={MyProfileScreen}
-      options={{ headerShown: false as boolean }}
-    />
+  <ProfileStack.Navigator initialRouteName="Profile">
     <ProfileStack.Screen
       name="Profile"
       component={ProfileScreen}
@@ -196,6 +199,16 @@ const ProfileStackNavigator = () => (
     <ProfileStack.Screen
       name="SystemNotifications"
       component={SystemNotificationsScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="Admin"
+      component={AdminScreen}
+      options={{ headerShown: false as boolean }}
+    />
+    <ProfileStack.Screen
+      name="OtherUserProfile"
+      component={ProfileScreen}
       options={{ headerShown: false as boolean }}
     />
   </ProfileStack.Navigator>

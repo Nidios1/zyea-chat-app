@@ -1,16 +1,23 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, Switch, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { Text, Card, Divider, useTheme, Button } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { useTheme as useAppTheme } from '../../contexts/ThemeContext';
 import { useUpdates } from '../../hooks/useUpdates';
 import { getCurrentUpdateInfo, formatUpdateVersion } from '../../utils/updateUtils';
 import { UpdateModal } from '../../components/Common/UpdateModal';
+import { ProfileStackParamList } from '../../navigation/types';
 import appJson from '../../../app.json';
 import { spacing, typography, borderRadius } from '../../config/designTokens';
 
+type SettingsScreenNavigationProp = StackNavigationProp<ProfileStackParamList, 'Settings'>;
+
 const SettingsScreen = () => {
   const theme = useTheme();
-  const { isDarkMode, toggleTheme } = useAppTheme();
+  const navigation = useNavigation<SettingsScreenNavigationProp>();
+  const { isDarkMode, themeMode } = useAppTheme();
   const { checkForUpdates, isChecking, isUpdateAvailable, currentVersion } = useUpdates({
     checkOnMount: false, // Không tự động check trong settings
     autoDownload: false,
@@ -19,6 +26,19 @@ const SettingsScreen = () => {
   const updateInfo = getCurrentUpdateInfo();
   const [showTestModal, setShowTestModal] = useState(false);
 
+  const getThemeModeLabel = () => {
+    switch (themeMode) {
+      case 'light':
+        return 'Sáng';
+      case 'dark':
+        return 'Tối';
+      case 'system':
+        return 'Theo hệ thống';
+      default:
+        return 'Theo hệ thống';
+    }
+  };
+
   return (
     <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Card style={styles.card}>
@@ -26,20 +46,51 @@ const SettingsScreen = () => {
           Giao diện
         </Text>
         
-        <View style={styles.settingItem}>
-          <View>
-            <Text style={[styles.settingLabel, { color: theme.colors.onBackground }]}>
-              Chế độ tối
-            </Text>
-            <Text style={[styles.settingDescription, { color: theme.colors.onSurfaceVariant }]}>
-              Chuyển đổi giữa chế độ sáng và tối
-            </Text>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => navigation.navigate('InterfaceSettings')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.settingItemContent}>
+            <View>
+              <Text style={[styles.settingLabel, { color: theme.colors.onBackground }]}>
+                Giao diện
+              </Text>
+              <Text style={[styles.settingDescription, { color: theme.colors.onSurfaceVariant }]}>
+                {getThemeModeLabel()}
+              </Text>
+            </View>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={24}
+              color={theme.colors.onSurfaceVariant}
+            />
           </View>
-          <Switch
-            value={Boolean(isDarkMode)}
-            onValueChange={toggleTheme}
-          />
-        </View>
+        </TouchableOpacity>
+
+        <Divider style={styles.divider} />
+
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => navigation.navigate('FontSizeSettings')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.settingItemContent}>
+            <View>
+              <Text style={[styles.settingLabel, { color: theme.colors.onBackground }]}>
+                Kích thước chữ
+              </Text>
+              <Text style={[styles.settingDescription, { color: theme.colors.onSurfaceVariant }]}>
+                Điều chỉnh kích thước văn bản
+              </Text>
+            </View>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={24}
+              color={theme.colors.onSurfaceVariant}
+            />
+          </View>
+        </TouchableOpacity>
         
         <Divider style={styles.divider} />
         
@@ -75,17 +126,27 @@ const SettingsScreen = () => {
           Quyền riêng tư
         </Text>
         
-        <View style={styles.settingItem}>
-          <View>
-            <Text style={[styles.settingLabel, { color: theme.colors.onBackground }]}>
-              Trạng thái hoạt động
-            </Text>
-            <Text style={[styles.settingDescription, { color: theme.colors.onSurfaceVariant }]}>
-              Cho phép mọi người thấy bạn đang online
-            </Text>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => navigation.navigate('ActivityStatus')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.settingItemContent}>
+            <View>
+              <Text style={[styles.settingLabel, { color: theme.colors.onBackground }]}>
+                Trạng thái hoạt động
+              </Text>
+              <Text style={[styles.settingDescription, { color: theme.colors.onSurfaceVariant }]}>
+                Cho phép mọi người thấy bạn đang online
+              </Text>
+            </View>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={24}
+              color={theme.colors.onSurfaceVariant}
+            />
           </View>
-          <Switch value={true} />
-        </View>
+        </TouchableOpacity>
       </Card>
 
       <Card style={styles.card}>
@@ -195,10 +256,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.base,
   },
   settingItem: {
+    paddingVertical: spacing.md,
+  },
+  settingItemContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: spacing.md,
   },
   settingLabel: {
     fontSize: typography.fontSize.md,

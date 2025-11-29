@@ -1,12 +1,12 @@
-import React, { useCallback, useState, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, Modal, Pressable, TouchableOpacity, Text, Dimensions, Platform, Animated } from 'react-native';
+import React, { useCallback, useState, useRef, useEffect } from 'react';
+import { View, StyleSheet, ActivityIndicator, TouchableOpacity, Text, Dimensions, Platform, Animated, PanResponder } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { HomeHeader } from '../../components/NewsFeed/HomeHeader';
-import PostsListScreen from './PostsListScreen';
+import PostsListScreen, { PostsListScreenRef } from './PostsListScreen';
+import SidebarDrawer from '../../components/Common/SidebarDrawer';
 
 // Feed types
 type FeedType = 'discover' | 'following' | 'video';
@@ -28,6 +28,7 @@ export default function HomeScreen() {
   const { user } = useAuth();
   const { colors, isDarkMode } = useTheme();
   const navigation = useNavigation();
+  const route = useRoute();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showMenu, setShowMenu] = useState(false);
   const [tabBarWidth, setTabBarWidth] = useState(screenWidth); // Lưu actual width của tab bar
@@ -35,6 +36,8 @@ export default function HomeScreen() {
   const scrollViewRef = useRef<Animated.ScrollView>(null);
   const selectedIndexRef = useRef(0); // Dùng ref để tránh delay
   const scrollX = useRef(new Animated.Value(0)).current; // Dùng để animate tab indicator mượt mà
+  const postsListRefs = useRef<{ [key: string]: React.RefObject<PostsListScreenRef> | null }>({}); // Refs cho các PostsListScreen
+  const lastRefreshParam = useRef<number | null>(null);
 
   const handleSelect = useCallback(
     (index: number) => {
@@ -115,6 +118,127 @@ export default function HomeScreen() {
     );
   }, [navigation]);
 
+  // Track scroll position to only allow swipe when at start
+  const scrollPositionRef = useRef(0);
+  // Track initial touch position for swipe detection
+  const initialTouchXRef = useRef<number | null>(null);
+
+  // PanResponder for swipe gesture - more reliable than Gesture.Pan for this use case
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: (evt) => {
+        // Only respond to touches that start from the left edge (within 30px from left)
+        const startX = evt.nativeEvent.pageX;
+        initialTouchXRef.current = startX;
+        
+        // Only start if sidebar is closed and scroll is at start
+        const shouldRespond = startX <= 30 && !showMenu && scrollPositionRef.current === 0;
+        if (!shouldRespond) {
+          initialTouchXRef.current = null;
+        }
+        return shouldRespond;
+      },
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Only respond if swiping from left edge and moving right
+        // And horizontal movement is greater than vertical (to avoid conflict with scroll)
+        const startX = initialTouchXRef.current ?? evt.nativeEvent.pageX;
+        return (
+          startX <= 30 &&
+          gestureState.dx > 3 &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.1 &&
+          !showMenu &&
+          scrollPositionRef.current === 0
+        );
+      },
+      onPanResponderGrant: () => {
+        // Touch started - gesture is active
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        // User is dragging - could add visual feedback here if needed
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        // Check if we started from left edge
+        if (initialTouchXRef.current === null || initialTouchXRef.current > 30) {
+          initialTouchXRef.current = null;
+          return;
+        }
+        
+        // Check if swipe was significant enough
+        // Use velocity for faster swipes (if velocity > 0.3, reduce threshold to 20px)
+        // Otherwise require 30px movement
+        const threshold = Math.abs(gestureState.vx) > 0.3 ? 20 : 30;
+        
+        if (
+          gestureState.dx > threshold &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.1 &&
+          !showMenu
+        ) {
+          setShowMenu(true);
+        }
+        
+        // Reset initial touch position
+        initialTouchXRef.current = null;
+      },
+      onPanResponderTerminate: () => {
+        // Gesture was cancelled
+        initialTouchXRef.current = null;
+      },
+    })
+  ).current;
+
+  // Listen for navigation params to trigger scroll to top and refresh (like social-app-main)
+  useEffect(() => {
+    const params = route.params as any;
+    if (params?.refresh && params.refresh !== lastRefreshParam.current) {
+      lastRefreshParam.current = params.refresh;
+      
+      // Get current feed type based on selected index
+      const currentFeedType = FEEDS[selectedIndex]?.id || 'discover';
+      const postsListRef = postsListRefs.current[currentFeedType];
+      
+      if (params.scrollToTop && postsListRef) {
+        // Trigger scroll to top and refresh for current PostsListScreen
+        // Use a small delay to ensure ref is ready
+        setTimeout(() => {
+          if (postsListRef && typeof postsListRef.scrollToTop === 'function') {
+            console.log('Triggering scrollToTop for feed:', currentFeedType);
+            postsListRef.scrollToTop();
+          } else {
+            console.log('PostsListRef not ready or scrollToTop not available:', {
+              hasRef: !!postsListRef,
+              hasMethod: postsListRef && typeof postsListRef.scrollToTop === 'function',
+              feedType: currentFeedType,
+            });
+          }
+        }, 150);
+      }
+    }
+  }, [route.params, selectedIndex]);
+
+  // Also listen for focus events to trigger refresh when tab is pressed
+  useFocusEffect(
+    useCallback(() => {
+      const params = route.params as any;
+      if (params?.refresh && params.refresh !== lastRefreshParam.current) {
+        lastRefreshParam.current = params.refresh;
+        
+        // Get current feed type based on selected index
+        const currentFeedType = FEEDS[selectedIndex]?.id || 'discover';
+        const postsListRef = postsListRefs.current[currentFeedType];
+        
+        if (params.scrollToTop && postsListRef) {
+          // Trigger scroll to top and refresh for current PostsListScreen
+          setTimeout(() => {
+            if (postsListRef && typeof postsListRef.scrollToTop === 'function') {
+              console.log('Triggering scrollToTop from focus effect for feed:', currentFeedType);
+              postsListRef.scrollToTop();
+            }
+          }, 150);
+        }
+      }
+    }, [route.params, selectedIndex])
+  );
+
   if (!user) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
@@ -127,6 +251,12 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]} edges={['top']}>
+      {/* Swipe gesture detector - overlay on left edge with high zIndex */}
+      <View 
+        style={styles.swipeDetector}
+        {...panResponder.panHandlers}
+      />
+      
       <HomeHeader
         onMenuPress={handleMenuPress}
         onLogoPress={handleLogoPress}
@@ -136,7 +266,10 @@ export default function HomeScreen() {
         headerHeight={headerHeight}
         tabBar={
           <View 
-            style={[styles.tabBarContainer, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}
+            style={[styles.tabBarContainer, { 
+              backgroundColor: isDarkMode ? colors.background || '#000000' : colors.surface || '#FFFFFF',
+              borderBottomColor: colors.border 
+            }]}
             onLayout={(e) => {
               // Lưu actual width của tab bar để tính toán chính xác
               const width = e.nativeEvent.layout.width;
@@ -241,7 +374,11 @@ export default function HomeScreen() {
           [{ nativeEvent: { contentOffset: { x: scrollX } } }],
           { 
             useNativeDriver: false, // Cần false vì đang dùng cho layout animation
-            listener: handleScroll,
+            listener: (event: any) => {
+              // Update scroll position for swipe gesture detection
+              scrollPositionRef.current = event.nativeEvent.contentOffset.x;
+              handleScroll(event);
+            },
           }
         )}
         scrollEventThrottle={16} // Tăng lên 16 để mượt mà hơn
@@ -261,104 +398,26 @@ export default function HomeScreen() {
             style={[styles.feedPage, { width: screenWidth }]}
             collapsable={false}
           >
-            <PostsListScreen feedType={feed.id} />
+            <PostsListScreen 
+              feedType={feed.id}
+              ref={(ref: PostsListScreenRef | null) => {
+                if (ref) {
+                  // Store ref directly (forwardRef returns the component instance, not a ref object)
+                  postsListRefs.current[feed.id] = ref as any;
+                } else {
+                  delete postsListRefs.current[feed.id];
+                }
+              }}
+            />
           </View>
         ))}
       </Animated.ScrollView>
 
-      {/* Menu Modal */}
-      <Modal
+      {/* Sidebar Drawer */}
+      <SidebarDrawer
         visible={showMenu}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowMenu(false)}
-        statusBarTranslucent={true}
-      >
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setShowMenu(false)}
-        >
-          <Pressable 
-            style={[styles.menuContainer, { backgroundColor: colors.surface }]}
-            onPress={() => {}} // Prevent closing when pressing on menu content
-          >
-            <View style={[styles.menuHandle, { backgroundColor: colors.border || (isDarkMode ? '#3A3B3C' : '#E4E6EB') }]} />
-            <View style={styles.menuContent}>
-              <TouchableOpacity
-                style={[
-                  styles.menuItem,
-                  selectedIndex === 0 && { backgroundColor: (colors.primary || '#1877F2') + '20' },
-                  { borderBottomColor: colors.border || (isDarkMode ? '#3A3B3C' : '#E4E6EB') },
-                ]}
-                onPress={() => {
-                  if (selectedIndex !== 0) {
-                    handleSelect(0);
-                  }
-                  setShowMenu(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.menuItemText, { 
-                  color: selectedIndex === 0 ? (colors.primary || '#1877F2') : colors.text,
-                  fontWeight: selectedIndex === 0 ? '600' : '400'
-                }]}>
-                  Dành cho bạn
-                </Text>
-                {selectedIndex === 0 && (
-                  <MaterialCommunityIcons name="check" size={20} color={colors.primary || '#1877F2'} />
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.menuItem,
-                  selectedIndex === 1 && { backgroundColor: (colors.primary || '#1877F2') + '20' },
-                  { borderBottomColor: colors.border || (isDarkMode ? '#3A3B3C' : '#E4E6EB') },
-                ]}
-                onPress={() => {
-                  if (selectedIndex !== 1) {
-                    handleSelect(1);
-                  }
-                  setShowMenu(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.menuItemText, { 
-                  color: selectedIndex === 1 ? (colors.primary || '#1877F2') : colors.text,
-                  fontWeight: selectedIndex === 1 ? '600' : '400'
-                }]}>
-                  Đang theo dõi
-                </Text>
-                {selectedIndex === 1 && (
-                  <MaterialCommunityIcons name="check" size={20} color={colors.primary || '#1877F2'} />
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.menuItem,
-                  selectedIndex === 2 && { backgroundColor: (colors.primary || '#1877F2') + '20' },
-                ]}
-                onPress={() => {
-                  if (selectedIndex !== 2) {
-                    handleSelect(2);
-                  }
-                  setShowMenu(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.menuItemText, { 
-                  color: selectedIndex === 2 ? (colors.primary || '#1877F2') : colors.text,
-                  fontWeight: selectedIndex === 2 ? '600' : '400'
-                }]}>
-                  Video
-                </Text>
-                {selectedIndex === 2 && (
-                  <MaterialCommunityIcons name="check" size={20} color={colors.primary || '#1877F2'} />
-                )}
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setShowMenu(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -412,39 +471,14 @@ const styles = StyleSheet.create({
     flex: 1,
     height: '100%',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  menuContainer: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: 20,
-    maxHeight: '50%',
-  },
-  menuHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  menuContent: {
-    paddingHorizontal: 16,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  menuItemText: {
-    fontSize: 16,
+  swipeDetector: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 30, // 30px wide area on left edge to detect swipe (increased for better detection)
+    zIndex: 999,
+    backgroundColor: 'transparent',
   },
 });
 

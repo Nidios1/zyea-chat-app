@@ -48,17 +48,60 @@ export function HomeHeader({
 
   const handleMessengerPress = React.useCallback(() => {
     try {
-      // Navigate to Chat tab (ChatList is the initial screen in ChatStack)
-      navigation.dispatch(
-        CommonActions.navigate({
-          name: 'Chat',
-        } as never)
-      );
+      // Reset Chat stack về ChatList và navigate đến Chat tab
+      const tabNavigator = navigation.getParent()?.getParent();
+      if (tabNavigator) {
+        const state = tabNavigator.getState();
+        const chatRoute = state?.routes.find((r: any) => r.name === 'Chat');
+        
+        // Nếu Chat stack đang có ChatDetail, reset về ChatList
+        if (chatRoute?.state && chatRoute.state.index > 0) {
+          tabNavigator.dispatch(
+            CommonActions.reset({
+              index: state.routes.findIndex((r: any) => r.name === 'Chat'),
+              routes: state.routes.map((route: any) => {
+                if (route.name === 'Chat') {
+                  // Reset Chat stack về ChatList
+                  return {
+                    ...route,
+                    state: {
+                      ...route.state,
+                      index: 0,
+                      routes: route.state?.routes?.slice(0, 1) || [{ name: 'ChatList' }],
+                    },
+                  };
+                }
+                return route;
+              }),
+            })
+          );
+        } else {
+          // Nếu Chat stack đã ở ChatList, chỉ cần navigate đến Chat tab
+          navigation.dispatch(
+            CommonActions.navigate({
+              name: 'Chat',
+              params: {
+                screen: 'ChatList',
+              },
+            } as never)
+          );
+        }
+      } else {
+        // Fallback: navigate trực tiếp
+        navigation.dispatch(
+          CommonActions.navigate({
+            name: 'Chat',
+            params: {
+              screen: 'ChatList',
+            },
+          } as never)
+        );
+      }
     } catch (error) {
       console.error('Navigation error:', error);
       // Fallback: try direct navigation
       try {
-        (navigation as any).navigate('Chat');
+        (navigation as any).navigate('Chat', { screen: 'ChatList' });
       } catch (fallbackError) {
         console.error('Fallback navigation error:', fallbackError);
       }

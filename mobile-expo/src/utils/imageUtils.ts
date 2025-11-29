@@ -35,20 +35,47 @@ export const getAvatarURL = (avatarPath: string | null | undefined): string => {
 };
 
 // Get Image URL - handles both chat images and post images
+// IMPORTANT: Always returns full-size image URL, removes thumbnail/small/medium suffixes
 export const getImageURL = (imagePath: string | null | undefined): string => {
   if (!imagePath) {
     return '';
   }
 
+  // Normalize path - remove thumbnail/small/medium suffixes to get full-size image
+  let normalizedPath = imagePath.trim();
+  
+  // Remove common thumbnail/size suffixes to get original full-size image
+  // Examples: image_thumb.jpg -> image.jpg, image_small.jpg -> image.jpg, image_medium.jpg -> image.jpg
+  // Match patterns like: filename_thumb.jpg, filename_small.jpg, etc.
+  const sizeSuffixes = ['_thumb', '_small', '_medium', '_large', '_thumbnail', 'thumbnail'];
+  for (const suffix of sizeSuffixes) {
+    // Match suffix before file extension
+    const regex = new RegExp(`${suffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\.[^.]+)?$`, 'i');
+    normalizedPath = normalizedPath.replace(regex, (match, ext) => ext || '');
+  }
+
   // If already a full URL
-  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-    return imagePath;
+  if (normalizedPath.startsWith('http://') || normalizedPath.startsWith('https://')) {
+    try {
+      // Also remove size suffixes from full URLs
+      const url = new URL(normalizedPath);
+      let pathname = url.pathname;
+      
+      // Remove size suffixes from pathname
+      for (const suffix of sizeSuffixes) {
+        const regex = new RegExp(`${suffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\.[^.]+)?$`, 'i');
+        pathname = pathname.replace(regex, (match, ext) => ext || '');
+      }
+      
+      url.pathname = pathname;
+      return url.toString();
+    } catch (e) {
+      // If URL parsing fails, return original
+      return normalizedPath;
+    }
   }
 
   const baseUrl = API_BASE_URL.replace('/api', '');
-  
-  // Normalize path - remove leading slash if present for consistent handling
-  let normalizedPath = imagePath.trim();
   
   // If path starts with /uploads/ (with leading slash)
   if (normalizedPath.startsWith('/uploads/')) {

@@ -58,8 +58,8 @@ const StickerPicker: React.FC<StickerPickerProps> = ({
         throw error;
       }
     },
-    staleTime: 0, // Always fetch fresh stickers on mount
-    gcTime: 10 * 60 * 1000, // Keep in cache for instant display while fetching
+    staleTime: 5 * 60 * 1000, // 5 phút - sticker packs không thay đổi thường xuyên
+    gcTime: 15 * 60 * 1000, // 15 phút cache
   });
 
   // Filter out empty packs - đảm bảo là array

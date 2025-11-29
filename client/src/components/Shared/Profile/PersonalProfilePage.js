@@ -32,6 +32,7 @@ import { getAvatarURL, getUploadedImageURL } from '../../../utils/imageUtils';
 import { getApiBaseUrl } from '../../../utils/platformConfig';
 import { getCurrentVersion } from '../../../utils/liveUpdate';
 import MobileProfileInformation from '../../Mobile/MobileProfileInformation';
+import FeedbackModal from './FeedbackModal';
 
 const PersonalProfileContainer = styled.div`
   position: fixed;
@@ -807,6 +808,7 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
   const [showInterfaceSettings, setShowInterfaceSettings] = useState(false);
   const [showTimeOptions, setShowTimeOptions] = useState(false);
   const [showProfileInformation, setShowProfileInformation] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(getInitialAvatarUrl());
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const menuSectionRef = useRef(null);
@@ -1093,7 +1095,7 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
         console.log('Kích thước chữ clicked');
         break;
       case 'feedback':
-        console.log('Góp ý clicked');
+        setShowFeedbackModal(true);
         break;
       case 'help':
         console.log('Hướng dẫn sử dụng clicked');
@@ -1472,6 +1474,11 @@ const PersonalProfilePage = ({ user: userProp, onBack, onActivityStatusChange })
           }}
         />
       )}
+
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+      />
     </>
   );
 };

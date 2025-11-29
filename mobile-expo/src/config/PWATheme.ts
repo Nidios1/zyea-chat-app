@@ -13,13 +13,13 @@ export const PWATheme = {
     success: '#00a651',
   },
   dark: {
-    primary: '#ffffff', // White for primary actions (like Threads)
+    primary: '#0084ff', // Bright blue for primary actions - nổi bật trên nền tối
     secondary: '#00a651',
     background: '#1a1a1a', // Dark gray background like image
-    surface: '#1a1a1a', // Dark gray surface
+    surface: '#2a2a2b', // Slightly lighter for cards/surfaces
     text: '#ffffff', // White text
-    textSecondary: '#a0a0a0', // Light gray for secondary text
-    border: '#2a2a2b', // Dark gray for borders
+    textSecondary: '#b0b0b0', // Lighter gray for better contrast
+    border: '#3a3a3b', // Lighter border for better visibility
     error: '#ff4444',
     success: '#00a651',
   },

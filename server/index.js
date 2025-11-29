@@ -18,6 +18,8 @@ const friendsRoutes = require('./routes/friends');
 const appRoutes = require('./routes/app');
 const adminRoutes = require('./routes/admin');
 const { router: notificationRoutes } = require('./routes/notifications');
+const feedbackRoutes = require('./routes/feedback');
+const verificationRoutes = require('./routes/verification');
 const { connectDB } = require('./config/database');
 const { authenticateToken } = require('./middleware/auth');
 
@@ -62,7 +64,7 @@ const io = socketIo(server, {
       
       // Allow server URL itself (mobile app might send this as origin)
       // IP sẽ được sync từ network-config.js qua config.env
-      const serverUrl = process.env.SERVER_URL || 'http://192.168.0.103:5000';
+      const serverUrl = process.env.SERVER_URL || 'http://192.168.0.102:5000';
       const allowedServerOrigins = [
         serverUrl,
         `http://localhost:5000`,
@@ -175,6 +177,8 @@ app.use('/api/friends', authenticateToken, friendsRoutes);
 app.use('/api/notifications', authenticateToken, notificationRoutes);
 app.use('/api/app', appRoutes); // Live update endpoints
 app.use('/api/upload', uploadRoutes);
+app.use('/api/feedback', feedbackRoutes); // Feedback routes (requires authentication)
+app.use('/api/verification', verificationRoutes); // Verification routes (requires authentication)
 app.use('/api/admin', adminRoutes); // Admin routes (requires admin role)
 
 // ✅ Tối ưu: Tạo helper function để tránh lặp code get connection

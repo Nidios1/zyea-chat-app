@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo, useImperativeHandle, forwardRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -33,6 +33,7 @@ import PostVideoPlayer from '../../components/NewsFeed/PostVideoPlayer';
 import PostContent from '../../components/NewsFeed/PostContent';
 import FullScreenImageViewer from '../../components/Common/FullScreenImageViewer';
 import { Lightbox } from '../../components/Common/Lightbox';
+import { VerifiedBadge } from '../../components/Common/VerifiedBadge';
 import SplashScreen from '../../components/Splash/SplashScreen';
 import ReactionPicker from '../../components/NewsFeed/ReactionPicker';
 import StoriesSection from '../../components/NewsFeed/StoriesSection';
@@ -317,6 +318,8 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
     marginBottom: 4,
     width: '100%',
     overflow: 'hidden',
+    minHeight: 200, // Đảm bảo video container luôn có chiều cao tối thiểu
+    backgroundColor: 'transparent',
   },
   videoWrapper: {
     width: '100%',
@@ -569,7 +572,13 @@ interface PostsListScreenProps {
   feedType?: 'discover' | 'following' | 'video';
 }
 
-const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) => {
+export interface PostsListScreenRef {
+  scrollToTop: () => void;
+  refresh: () => void;
+}
+
+const PostsListScreen = forwardRef<PostsListScreenRef, PostsListScreenProps>((props, ref) => {
+  const { feedType = 'discover' } = props;
   const { user } = useAuth();
   const { colors, isDarkMode } = useAppTheme();
   const navigation = useNavigation();
@@ -771,74 +780,136 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
   }, [route.params, handleRefresh]);
 
   // Fetch following list for filtering and checking follow status
-  const { data: followingList = [], isLoading: isLoadingFollowing, refetch: refetchFollowing } = useQuery({
+  // Tối ưu: Cache 2 phút vì following list không thay đổi thường xuyên
+  const { data: followingListData, isLoading: isLoadingFollowing, refetch: refetchFollowing } = useQuery({
     queryKey: ['following'],
     queryFn: async () => {
       const res = await friendsAPI.getFollowing();
       // Handle both array response and object with data property
-      return Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      const data = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+      // Ensure we always return an array
+      return Array.isArray(data) ? data : [];
     },
-    // Always fetch to check follow status for all posts
+    staleTime: 2 * 60 * 1000, // 2 phút - following list không thay đổi thường xuyên
+    gcTime: 10 * 60 * 1000, // 10 phút cache
   });
+
+  // Ensure followingList is always an array
+  const followingList = Array.isArray(followingListData) ? followingListData : [];
 
   // Create a Set of following IDs for quick lookup
   const followingIds = new Set(
-    followingList.map((f: any) => f.following_id || f.id || f.user_id)
+    (Array.isArray(followingList) ? followingList : []).map((f: any) => f.following_id || f.id || f.user_id)
   );
 
   // Fetch conversations to get unread count
   // Socket will handle real-time updates, no polling needed
+  // Tối ưu: Cache 1 phút, socket sẽ update real-time
   const { data: conversations = [] } = useQuery({
     queryKey: ['conversations'],
     queryFn: async () => {
       const res = await chatAPI.getConversations();
       return Array.isArray(res.data) ? res.data : (res.data?.conversations || []);
     },
-    staleTime: 0, // Always fetch fresh data on mount
+    staleTime: 60 * 1000, // 1 phút - socket sẽ update real-time nên không cần refetch liên tục
     gcTime: 10 * 60 * 1000, // 10 minutes cache for instant display
     refetchInterval: false, // No polling - use socket for real-time updates
-    refetchOnMount: true, // Always refetch on mount for fresh data
   });
 
   // Fetch friend suggestions (chỉ hiển thị ở discover tab)
-  // Lấy suggestions từ các users đã đăng bài trong feed
+  // Lấy suggestions từ các users đã đăng bài trong feed + search users nếu cần
   const { data: friendSuggestions = [], refetch: refetchSuggestions } = useQuery({
-    queryKey: ['friendSuggestions', (posts?.length || 0), followingIds.size],
+    queryKey: ['friendSuggestions', (posts?.length || 0), followingIds.size, user?.id],
     queryFn: async () => {
       try {
-        // Kiểm tra posts có tồn tại và là array
-        if (!posts || !Array.isArray(posts) || posts.length === 0) {
-          return [];
-        }
-
-        // Lấy danh sách users từ các posts trong feed
-        const usersFromPosts = new Map<string | number, any>();
+        const allSuggestions: any[] = [];
+        const currentUserId = user?.id ? String(user.id) : null;
         
-        posts.forEach((post: any) => {
-          const userId = post.user_id || post.user?.id;
-          const userName = post.full_name || post.username;
-          const userAvatar = post.avatar_url || post.user?.avatar_url;
-          
-          if (userId && userId !== user?.id && !followingIds.has(userId)) {
-            // Chỉ thêm nếu chưa có trong map
-            if (!usersFromPosts.has(userId)) {
-              usersFromPosts.set(userId, {
-                id: userId,
-                user_id: userId,
-                full_name: userName,
-                username: post.username || post.user?.username,
-                avatar_url: userAvatar,
-              });
-            }
+        // 1. Ưu tiên lấy từ search API (có nhiều users hơn)
+        try {
+          const searchResponse = await usersAPI.searchUsers('');
+          if (searchResponse.data && Array.isArray(searchResponse.data)) {
+            console.log('🔍 Search API returned', searchResponse.data.length, 'users');
+            
+            const searchCandidates = searchResponse.data
+              .filter((u: any) => {
+                const uId = u.id || u.user_id;
+                const uIdString = uId ? String(uId) : null;
+                if (!uIdString || !currentUserId) return false;
+                
+                // Loại bỏ: chính user hiện tại, đã follow
+                const isCurrentUser = uIdString === currentUserId;
+                const isFollowing = followingIds.has(uId) || followingIds.has(uIdString);
+                
+                return !isCurrentUser && !isFollowing;
+              })
+              .map((u: any) => ({
+                id: u.id || u.user_id,
+                user_id: u.id || u.user_id,
+                full_name: u.full_name || u.name || u.username,
+                username: u.username || u.email,
+                avatar_url: u.avatar_url || u.avatar,
+              }));
+            
+            console.log('🔍 After filter:', {
+              total: searchResponse.data.length,
+              filtered: searchCandidates.length,
+              followingCount: followingIds.size,
+              currentUserId,
+            });
+            
+            allSuggestions.push(...searchCandidates);
           }
-        });
+        } catch (searchError) {
+          console.error('🔍 Error fetching from search API:', searchError);
+        }
         
-        // Chuyển map thành array và lấy 5 suggestions đầu tiên
-        const suggestions = Array.from(usersFromPosts.values()).slice(0, 5);
+        // 2. Bổ sung từ posts trong feed (nếu chưa có trong allSuggestions)
+        if (posts && Array.isArray(posts) && posts.length > 0) {
+          const usersFromPosts = new Map<string | number, any>();
+          
+          posts.forEach((post: any) => {
+            const userId = post.user_id || post.user?.id;
+            const userName = post.full_name || post.username;
+            const userAvatar = post.avatar_url || post.user?.avatar_url;
+            const postUserId = userId ? String(userId) : null;
+            
+            // Loại bỏ: chính user hiện tại, đã follow, hoặc đã có trong allSuggestions
+            if (
+              postUserId && 
+              currentUserId && 
+              postUserId !== currentUserId && 
+              !followingIds.has(userId) &&
+              !followingIds.has(postUserId) &&
+              !allSuggestions.some((s: any) => String(s.id) === postUserId)
+            ) {
+              if (!usersFromPosts.has(userId) && !usersFromPosts.has(postUserId)) {
+                usersFromPosts.set(userId, {
+                  id: userId,
+                  user_id: userId,
+                  full_name: userName,
+                  username: post.username || post.user?.username,
+                  avatar_url: userAvatar,
+                });
+              }
+            }
+          });
+          
+          const postsSuggestions = Array.from(usersFromPosts.values());
+          allSuggestions.push(...postsSuggestions);
+          console.log('🔍 Added', postsSuggestions.length, 'suggestions from posts');
+        }
+        
+        // Shuffle tất cả suggestions để mỗi lần load lại sẽ có thứ tự khác nhau
+        const shuffled = allSuggestions.sort(() => Math.random() - 0.5);
+        
+        // Lấy tối đa 15 suggestions
+        const suggestions = shuffled.slice(0, 15);
+        
         console.log('🔍 Friend suggestions fetched:', {
-          totalPosts: posts.length,
-          uniqueUsers: usersFromPosts.size,
-          suggestionsCount: suggestions.length,
+          fromSearch: allSuggestions.length,
+          total: suggestions.length,
+          followingCount: followingIds.size,
           suggestions: suggestions.map((s: any) => ({ id: s.id, name: s.full_name || s.username })),
         });
         return suggestions;
@@ -847,8 +918,9 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
         return [];
       }
     },
-    enabled: (activeTab === 'discover' || activeTab === 'all') && !!user?.id && !!posts && Array.isArray(posts) && posts.length > 0 && (followingList?.length ?? 0) >= 0,
-    staleTime: 0, // Always fetch fresh suggestions
+    enabled: (activeTab === 'discover' || activeTab === 'all') && !!user?.id,
+    staleTime: 5 * 60 * 1000, // 5 phút - suggestions không cần refresh quá thường xuyên
+    gcTime: 10 * 60 * 1000, // 10 phút cache
   });
 
   const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string | number>>(new Set());
@@ -857,17 +929,31 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
       console.log('🔍 Suggestions: friendSuggestions is empty or not array');
       return [];
     }
-    const filtered = friendSuggestions.filter(
-      (s: any) => !dismissedSuggestions.has(s.id || s.user_id)
-    );
-    console.log('🔍 Suggestions:', {
+    
+    // Chuyển đổi user.id sang string để so sánh chính xác
+    const currentUserId = user?.id ? String(user.id) : null;
+    
+    const filtered = friendSuggestions.filter((s: any) => {
+      const suggestionId = s.id || s.user_id;
+      const suggestionIdString = suggestionId ? String(suggestionId) : null;
+      
+      // Loại bỏ: đã dismiss, chính user hiện tại, hoặc đã follow
+      const isDismissed = dismissedSuggestions.has(suggestionId) || dismissedSuggestions.has(suggestionIdString);
+      const isCurrentUser = currentUserId && suggestionIdString && suggestionIdString === currentUserId;
+      const isFollowing = followingIds.has(suggestionId) || followingIds.has(suggestionIdString);
+      
+      return !isDismissed && !isCurrentUser && !isFollowing;
+    });
+    
+    console.log('🔍 Suggestions filtered:', {
       total: friendSuggestions.length,
       visible: filtered.length,
       dismissed: dismissedSuggestions.size,
-      activeTab,
+      currentUserId,
+      filteredIds: filtered.map((s: any) => ({ id: s.id, name: s.full_name || s.username })),
     });
     return filtered;
-  }, [friendSuggestions, dismissedSuggestions, activeTab]);
+  }, [friendSuggestions, dismissedSuggestions, activeTab, user?.id, followingIds]);
 
   // Calculate unread count from conversations
   const unreadCount = useMemo(() => {
@@ -921,6 +1007,24 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
       // Include all posts (including videos) in news feed
       const allPosts = Array.isArray(res.data) ? res.data : (res.data?.posts || []);
       console.log('📱 Received posts:', allPosts.length, 'posts');
+      
+      // Debug: Check for video posts in allPosts
+      const videoPosts = allPosts.filter((p: any) => {
+        return p.videoUrl || p.video_url || p.videos || p.video || (p.media_type === 'video' && p.media_url);
+      });
+      console.log('📱 Video posts found in response:', videoPosts.length, 'out of', allPosts.length);
+      if (videoPosts.length > 0) {
+        console.log('📱 Sample video post:', {
+          id: videoPosts[0].id,
+          videoUrl: videoPosts[0].videoUrl,
+          video_url: videoPosts[0].video_url,
+          videos: videoPosts[0].videos,
+          video: videoPosts[0].video,
+          media_type: videoPosts[0].media_type,
+          media_url: videoPosts[0].media_url,
+        });
+      }
+      
       if (allPosts.length > 0) {
         const userIds = [...new Set(allPosts.map((p: any) => p.user_id))];
         console.log('📱 Posts from', userIds.length, 'different users:', userIds);
@@ -937,35 +1041,62 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
         }
       }
       
-      // Return all posts (including videos) - videos will be displayed in news feed
-      const postsWithVideos = allPosts.filter((p: any) => p.videoUrl || p.video_url || p.videos || p.video || (p.media_type === 'video' && p.media_url));
-      console.log('📱 Posts with videos:', postsWithVideos.length);
-      if (postsWithVideos.length > 0) {
-        console.log('📱 Sample video post data:', {
-          id: postsWithVideos[0].id,
-          videoUrl: postsWithVideos[0].videoUrl,
-          video_url: postsWithVideos[0].video_url,
-          videos: postsWithVideos[0].videos,
-          video: postsWithVideos[0].video,
-          media_type: postsWithVideos[0].media_type,
-          media_url: postsWithVideos[0].media_url,
-          allKeys: Object.keys(postsWithVideos[0]),
+      // Filter video posts if activeTab is 'video'
+      if (activeTab === 'video') {
+        const postsWithVideos = allPosts.filter((p: any) => {
+          // Check multiple possible video fields
+          const hasVideo = p.videoUrl || 
+                          p.video_url || 
+                          (Array.isArray(p.videos) && p.videos.length > 0) || 
+                          p.video || 
+                          (p.media_type === 'video' && p.media_url);
+          return hasVideo;
         });
+        console.log('📱 Video tab - Total posts:', allPosts.length, 'Video posts:', postsWithVideos.length);
+        if (postsWithVideos.length > 0) {
+          const samplePost = postsWithVideos[0];
+          console.log('📱 Sample video post data:', {
+            id: samplePost.id,
+            videoUrl: samplePost.videoUrl,
+            video_url: samplePost.video_url,
+            videos: samplePost.videos,
+            video: samplePost.video,
+            media_type: samplePost.media_type,
+            media_url: samplePost.media_url,
+            // Thumbnail fields
+            thumbnailUrl: samplePost.thumbnailUrl,
+            thumbnail_url: samplePost.thumbnail_url,
+            video_thumbnail: samplePost.video_thumbnail,
+            images: samplePost.images,
+            image_url: samplePost.image_url,
+            imagesCount: samplePost.images ? samplePost.images.length : 0,
+            allKeys: Object.keys(samplePost),
+          });
+        } else {
+          console.log('⚠️ No video posts found. Sample post keys:', allPosts.length > 0 ? Object.keys(allPosts[0]) : 'No posts');
+        }
+        return postsWithVideos;
       }
+      
+      // For other tabs, return all posts
       return allPosts;
     },
     enabled: activeTab === 'discover' || activeTab === 'video' || (activeTab === 'following' && !isLoadingFollowing),
-    staleTime: 0, // Always fetch fresh data on mount for instant updates
-    gcTime: 5 * 60 * 1000, // Keep in cache for instant display while fetching
+    staleTime: 30 * 1000, // 30 giây - posts cần refresh thường xuyên hơn nhưng không cần mỗi lần mount
+    gcTime: 10 * 60 * 1000, // 10 phút - giữ cache lâu hơn để hiển thị nhanh
     refetchOnWindowFocus: false, // Don't refetch on focus
   });
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
+      // Reset dismissed suggestions khi refresh để có suggestions mới
+      setDismissedSuggestions(new Set());
+      
       // Invalidate cache to force fresh data
       await queryClient.invalidateQueries({ queryKey: ['posts', activeTab] });
       await queryClient.invalidateQueries({ queryKey: ['following'] });
+      await queryClient.invalidateQueries({ queryKey: ['friendSuggestions'] });
       
       // Always refresh following list to get latest follow status
       await refetchFollowing();
@@ -973,13 +1104,16 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
       // Refetch posts with current activeTab
       await refetch();
       
+      // Refresh suggestions để có suggestions mới
+      await refetchSuggestions();
+      
       console.log('📱 Refresh completed for tab:', activeTab);
     } catch (error) {
       console.error('❌ Error refreshing:', error);
     } finally {
       setRefreshing(false);
     }
-  }, [queryClient, activeTab, refetchFollowing, refetch]);
+  }, [queryClient, activeTab, refetchFollowing, refetch, refetchSuggestions]);
 
   // Handler để navigate đến Chat với hiệu ứng chuyển app (giống Messenger)
   const handleNavigateToChat = () => {
@@ -1065,8 +1199,11 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
       await friendsAPI.follow(userId.toString());
       // Refresh following list to update UI
       await refetchFollowing();
-      // Refresh suggestions để loại bỏ user đã follow
-      await refetchSuggestions();
+      // Refresh suggestions để loại bỏ user đã follow và lấy suggestions mới
+      // Delay một chút để following list được update trước
+      setTimeout(() => {
+        refetchSuggestions();
+      }, 500);
       Toast.show({
         type: 'success',
         text1: 'Đã theo dõi',
@@ -1082,7 +1219,11 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
 
   const handleDismissSuggestion = useCallback((userId: string | number) => {
     setDismissedSuggestions(prev => new Set([...prev, userId]));
-  }, []);
+    // Refresh suggestions sau khi dismiss để có suggestions mới thay thế
+    setTimeout(() => {
+      refetchSuggestions();
+    }, 300);
+  }, [refetchSuggestions]);
 
   const handlePressSuggestionUser = useCallback((userId: string | number) => {
     navigation.navigate('OtherUserProfile' as never, { userId: userId.toString() } as never);
@@ -1368,6 +1509,7 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
   // Không cần useEffect này nữa vì PostVideoPlayer đã xử lý
 
   // Tạo data array với suggestions chèn vào giữa (sau 2-3 posts đầu tiên)
+  // Note: Video tab không hiển thị suggestions, chỉ hiển thị video posts trong grid
   const postsWithSuggestions = useMemo(() => {
     // Kiểm tra posts có tồn tại và là array
     if (!posts || !Array.isArray(posts)) {
@@ -1380,6 +1522,11 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
       visibleSuggestionsLength: visibleSuggestions?.length || 0,
       postsLength: posts.length,
     });
+
+    // Video tab: không hiển thị suggestions, chỉ trả về posts
+    if (activeTab === 'video') {
+      return posts;
+    }
 
     // Hiển thị suggestions cho cả 'discover' và 'all' (nếu activeTab là 'all' thì cũng là discover tab)
     const isDiscoverTab = activeTab === 'discover' || activeTab === 'all';
@@ -1434,6 +1581,27 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
     }
   }, [posts]);
 
+  // Render video post card for grid layout (video tab)
+  const renderVideoPostCard = useCallback(({ item, index }: { item: any, index: number }) => {
+    // Import VideoPostCard dynamically
+    const VideoPostCard = require('../../components/NewsFeed/VideoPostCard').VideoPostCard;
+    
+    return (
+      <VideoPostCard
+        post={item}
+        onPress={() => {
+          // Navigate to video feed or play video
+          const postId = item.id || item._id || item.post_id || item.postId;
+          if (postId) {
+            navigation.navigate('VideoFeed' as never, {
+              initialPostId: postId,
+            } as never);
+          }
+        }}
+      />
+    );
+  }, [navigation]);
+
   // Memoize renderPost để tránh re-render không cần thiết
   const renderPost = useCallback(({ item, index }: { item: any, index: number }) => {
     // Kiểm tra nếu item là suggestions thì render component FriendsSuggestions
@@ -1449,10 +1617,42 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
       );
     }
 
+    // For video tab, use grid layout - render as video card
+    if (activeTab === 'video') {
+      return renderVideoPostCard({ item, index });
+    }
+
     // Get author info - API returns user fields directly on post object
     const authorName = item.full_name || item.username || 'Unknown';
     const authorAvatar = item.avatar_url || '';
     const authorId = item.user_id || item.user?.id;
+    // Check if author is verified - API returns is_verified directly on item (MySQL returns 1/0, convert to boolean)
+    // Debug: Log all verification-related fields for ALL posts
+    if (__DEV__) {
+      console.log('🔍 [Post Debug]', {
+        postId: item.id,
+        authorName: item.full_name || item.username,
+        authorId,
+        'item.is_verified': item.is_verified,
+        'item.user?.is_verified': item.user?.is_verified,
+        'typeof item.is_verified': typeof item.is_verified,
+        'Boolean(item.is_verified)': Boolean(item.is_verified),
+      });
+    }
+    const isAuthorVerified = Boolean(item.is_verified || item.user?.is_verified);
+    
+    // Debug log for verified users (only in development)
+    if (__DEV__ && isAuthorVerified) {
+      console.log('✅ [Verified Badge] Should show for:', {
+        postId: item.id,
+        authorName,
+        authorId,
+        is_verified: item.is_verified,
+        user_is_verified: item.user?.is_verified,
+        isAuthorVerified,
+      });
+    }
+    
     const postTime = item.created_at ? formatTimeAgo(new Date(item.created_at)) : '';
     
     // Get online status - check multiple sources
@@ -1460,7 +1660,7 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
     let isAuthorOnline = false;
     if (authorIdString) {
       // Check from following list first (most reliable)
-      const followingUser = followingList.find((f: any) => {
+      const followingUser = (Array.isArray(followingList) ? followingList : []).find((f: any) => {
         const fId = f.following_id || f.id || f.user_id;
         return String(fId) === authorIdString;
       });
@@ -1531,8 +1731,8 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
     
     // Debug: Log video detection with more details
     if (postVideoUrl && postVideoUrl.trim() !== '') {
-      console.log('🎥 Video detected for post:', item.id, 'URL:', postVideoUrl);
-      console.log('🎥 Video fields:', {
+      console.log('🎥 [DISCOVER TAB] Video detected for post:', item.id, 'URL:', postVideoUrl, 'activeTab:', activeTab);
+      console.log('🎥 [DISCOVER TAB] Video fields:', {
         rawVideoPath,
         processedUrl: postVideoUrl,
         videoUrl: item.videoUrl,
@@ -1541,11 +1741,12 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
         video: item.video,
         media_type: item.media_type,
         media_url: item.media_url,
+        activeTab,
       });
     } else {
       // Debug: Log when video is NOT detected to help troubleshoot
       if (item.videoUrl || item.video_url || item.videos || item.video || item.media_type === 'video') {
-        console.log('⚠️ Video field exists but URL is empty or invalid for post:', item.id, {
+        console.log('⚠️ [DISCOVER TAB] Video field exists but URL is empty or invalid for post:', item.id, {
           rawVideoPath,
           processedUrl: postVideoUrl,
           videoUrl: item.videoUrl,
@@ -1555,6 +1756,7 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
           media_type: item.media_type,
           media_url: item.media_url,
           hasVideo,
+          activeTab,
         });
       }
     }
@@ -1651,6 +1853,10 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
                 <Text style={[dynamicStyles.authorName, { color: colors.text, maxWidth: '70%' }]} numberOfLines={1}>
                   {authorName}
                 </Text>
+                {/* Verified badge - hiển thị ngay sau tên */}
+                {isAuthorVerified && (
+                  <VerifiedBadge size={16} />
+                )}
                 <Text style={[dynamicStyles.authorHandle, { 
                   color: colors.textSecondary || (isDarkMode ? '#B0B3B8' : '#65676B'),
                   fontSize: 16,
@@ -1680,17 +1886,30 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
 
             {/* Post Video - Render BEFORE images */}
             {postVideoUrl && postVideoUrl.trim() !== '' ? (
-              <View style={dynamicStyles.videoContainer}>
+              <View 
+                style={[
+                  dynamicStyles.videoContainer,
+                  { 
+                    backgroundColor: '#000000', // Debug: Black background to see container
+                    minHeight: 200, // Ensure minimum height
+                  }
+                ]}
+                onLayout={(event) => {
+                  const { width, height } = event.nativeEvent.layout;
+                  console.log('📐 Video container layout:', { postId: item.id, width, height });
+                }}
+              >
                 {(() => {
                   // Debug: Log before rendering video
                   const postIdString = String(item.id || item._id || item.post_id || item.postId || 'unknown');
-                  console.log('🎬 Rendering PostVideoPlayer for post:', item.id, {
-                    postVideoUrl,
-                    videoThumbnail,
+                  console.log('🎬 [RENDER] Rendering PostVideoPlayer for post:', item.id, {
+                    postVideoUrl: postVideoUrl.substring(0, 50) + '...',
+                    videoThumbnail: videoThumbnail ? 'exists' : 'none',
                     videoAspectRatio,
                     postId: postIdString,
                     isPlaying: playingVideoId === postIdString,
                     hasVideo,
+                    activeTab,
                   });
                   return (
                     <PostVideoPlayer
@@ -1860,6 +2079,7 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
     handleVideoPress,
     setPlayingVideoId,
     handlePostCollapse,
+    renderVideoPostCard,
   ]);
 
   // Handle logo press - scroll to top
@@ -1868,6 +2088,34 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
       flatListRef.current.scrollToOffset({ offset: 0, animated: true });
     }
   }, []);
+
+  // Expose methods via ref (for HomeScreen to call when tab is pressed)
+  useImperativeHandle(ref, () => ({
+    scrollToTop: () => {
+      if (flatListRef.current) {
+        // Scroll to a small negative offset first to trigger pull-to-refresh indicator
+        flatListRef.current.scrollToOffset({ offset: -50, animated: false });
+        // Immediately show refresh indicator
+        setRefreshing(true);
+        // Then scroll to top with animation
+        setTimeout(() => {
+          flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+          // Trigger refresh after scroll animation
+          setTimeout(() => {
+            handleRefresh();
+          }, 200);
+        }, 50);
+      }
+    },
+    refresh: async () => {
+      // Show refresh indicator
+      setRefreshing(true);
+      // Trigger refresh
+      setTimeout(() => {
+        handleRefresh();
+      }, 100);
+    },
+  }), [handleRefresh]);
 
   // Handle menu press
   const handleMenuPress = useCallback(() => {
@@ -1984,6 +2232,8 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
             return item.id?.toString() || Math.random().toString();
           }}
           renderItem={renderPost}
+          numColumns={activeTab === 'video' ? 2 : 1}
+          columnWrapperStyle={activeTab === 'video' ? { paddingHorizontal: 8, gap: 8 } : undefined}
           ItemSeparatorComponent={() => null}
           showsVerticalScrollIndicator={false}
           style={{ backgroundColor: colors.background || (isDarkMode ? '#000000' : '#f8f9fa') }}
@@ -2011,9 +2261,9 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
                     titleColor: colors.text || '#000000',
                     progressViewOffset: 
                       (activeTab === 'discover' || activeTab === 'video')
-                        ? Math.max(insets.top + 20, 0) // iOS: Dùng safe area insets + offset nhỏ để icon hiển thị rõ
+                        ? Math.max(insets.top + headerHeight - 10, 0) // iOS: Tính header height, trừ 10px để icon hiển thị rõ hơn
                         : activeTab === 'following'
-                        ? Math.max(insets.top + 20, 0) // iOS: Following tab
+                        ? Math.max(insets.top + followingHeaderHeight + 48 - 10, 0) // iOS: Following tab, trừ 10px
                         : 0
                   }
                 : {
@@ -2021,9 +2271,9 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
                     progressBackgroundColor: colors.surface || '#FFFFFF',
                     progressViewOffset: 
                       (activeTab === 'discover' || activeTab === 'video')
-                        ? Math.max(insets.top + 10, 0) // Android: Dùng safe area insets + offset nhỏ để icon hiển thị rõ
+                        ? Math.max(insets.top + headerHeight - 5, 0) // Android: Tính header height, trừ 5px để icon hiển thị rõ hơn
                         : activeTab === 'following'
-                        ? Math.max(insets.top + 10, 0) // Android: Following tab
+                        ? Math.max(insets.top + followingHeaderHeight + 48 - 5, 0) // Android: Following tab, trừ 5px
                         : 0
                   }
               )}
@@ -2054,7 +2304,8 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
           ]}
           ListHeaderComponent={
             <View style={{ marginTop: 0, paddingTop: 0, marginBottom: 0 }}>
-              {(activeTab === 'discover' || activeTab === 'video') ? (
+              {/* Chỉ hiển thị newPostSection và StoriesSection cho discover tab, không hiển thị cho video tab */}
+              {activeTab === 'discover' ? (
                 <>
                 <TouchableOpacity
                   style={[
@@ -2115,17 +2366,30 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
                   }}
                 />
                 </>
+              ) : activeTab === 'video' ? (
+                // Video tab: chỉ có spacing để content không bị che bởi header
+                <View style={{ marginTop: Math.max(headerHeight + 48, 0), height: 0 }} />
               ) : null}
             </View>
           }
           ListEmptyComponent={
             <View style={dynamicStyles.emptyContainer}>
-              <MaterialCommunityIcons name="newspaper-variant-outline" size={48} color={colors.textSecondary} />
+              <MaterialCommunityIcons 
+                name={activeTab === 'video' ? 'video-outline' : 'newspaper-variant-outline'} 
+                size={48} 
+                color={colors.textSecondary} 
+              />
               <Text style={[dynamicStyles.emptyText, { color: colors.textSecondary, marginTop: 16 }]}>
-                Chưa có bài viết nào
+                {activeTab === 'video' 
+                  ? 'Chưa có video nào' 
+                  : activeTab === 'following'
+                  ? 'Chưa có bài viết từ người bạn đang theo dõi'
+                  : 'Chưa có bài viết nào'}
               </Text>
               <Text style={[dynamicStyles.emptyText, { color: colors.textSecondary, marginTop: 8, fontSize: 13 }]}>
-                Kéo xuống để làm mới
+                {activeTab === 'video' 
+                  ? 'Video sẽ xuất hiện ở đây khi có người đăng video'
+                  : 'Kéo xuống để làm mới'}
               </Text>
             </View>
           }
@@ -2518,6 +2782,8 @@ const PostsListScreen = ({ feedType = 'discover' }: PostsListScreenProps = {}) =
       />
     </View>
   );
-};
+});
+
+PostsListScreen.displayName = 'PostsListScreen';
 
 export default PostsListScreen;

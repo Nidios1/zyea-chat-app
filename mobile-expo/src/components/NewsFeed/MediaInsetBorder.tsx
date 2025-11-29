@@ -5,24 +5,34 @@ import { useTheme } from '../../contexts/ThemeContext';
 /**
  * MediaInsetBorder - Applies a thin border within a bounding box
  * Used to contrast media from bg of the container
- * Similar to social-app-main MediaInsetBorder
+ * Logic tương tự social-app-main MediaInsetBorder
+ * 
+ * Tạo lại để tránh trùng lặp với social-app-main
  */
 export function MediaInsetBorder({
   style,
   opaque,
+  children,
 }: {
   style?: any;
   opaque?: boolean;
+  children?: React.ReactNode;
 }) {
   const { colors, isDarkMode } = useTheme();
   const isLight = !isDarkMode;
 
+  // Logic giống social-app-main:
+  // - borderWidth: hairlineWidth cho native, 0.5 cho web high DPI
+  // - borderColor: contrast_low cho light mode, contrast_high cho dark mode
+  // - opacity: 0.6 nếu không opaque, 1 nếu opaque
+  const borderWidth = Platform.OS === 'web' ? 0.5 : StyleSheet.hairlineWidth;
+  
   return (
     <View
       style={[
         styles.border,
         {
-          borderWidth: Platform.OS === 'web' ? 0.5 : StyleSheet.hairlineWidth,
+          borderWidth,
           borderColor: opaque
             ? colors.border || (isLight ? '#E4E6EB' : '#3E4042')
             : isLight
@@ -32,8 +42,9 @@ export function MediaInsetBorder({
         },
         style,
       ]}
-      pointerEvents="none"
-    />
+      pointerEvents="none">
+      {children}
+    </View>
   );
 }
 

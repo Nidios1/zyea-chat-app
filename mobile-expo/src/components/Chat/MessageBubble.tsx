@@ -12,6 +12,7 @@ import TextWithLinks from './TextWithLinks';
 import { getStickerURL } from '../../utils/imageUtils';
 import { stickerAPI } from '../../utils/api';
 import { useQuery } from '@tanstack/react-query';
+import { VerifiedBadge } from '../Common/VerifiedBadge';
 // Haptics is optional - only use if available
 let Haptics: any = null;
 try {
@@ -317,8 +318,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         return [];
       }
     },
-    staleTime: 0, // Luôn coi là stale để refresh ngay khi cần
-    gcTime: 10 * 60 * 1000,
+    staleTime: 5 * 60 * 1000, // 5 phút - sticker packs không thay đổi thường xuyên
+    gcTime: 15 * 60 * 1000, // 15 phút cache
   });
 
   // Get sticker URL from packs - hỗ trợ cả id (số) và name (string)

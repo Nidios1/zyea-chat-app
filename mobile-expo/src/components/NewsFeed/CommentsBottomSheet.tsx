@@ -17,10 +17,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { newsfeedAPI } from '../../utils/api';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { PWATheme } from '../../config/PWATheme';
-import { getInitials } from '../../utils/nameUtils';
-import { getAvatarURL } from '../../utils/imageUtils';
-import ExpandableText from '../Common/ExpandableText';
+import CommentItem from './CommentItem';
 
 type CommentsBottomSheetProps = {
   postId: string | number | null;
@@ -102,57 +101,10 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
   list: {
     flex: 1,
     paddingBottom: 8,
-  },
-  commentItem: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  commentAvatar: {
-    marginRight: 8,
-  },
-  commentBody: {
-    flex: 1,
-  },
-  commentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  commentName: {
-    fontWeight: '600',
-    fontSize: 15,
-    color: colors.text,
-    marginRight: 6,
-  },
-  commentTime: {
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  commentText: {
-    fontSize: 15,
-    color: colors.text,
-    lineHeight: 20,
-    marginBottom: 6,
-  },
-  commentActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginTop: 4,
-  },
-  commentAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  commentActionText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textSecondary,
+    padding: 0, // Không có padding - padding trong từng item (giống social-app-main)
   },
   replyContainer: {
-    marginLeft: 44,
+    marginLeft: 50, // Avatar width (42) + padding (8) = 50
     marginTop: 8,
     paddingLeft: 12,
     borderLeftWidth: 2,
@@ -211,6 +163,7 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
 
 const CommentsBottomSheet: React.FC<CommentsBottomSheetProps> = ({ postId, visible, onClose, placeholder }) => {
   const { colors, isDarkMode } = useTheme();
+  const { user } = useAuth();
   const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
   const [text, setText] = useState('');
   const [sortBy, setSortBy] = useState<'most_relevant' | 'newest'>('most_relevant');
@@ -259,7 +212,19 @@ const CommentsBottomSheet: React.FC<CommentsBottomSheetProps> = ({ postId, visib
   const { data: comments = [], isLoading } = useQuery({
     enabled: Boolean(postId) && visible,
     queryKey: ['postComments', postId],
-    queryFn: () => newsfeedAPI.getPostComments(String(postId)).then((r) => r.data || []),
+    queryFn: () => newsfeedAPI.getPostComments(String(postId)).then((r) => {
+      const rawComments = r.data || [];
+      // Transform API response to match expected structure with author object
+      return rawComments.map((comment: any) => ({
+        ...comment,
+        author: {
+          id: comment.user_id,
+          username: comment.username,
+          full_name: comment.full_name,
+          avatar_url: comment.avatar_url,
+        },
+      }));
+    }),
   });
 
   // Sort comments
@@ -278,19 +243,80 @@ const CommentsBottomSheet: React.FC<CommentsBottomSheetProps> = ({ postId, visib
 
   const addComment = useMutation({
     mutationFn: (content: string) => newsfeedAPI.commentPost(String(postId), content),
-    onSuccess: () => {
+    onMutate: async (content) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: ['postComments', postId] });
+
+      // Snapshot the previous value
+      const previousComments = queryClient.getQueryData(['postComments', postId]);
+
+      // Optimistically update
+      if (user) {
+        const optimisticComment = {
+          id: `temp-${Date.now()}`,
+          post_id: postId,
+          user_id: user.id,
+          username: user.username,
+          full_name: user.full_name,
+          avatar_url: user.avatar_url,
+          content: content.trim(),
+          created_at: new Date().toISOString(),
+          author: {
+            id: user.id,
+            username: user.username,
+            full_name: user.full_name,
+            avatar_url: user.avatar_url,
+          },
+          isOptimistic: true,
+        };
+
+        queryClient.setQueryData(['postComments', postId], (old: any[] = []) => {
+          return [...old, optimisticComment];
+        });
+      }
+
+      return { previousComments };
+    },
+    onError: (err, newComment, context) => {
+      // Rollback on error
+      if (context?.previousComments) {
+        queryClient.setQueryData(['postComments', postId], context.previousComments);
+      }
+    },
+    onSuccess: (response) => {
+      // Axios automatically unwraps response.data, so response is already the data
+      const commentData = response?.data || response;
+      const transformedComment = {
+        ...commentData,
+        author: {
+          id: commentData.user_id,
+          username: commentData.username,
+          full_name: commentData.full_name,
+          avatar_url: commentData.avatar_url,
+        },
+      };
+      
+      // Replace optimistic comment with real data
+      queryClient.setQueryData(['postComments', postId], (old: any[] = []) => {
+        const filtered = old.filter((c: any) => !c.isOptimistic);
+        return [...filtered, transformedComment];
+      });
+      
       setText('');
       setReplyingTo(null);
-      queryClient.invalidateQueries({ queryKey: ['postComments', postId] });
       queryClient.invalidateQueries({ queryKey: ['posts'] });
+      
       if (inputRef.current) {
         inputRef.current.blur();
       }
     },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['postComments', postId] });
+    },
   });
 
   const handleSubmit = () => {
-    if (text.trim() && postId) {
+    if (text.trim() && postId && !addComment.isPending) {
       addComment.mutate(text.trim());
     }
   };
@@ -310,81 +336,41 @@ const CommentsBottomSheet: React.FC<CommentsBottomSheetProps> = ({ postId, visib
   }, [visible]);
 
   const renderComment = ({ item }: any) => {
-    const commentDate = item.created_at ? new Date(item.created_at) : new Date();
-    const authorName = item?.author?.full_name || item?.author?.username || 'Người dùng';
-    const authorAvatar = item?.author?.avatar_url;
+    const isOptimistic = item.isOptimistic;
+    
+    // Handle optimistic comment with loading state
+    const commentContent = isOptimistic 
+      ? { ...item, content: `${item?.content || ''} (Đang gửi...)` }
+      : item;
 
     return (
-      <View style={styles.commentItem}>
-        <View style={styles.commentAvatar}>
-          {authorAvatar ? (
-            <Avatar.Image size={36} source={{ uri: getAvatarURL(authorAvatar) }} />
-          ) : (
-            <Avatar.Text size={36} label={getInitials(authorName)} />
-          )}
-        </View>
-        <View style={styles.commentBody}>
-          <View style={styles.commentHeader}>
-            <Text style={styles.commentName}>{authorName}</Text>
-            <Text style={styles.commentTime}>{formatTimeAgo(commentDate)}</Text>
-          </View>
-          <Text style={styles.commentText}>{item?.content || ''}</Text>
-          <View style={styles.commentActions}>
-            <TouchableOpacity 
-              style={styles.commentAction}
-              onPress={() => {
-                // TODO: Implement like comment
-                console.log('Like comment:', item.id);
-              }}
-            >
-              <MaterialCommunityIcons 
-                name={item?.isLiked ? 'thumb-up' : 'thumb-up-outline'} 
-                size={16} 
-                color={item?.isLiked ? '#1877F2' : colors.textSecondary} 
+      <View style={{ opacity: isOptimistic ? 0.6 : 1 }}>
+        <CommentItem
+          comment={commentContent}
+          onPressReply={() => {
+            setReplyingTo(item);
+            inputRef.current?.focus();
+          }}
+          onPressLike={() => {
+            // TODO: Implement like comment
+            console.log('Like comment:', item.id);
+          }}
+        />
+        {/* Replies */}
+        {item.replies && item.replies.length > 0 && (
+          <View style={styles.replyContainer}>
+            {item.replies.map((reply: any, idx: number) => (
+              <CommentItem
+                key={reply.id || idx}
+                comment={reply}
+                onPressReply={() => {
+                  setReplyingTo(reply);
+                  inputRef.current?.focus();
+                }}
               />
-              {(item?.likes_count || 0) > 0 && (
-                <Text style={styles.commentActionText}>{item.likes_count}</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.commentAction}
-              onPress={() => {
-                setReplyingTo(item);
-                inputRef.current?.focus();
-              }}
-            >
-              <Text style={styles.commentActionText}>Trả lời</Text>
-            </TouchableOpacity>
+            ))}
           </View>
-          {/* Replies */}
-          {item.replies && item.replies.length > 0 && (
-            <View style={styles.replyContainer}>
-              {item.replies.map((reply: any, idx: number) => {
-                const replyDate = reply.created_at ? new Date(reply.created_at) : new Date();
-                const replyAuthorName = reply?.author?.full_name || reply?.author?.username || 'Người dùng';
-                const replyAuthorAvatar = reply?.author?.avatar_url;
-                return (
-                  <View key={reply.id || idx} style={styles.commentItem}>
-                    <View style={styles.commentAvatar}>
-                      {replyAuthorAvatar ? (
-                        <Avatar.Image size={32} source={{ uri: getAvatarURL(replyAuthorAvatar) }} />
-                      ) : (
-                        <Avatar.Text size={32} label={getInitials(replyAuthorName)} />
-                      )}
-                    </View>
-                    <View style={styles.commentBody}>
-                      <View style={styles.commentHeader}>
-                        <Text style={styles.commentName}>{replyAuthorName}</Text>
-                        <Text style={styles.commentTime}>{formatTimeAgo(replyDate)}</Text>
-                      </View>
-                      <Text style={styles.commentText}>{reply?.content || ''}</Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </View>
+        )}
       </View>
     );
   };
@@ -493,6 +479,11 @@ const CommentsBottomSheet: React.FC<CommentsBottomSheetProps> = ({ postId, visib
                     size={22} 
                     color={addComment.isPending ? colors.textSecondary : colors.primary} 
                   />
+                  {addComment.isPending && (
+                    <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>
+                      Đang gửi...
+                    </Text>
+                  )}
                 </TouchableOpacity>
               )}
             </View>

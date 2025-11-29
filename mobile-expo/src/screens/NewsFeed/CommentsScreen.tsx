@@ -1,31 +1,37 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useLayoutEffect } from 'react';
 import {
   View,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
+  ActivityIndicator,
+  KeyboardAvoidingView,
   Platform,
-  Keyboard,
+  TouchableOpacity,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, TextInput, Avatar } from 'react-native-paper';
+import { Text, Appbar, useTheme, TextInput, Avatar, IconButton } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigation, useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { newsfeedAPI } from '../../utils/api';
-import { useTheme } from '../../contexts/ThemeContext';
-import { PWATheme } from '../../config/PWATheme';
-import { useTabBar } from '../../contexts/TabBarContext';
+import CommentItem from '../../components/NewsFeed/CommentItem';
+import Toast from 'react-native-toast-message';
+import { getInitials } from '../../utils/nameUtils';
+import { getAvatarURL, getImageURL } from '../../utils/imageUtils';
+import { FacebookImageLayout } from '../../components/NewsFeed/FacebookImageLayout';
+import { getImageMetadata, MediaMetadata } from '../../utils/mediaUtils';
+import { useLightboxControls } from '../../contexts/LightboxContext';
+import { type ImageSource } from '../../contexts/LightboxContext';
+import { Lightbox } from '../../components/Common/Lightbox';
 import { useAuth } from '../../contexts/AuthContext';
-import { getInitials, getImageURL, getAvatarURL } from '../../utils/imageUtils';
-import ExpandableText from '../../components/Common/ExpandableText';
-import PostImagesCarousel from '../../components/NewsFeed/PostImagesCarousel';
-import { spacing, typography, borderRadius, borderWidth, touchTargets } from '../../config/designTokens';
 
-type CommentsScreenRouteParams = {
-  postId: string | number;
-  postData?: any;
-};
+interface CommentsScreenProps {
+  route: {
+    params: {
+      postId: string | number;
+      postTitle?: string;
+    };
+  };
+}
 
 // Format time ago helper
 const formatTimeAgo = (date: Date): string => {
@@ -39,216 +45,377 @@ const formatTimeAgo = (date: Date): string => {
   const months = Math.floor(days / 30);
   const years = Math.floor(days / 365);
 
-  if (years > 0) return `${years} năm`;
-  if (months > 0) return `${months} tháng`;
-  if (weeks > 0) return `${weeks} tuần`;
-  if (days > 0) return `${days} ngày`;
-  if (hours > 0) return `${hours} giờ`;
-  if (minutes > 0) return `${minutes} phút`;
+  if (years > 0) return `${years} năm trước`;
+  if (months > 0) return `${months} tháng trước`;
+  if (weeks > 0) return `${weeks} tuần trước`;
+  if (days > 0) return `${days} ngày trước`;
+  if (hours > 0) return `${hours} giờ trước`;
+  if (minutes > 0) return `${minutes} phút trước`;
   return 'Vừa xong';
 };
 
-const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => StyleSheet.create({
+const CommentsScreen: React.FC<CommentsScreenProps> = ({ route }) => {
+  const { postId, postTitle } = route.params;
+  const theme = useTheme();
+  const navigation = useNavigation();
+  const { user } = useAuth();
+  const [commentText, setCommentText] = useState('');
+  const queryClient = useQueryClient();
+  const { openLightbox } = useLightboxControls();
+  const [imageMetadata, setImageMetadata] = useState<Map<string, MediaMetadata>>(new Map());
+  const [isLiked, setIsLiked] = useState(false);
+
+  // Fetch bài viết gốc
+  const { data: post, isLoading: isLoadingPost } = useQuery({
+    queryKey: ['post', postId],
+    queryFn: () => newsfeedAPI.getPost(String(postId)).then((res) => res.data),
+  });
+
+  // Track like state
+  React.useEffect(() => {
+    if (post) {
+      setIsLiked(post.isLiked || false);
+    }
+  }, [post]);
+
+  // Like/Unlike mutation
+  const likeMutation = useMutation({
+    mutationFn: () => {
+      if (isLiked) {
+        return newsfeedAPI.unlikePost(String(postId));
+      } else {
+        return newsfeedAPI.likePost(String(postId));
+      }
+    },
+    onSuccess: () => {
+      setIsLiked(!isLiked);
+      queryClient.invalidateQueries({ queryKey: ['post', postId] });
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+  });
+
+  const { data: comments = [], isLoading: isLoadingComments } = useQuery({
+    queryKey: ['postComments', postId],
+    queryFn: () => newsfeedAPI.getPostComments(String(postId)).then((res) => {
+      const rawComments = res.data || [];
+      // Transform API response to match expected structure with author object
+      return rawComments.map((comment: any) => ({
+        ...comment,
+        author: {
+          id: comment.user_id || comment.author?.id,
+          username: comment.username || comment.author?.username,
+          full_name: comment.full_name || comment.author?.full_name,
+          avatar_url: comment.avatar_url || comment.author?.avatar_url,
+        },
+      }));
+    }),
+  });
+
+  // Get post images
+  const postImages = React.useMemo(() => {
+    if (!post) return [];
+    const images = post.images && Array.isArray(post.images) 
+      ? post.images 
+      : post.image_url 
+        ? [post.image_url] 
+        : [];
+    return images.filter((img: string) => img && img.trim());
+  }, [post]);
+
+  // Preload image metadata
+  useLayoutEffect(() => {
+    if (postImages.length === 0) return;
+
+    const metadataPromises = postImages.map((imageUrl: string) =>
+      getImageMetadata(imageUrl)
+        .then((metadata) => {
+          if (metadata) {
+            setImageMetadata((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(imageUrl, metadata);
+              return newMap;
+            });
+          }
+          return metadata;
+        })
+        .catch(() => null)
+    );
+
+    Promise.all(metadataPromises);
+  }, [post?.id, JSON.stringify(postImages)]);
+
+  // Handle image press - open lightbox
+  const handleImagePress = (index: number) => {
+    if (postImages.length === 0) return;
+
+    const items: ImageSource[] = postImages.map((img: string, i: number) => {
+      const metadata = imageMetadata.get(img);
+      return {
+        uri: getImageURL(img),
+        thumbUri: getImageURL(img),
+        alt: undefined,
+        dimensions: metadata ? { width: metadata.width, height: metadata.height } : null,
+        thumbRect: null,
+        thumbDimensions: null,
+      };
+    });
+
+    openLightbox({
+      images: items,
+      index,
+    });
+  };
+
+  const commentMutation = useMutation({
+    mutationFn: (content: string) => newsfeedAPI.commentPost(String(postId), content),
+    onSuccess: () => {
+      Toast.show({ type: 'success', text1: 'Đã bình luận' });
+      setCommentText('');
+      queryClient.invalidateQueries({ queryKey: ['postComments', postId] });
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    },
+    onError: (error: any) => {
+      Toast.show({
+        type: 'error',
+        text1: 'Lỗi',
+        text2: error?.response?.data?.message || 'Không thể gửi bình luận',
+      });
+    },
+  });
+
+  const handleComment = () => {
+    if (!commentText.trim()) return;
+    commentMutation.mutate(commentText);
+  };
+
+  return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
+      <Appbar.Header>
+        <Appbar.BackAction onPress={() => navigation.goBack()} />
+        <Appbar.Content
+          title="Thread"
+          subtitle={post?.views_count ? `${post.views_count} lượt xem` : undefined}
+        />
+        <Appbar.Action icon="dots-vertical" onPress={() => {}} />
+      </Appbar.Header>
+
+      {(isLoadingPost || isLoadingComments) ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={comments}
+          keyExtractor={(item, index) => item.id?.toString() || `comment-${index}`}
+          renderItem={({ item }) => <CommentItem comment={item} />}
+          contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            post ? (
+              <View style={[styles.postContainer, { borderBottomColor: theme.colors.border }]} collapsable={false}>
+                {/* Post Header */}
+                <View style={styles.postHeader} collapsable={false}>
+                  {post.author?.avatar_url ? (
+                    <Avatar.Image
+                      size={42}
+                      source={{ uri: getAvatarURL(post.author.avatar_url) }}
+                    />
+                  ) : (
+                    <Avatar.Text
+                      size={42}
+                      label={getInitials(post.author?.full_name || post.author?.username || 'U')}
+                    />
+                  )}
+                  <View style={styles.postAuthorInfo}>
+                    <Text style={[styles.postAuthorName, { color: theme.colors.onBackground }]}>
+                      {post.author?.full_name || post.author?.username || 'Người dùng'}
+                    </Text>
+                    <Text style={[styles.postTime, { color: theme.colors.onSurfaceVariant }]}>
+                      {formatTimeAgo(new Date(post.created_at))}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Post Content */}
+                {post.content && String(post.content).trim() && (
+                  <View style={styles.postContentWrapper} collapsable={false}>
+                    <Text style={[styles.postContent, { color: theme.colors.onBackground }]}>
+                      {String(post.content)}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Post Images */}
+                {postImages && postImages.length > 0 && (
+                  <View style={styles.postImagesContainer} collapsable={false}>
+                    <FacebookImageLayout
+                      images={postImages}
+                      onPressImage={handleImagePress}
+                      imageMetadata={imageMetadata}
+                    />
+                  </View>
+                )}
+
+                {/* Post Actions - Threads style */}
+                <View 
+                  style={[styles.postActions, { borderTopColor: theme.colors.border, borderBottomColor: theme.colors.border }]}
+                  collapsable={false}>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => likeMutation.mutate()}
+                    activeOpacity={0.7}>
+                    <MaterialCommunityIcons
+                      name={isLiked ? 'heart' : 'heart-outline'}
+                      size={20}
+                      color={isLiked ? '#e74c3c' : theme.colors.onSurfaceVariant}
+                    />
+                    {post?.likes_count > 0 && (
+                      <Text style={[styles.actionText, { color: theme.colors.onSurfaceVariant }]}>
+                        {post.likes_count}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    activeOpacity={0.7}>
+                    <MaterialCommunityIcons
+                      name="comment-outline"
+                      size={20}
+                      color={theme.colors.onSurfaceVariant}
+                    />
+                    {comments.length > 0 && (
+                      <Text style={[styles.actionText, { color: theme.colors.onSurfaceVariant }]}>
+                        {comments.length}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    activeOpacity={0.7}>
+                    <MaterialCommunityIcons
+                      name="repeat"
+                      size={20}
+                      color={theme.colors.onSurfaceVariant}
+                    />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    activeOpacity={0.7}>
+                    <MaterialCommunityIcons
+                      name="send-outline"
+                      size={20}
+                      color={theme.colors.onSurfaceVariant}
+                    />
+                  </TouchableOpacity>
+
+                  <View style={styles.actionSpacer} />
+
+                  <TouchableOpacity
+                    style={styles.viewActivityButton}
+                    activeOpacity={0.7}>
+                    <Text style={[styles.viewActivityText, { color: theme.colors.onSurfaceVariant }]}>
+                      Xem hoạt động &gt;
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>
+                Chưa có bình luận nào
+              </Text>
+              <Text style={[styles.emptySubtext, { color: theme.colors.onSurfaceVariant }]}>
+                Hãy là người đầu tiên bình luận!
+              </Text>
+            </View>
+          }
+        />
+      )}
+
+      {/* Input Field - Threads style với avatar và icons */}
+      <View style={[styles.commentInputContainer, { borderTopColor: theme.colors.border, backgroundColor: theme.colors.surface }]}>
+        {user?.avatar_url ? (
+          <Avatar.Image
+            size={32}
+            source={{ uri: getAvatarURL(user.avatar_url) }}
+            style={styles.inputAvatar}
+          />
+        ) : (
+          <Avatar.Text
+            size={32}
+            label={getInitials(user?.full_name || user?.username || 'U')}
+            style={styles.inputAvatar}
+          />
+        )}
+        <View style={[styles.inputWrapper, { backgroundColor: theme.colors.surfaceVariant }]}>
+          <TextInput
+            placeholder={`Trả lời ${post?.author?.full_name || post?.author?.username || ''}...`}
+            value={commentText}
+            onChangeText={setCommentText}
+            multiline
+            style={[styles.commentInput, { color: theme.colors.onSurface }]}
+            mode="flat"
+            disabled={commentMutation.isPending}
+            underlineColorAndroid="transparent"
+            activeUnderlineColor="transparent"
+          />
+          <View style={styles.inputIcons}>
+            <TouchableOpacity style={styles.inputIcon}>
+              <MaterialCommunityIcons
+                name="image-outline"
+                size={22}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.inputIcon}>
+              <MaterialCommunityIcons
+                name="gif"
+                size={22}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+        {commentText.trim().length > 0 && (
+          <TouchableOpacity
+            style={styles.sendButton}
+            onPress={handleComment}
+            disabled={commentMutation.isPending}
+            activeOpacity={0.7}>
+            <MaterialCommunityIcons
+              name="send"
+              size={22}
+              color={commentMutation.isPending ? theme.colors.onSurfaceVariant : theme.colors.primary}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Lightbox for image viewing */}
+      <Lightbox />
+    </KeyboardAvoidingView>
+  );
+};
+
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.surface,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md + 2,
-    borderBottomWidth: borderWidth.hairline,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
+  loadingContainer: {
     flex: 1,
-  },
-  headerPostInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  headerPostAvatar: {
-    marginRight: 0,
-  },
-  headerPostName: {
-    fontSize: typography.fontSize.md,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.text,
-  },
-  headerPostTime: {
-    fontSize: typography.fontSize.base,
-    color: colors.textSecondary,
-  },
-  headerRight: {
-    width: Math.max(40, touchTargets.md),
-    alignItems: 'flex-end',
-  },
-  sortDropdown: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md + 2,
-    borderBottomWidth: borderWidth.hairline,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  sortText: {
-    fontSize: typography.fontSize.md - 1,
-    fontWeight: typography.fontWeight.semibold,
-    color: colors.primary,
-    marginLeft: spacing.sm - 2,
-  },
-  sortIcon: {
-    marginLeft: 4,
-  },
-  postContainer: {
-    backgroundColor: colors.surface,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: borderWidth.hairline,
-    borderBottomColor: colors.border || (isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)'),
-  },
-  postContent: {
-    fontSize: typography.fontSize.md,
-    color: colors.text,
-    lineHeight: typography.fontSize.md * typography.lineHeight.relaxed,
-    paddingHorizontal: spacing.base,
-    paddingTop: 0,
-    paddingBottom: 0,
-  },
-  postImages: {
-    width: '100%',
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  commentsList: {
-    flexGrow: 1,
-  },
-  commentItem: {
-    flexDirection: 'row',
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm,
-  },
-  commentAvatar: {
-    marginRight: spacing.sm,
-  },
-  commentBody: {
-    flex: 1,
-  },
-  commentHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  commentName: {
-    fontWeight: '600',
-    fontSize: 16,
-    color: colors.text,
-    marginRight: 6,
-  },
-  commentTime: {
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  commentText: {
-    fontSize: 16,
-    color: colors.text,
-    lineHeight: 22,
-    marginBottom: 4,
-  },
-  commentActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginTop: 4,
-  },
-  commentAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-  },
-  commentActionText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  commentLikeCount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginLeft: 2,
-  },
-  replyContainer: {
-    marginLeft: 46,
-    marginTop: 8,
-    paddingLeft: 12,
-    borderLeftWidth: 2,
-    borderLeftColor: colors.border,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: colors.surface,
-    gap: 8,
-    minHeight: 56,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  inputAvatar: {
-    marginRight: 8,
-    marginBottom: 2,
-  },
-  inputWrapper: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-    borderRadius: 20,
-    paddingLeft: 12,
-    paddingRight: 8,
-    paddingVertical: 8,
-    minHeight: 36,
-    maxHeight: 100,
-    marginBottom: 2,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    color: colors.text,
-    padding: 0,
-    margin: 0,
-    paddingRight: 4,
-  },
-  inputIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  inputIcon: {
-    padding: 6,
-  },
-  sendButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginLeft: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sendButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.primary,
+  listContent: {
+    padding: 0, // Không có padding - padding trong từng item (giống social-app-main)
   },
   emptyContainer: {
     padding: 32,
@@ -256,430 +423,124 @@ const createStyles = (colors: typeof PWATheme.light, isDarkMode: boolean) => Sty
   },
   emptyText: {
     fontSize: 16,
-    color: colors.textSecondary,
-    textAlign: 'center',
+    fontWeight: '500',
+    marginBottom: 8,
   },
-  replyingToContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: colors.border,
+  emptySubtext: {
+    fontSize: 14,
+  },
+  commentInputContainer: {
     flexDirection: 'row',
+    padding: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     gap: 8,
   },
-  replyingToText: {
-    fontSize: 14,
-    color: colors.textSecondary,
+  inputAvatar: {
+    marginRight: 4,
   },
-  replyingToName: {
+  inputWrapper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minHeight: 40,
+    maxHeight: 100,
+  },
+  commentInput: {
+    flex: 1,
+    fontSize: 15,
+    padding: 0,
+    margin: 0,
+  },
+  inputIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 8,
+  },
+  inputIcon: {
+    padding: 4,
+  },
+  sendButton: {
+    padding: 8,
+  },
+  postActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginTop: 12,
+    marginBottom: 0,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  actionText: {
     fontSize: 14,
     fontWeight: '600',
-    color: colors.text,
+  },
+  actionSpacer: {
+    flex: 1,
+  },
+  viewActivityButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  viewActivityText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  postContainer: {
+    paddingTop: 16,
+    paddingRight: 16,
+    paddingBottom: 16,
+    paddingLeft: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    backgroundColor: 'transparent',
+  },
+  postHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  postAuthorInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  postAuthorName: {
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  postTime: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  postContentWrapper: {
+    marginBottom: 12,
+    marginTop: 4,
+    minHeight: 20, // Đảm bảo có không gian
+  },
+  postContent: {
+    fontSize: 15,
+    lineHeight: 22,
+    flexShrink: 1,
+  },
+  postImagesContainer: {
+    marginTop: 12,
+    marginBottom: 12,
+    minHeight: 50, // Đảm bảo có không gian cho ảnh
   },
 });
 
-const CommentsScreen: React.FC = () => {
-  const { colors, isDarkMode } = useTheme();
-  const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
-  const navigation = useNavigation();
-  const route = useRoute<RouteProp<{ params: CommentsScreenRouteParams }, 'params'>>();
-  const { postId, postData } = route.params || {};
-  const { setIsVisible } = useTabBar();
-  const { user } = useAuth();
-  const insets = useSafeAreaInsets();
-  
-  const [text, setText] = useState('');
-  const [sortBy, setSortBy] = useState<'most_relevant' | 'newest'>('most_relevant');
-  const [replyingTo, setReplyingTo] = useState<any>(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const queryClient = useQueryClient();
-  const inputRef = useRef<any>(null);
-  const flatListRef = useRef<FlatList>(null);
-
-  // Ẩn bottom tab bar khi vào màn hình Comments
-  useFocusEffect(
-    React.useCallback(() => {
-      setIsVisible(false);
-      return () => {
-        setIsVisible(true);
-      };
-    }, [setIsVisible])
-  );
-
-  // Track keyboard height
-  useEffect(() => {
-    const showSubscription = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, Platform.OS === 'ios' ? 100 : 200);
-      }
-    );
-    const hideSubscription = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
-  }, []);
-
-  // Fetch post data if not provided
-  const { data: post } = useQuery({
-    enabled: Boolean(postId) && !postData,
-    queryKey: ['post', postId],
-    queryFn: () => newsfeedAPI.getPost(String(postId)).then((r) => r.data),
-  });
-
-  const currentPost = postData || post;
-
-  const { data: comments = [], isLoading } = useQuery({
-    enabled: Boolean(postId),
-    queryKey: ['postComments', postId],
-    queryFn: () => newsfeedAPI.getPostComments(String(postId)).then((r) => r.data || []),
-  });
-
-  // Sort comments
-  const sortedComments = useMemo(() => {
-    if (!comments || comments.length === 0) return [];
-    const sorted = [...comments];
-    if (sortBy === 'newest') {
-      return sorted.sort((a: any, b: any) => {
-        const dateA = new Date(a.created_at || 0).getTime();
-        const dateB = new Date(b.created_at || 0).getTime();
-        return dateB - dateA;
-      });
-    }
-    return sorted;
-  }, [comments, sortBy]);
-
-  const addComment = useMutation({
-    mutationFn: (content: string) => newsfeedAPI.commentPost(String(postId), content),
-    onSuccess: () => {
-      setText('');
-      setReplyingTo(null);
-      queryClient.invalidateQueries({ queryKey: ['postComments', postId] });
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-      
-      // Invalidate notifications queries ngay lập tức để cập nhật badge và danh sách thông báo
-      // Khi comment, có thể đã tạo notification mới cho post owner
-      queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      
-      if (inputRef.current) {
-        inputRef.current.blur();
-      }
-    },
-  });
-
-  const handleAddComment = () => {
-    if (text.trim() && postId) {
-      addComment.mutate(text.trim());
-    }
-  };
-
-  const renderComment = ({ item }: any) => {
-    const commentDate = item.created_at ? new Date(item.created_at) : new Date();
-    const authorName = item?.author?.full_name || item?.author?.username || 'Người dùng';
-    const authorAvatar = item?.author?.avatar_url;
-
-    return (
-      <View style={styles.commentItem}>
-        <View style={styles.commentAvatar}>
-          {authorAvatar ? (
-            <Avatar.Image size={36} source={{ uri: getAvatarURL(authorAvatar) }} />
-          ) : (
-            <Avatar.Text size={36} label={getInitials(authorName)} />
-          )}
-        </View>
-        <View style={styles.commentBody}>
-          <View style={styles.commentHeader}>
-            <Text style={styles.commentName}>{authorName}</Text>
-            <Text style={styles.commentTime}>{formatTimeAgo(commentDate)}</Text>
-          </View>
-          <Text style={styles.commentText}>{item?.content || ''}</Text>
-          <View style={styles.commentActions}>
-            <TouchableOpacity 
-              style={styles.commentAction}
-              onPress={() => {
-                console.log('Like comment:', item.id);
-              }}
-            >
-              <MaterialCommunityIcons 
-                name={item?.isLiked ? 'thumb-up' : 'thumb-up-outline'} 
-                size={16} 
-                color={item?.isLiked ? '#1877F2' : colors.textSecondary} 
-              />
-              {(item?.likes_count || 0) > 0 && (
-                <Text style={styles.commentLikeCount}>{item.likes_count}</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.commentAction}
-              onPress={() => {
-                setReplyingTo(item);
-                inputRef.current?.focus();
-              }}
-            >
-              <Text style={styles.commentActionText}>Trả lời</Text>
-            </TouchableOpacity>
-          </View>
-          {/* Replies */}
-          {item.replies && item.replies.length > 0 && (
-            <View style={styles.replyContainer}>
-              {item.replies.map((reply: any, idx: number) => {
-                const replyDate = reply.created_at ? new Date(reply.created_at) : new Date();
-                const replyAuthorName = reply?.author?.full_name || reply?.author?.username || 'Người dùng';
-                const replyAuthorAvatar = reply?.author?.avatar_url;
-                return (
-                  <View key={reply.id || idx} style={styles.commentItem}>
-                    <View style={styles.commentAvatar}>
-                      {replyAuthorAvatar ? (
-                        <Avatar.Image size={32} source={{ uri: getAvatarURL(replyAuthorAvatar) }} />
-                      ) : (
-                        <Avatar.Text size={32} label={getInitials(replyAuthorName)} />
-                      )}
-                    </View>
-                    <View style={styles.commentBody}>
-                      <View style={styles.commentHeader}>
-                        <Text style={styles.commentName}>{replyAuthorName}</Text>
-                        <Text style={styles.commentTime}>{formatTimeAgo(replyDate)}</Text>
-                      </View>
-                      <Text style={styles.commentText}>{reply?.content || ''}</Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  };
-
-  const renderPost = () => {
-    if (!currentPost) return null;
-
-    const postImages = currentPost.images || (currentPost.image_url ? [currentPost.image_url] : []);
-
-    return (
-      <View style={styles.postContainer}>
-        {currentPost.content && (
-          <View style={{ paddingHorizontal: 16 }}>
-            <ExpandableText
-              text={currentPost.content}
-              numberOfLines={3}
-              color={colors.text}
-              backgroundColor={colors.surface}
-              linkColor={colors.primary}
-              charLimitFallback={200}
-              gradient={false}
-            />
-          </View>
-        )}
-        {postImages.length > 0 && (
-          <View style={styles.postImages}>
-            <PostImagesCarousel images={postImages} />
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  // Tính toán chiều cao input container
-  const [inputBarHeight, setInputBarHeight] = useState(70);
-
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={{ flex: 1 }}>
-        {/* Header - Fixed */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-              <MaterialCommunityIcons name="arrow-left" size={24} color={colors.text} />
-            </TouchableOpacity>
-            {currentPost && (() => {
-              const authorName = currentPost.full_name || currentPost.username || 'Unknown';
-              const authorAvatar = currentPost.avatar_url || '';
-              const postTime = currentPost.created_at ? formatTimeAgo(new Date(currentPost.created_at)) : '';
-              return (
-                <View style={styles.headerPostInfo}>
-                  <View style={styles.headerPostAvatar}>
-                    {authorAvatar ? (
-                      <Avatar.Image size={36} source={{ uri: getAvatarURL(authorAvatar) }} />
-                    ) : (
-                      <Avatar.Text size={36} label={getInitials(authorName)} />
-                    )}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.headerPostName}>{authorName}</Text>
-                    {postTime && <Text style={styles.headerPostTime}>{postTime}</Text>}
-                  </View>
-                </View>
-              );
-            })()}
-          </View>
-          <View style={styles.headerRight}>
-            <TouchableOpacity>
-              <MaterialCommunityIcons name="dots-horizontal" size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Content Area - Không cần paddingBottom vì FlatList đã có */}
-        <View style={{ flex: 1 }}>
-          {/* Post Content */}
-          {renderPost()}
-
-          {/* Sort Dropdown - Chỉ hiển thị khi có từ 5 bình luận trở lên */}
-          {comments.length >= 5 && (
-            <TouchableOpacity 
-              style={styles.sortDropdown}
-              onPress={() => setSortBy(sortBy === 'most_relevant' ? 'newest' : 'most_relevant')}
-            >
-              <Text style={styles.sortText}>
-                {sortBy === 'most_relevant' ? 'Phù hợp nhất' : 'Mới nhất'}
-              </Text>
-              <MaterialCommunityIcons 
-                name="chevron-down" 
-                size={18} 
-                color={colors.primary}
-                style={styles.sortIcon}
-              />
-            </TouchableOpacity>
-          )}
-
-          {/* Comments List */}
-          <FlatList
-            ref={flatListRef}
-            data={sortedComments}
-            keyExtractor={(item: any, index) => item.id?.toString() || `comment-${index}`}
-            renderItem={renderComment}
-            contentContainerStyle={[
-              styles.commentsList,
-              {
-                paddingBottom: inputBarHeight + (replyingTo ? 56 : 0) + Math.max(insets.bottom, 20),
-              }
-            ]}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            onContentSizeChange={() => {
-              if (keyboardHeight > 0) {
-                setTimeout(() => {
-                  flatListRef.current?.scrollToEnd({ animated: true });
-                }, Platform.OS === 'ios' ? 100 : 200);
-              }
-            }}
-            ListEmptyComponent={
-              isLoading ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>Đang tải...</Text>
-                </View>
-              ) : (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyText}>Chưa có bình luận</Text>
-                </View>
-              )
-            }
-          />
-        </View>
-
-        {/* Replying To Indicator - Position absolute */}
-        {replyingTo && (
-          <View style={[
-            styles.replyingToContainer,
-            {
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: inputBarHeight + (keyboardHeight > 0 ? keyboardHeight : Math.max(insets.bottom, 0)),
-              zIndex: 5,
-            }
-          ]}>
-            <Text style={styles.replyingToText}>Đang trả lời</Text>
-            <Text style={styles.replyingToName}>
-              {replyingTo?.author?.full_name || replyingTo?.author?.username || 'Người dùng'}
-            </Text>
-            <TouchableOpacity onPress={() => setReplyingTo(null)}>
-              <MaterialCommunityIcons name="close" size={16} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Input Field - Position absolute để luôn ở trên keyboard */}
-        <View 
-          style={[
-            styles.inputContainer, 
-            { 
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: keyboardHeight > 0 ? keyboardHeight : Math.max(insets.bottom, 0),
-              paddingBottom: Math.max(insets.bottom * 0.3, 0),
-              zIndex: 10,
-            }
-          ]}
-          onLayout={(e) => {
-            const h = e.nativeEvent.layout.height;
-            if (h && Math.abs(h - inputBarHeight) > 1) setInputBarHeight(h);
-          }}
-        >
-          {user && (
-            <View style={styles.inputAvatar}>
-              {user.avatar_url ? (
-                <Avatar.Image size={32} source={{ uri: getAvatarURL(user.avatar_url) }} />
-              ) : (
-                <Avatar.Text size={32} label={getInitials(user.full_name || user.username || 'U')} />
-              )}
-            </View>
-          )}
-          <View style={styles.inputWrapper}>
-            <TextInput
-              ref={inputRef}
-              mode="flat"
-              placeholder={replyingTo ? `Trả lời ${replyingTo?.author?.full_name || replyingTo?.author?.username || ''}...` : 'Viết bình luận...'}
-              placeholderTextColor={colors.textSecondary}
-              value={text}
-              onChangeText={setText}
-              style={styles.input}
-              multiline
-              dense
-              underlineColorAndroid="transparent"
-              activeUnderlineColor="transparent"
-            />
-            {!text.trim() && (
-              <View style={styles.inputIcons}>
-                <TouchableOpacity style={styles.inputIcon}>
-                  <MaterialCommunityIcons name="camera-outline" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.inputIcon}>
-                  <MaterialCommunityIcons name="file-image-outline" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.inputIcon}>
-                  <MaterialCommunityIcons name="emoticon-outline" size={20} color={colors.textSecondary} />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-          {text.trim() && (
-            <TouchableOpacity
-              style={styles.sendButton}
-              onPress={handleAddComment}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.sendButtonText}>Nhập</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    </SafeAreaView>
-  );
-};
-
 export default CommentsScreen;
+

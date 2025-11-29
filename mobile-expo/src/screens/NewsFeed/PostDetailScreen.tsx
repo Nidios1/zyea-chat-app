@@ -1,12 +1,16 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, KeyboardAvoidingView, FlatList, Image } from 'react-native';
-import { Text, Card, Button, Avatar, useTheme, TextInput, Appbar } from 'react-native-paper';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useLayoutEffect } from 'react';
+import { View, StyleSheet, ScrollView, KeyboardAvoidingView, FlatList } from 'react-native';
+import { Text, Card, Button, Avatar, useTheme, Appbar } from 'react-native-paper';
+import { useQuery } from '@tanstack/react-query';
 import { newsfeedAPI } from '../../utils/api';
 import { getInitials } from '../../utils/nameUtils';
+import { FacebookImageLayout } from '../../components/NewsFeed/FacebookImageLayout';
+import { getImageMetadata, MediaMetadata } from '../../utils/mediaUtils';
+import { useLightboxControls } from '../../contexts/LightboxContext';
+import { type ImageSource } from '../../contexts/LightboxContext';
 import { getImageURL } from '../../utils/imageUtils';
+import Lightbox from '../../components/Common/Lightbox';
 import CommentItem from '../../components/NewsFeed/CommentItem';
-import Toast from 'react-native-toast-message';
 
 interface PostDetailScreenProps {
   route: {
@@ -19,8 +23,8 @@ interface PostDetailScreenProps {
 const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ route }) => {
   const { postId } = route.params;
   const theme = useTheme();
-  const [commentText, setCommentText] = useState('');
-  const queryClient = useQueryClient();
+  const { openLightbox } = useLightboxControls();
+  const [imageMetadata, setImageMetadata] = useState<Map<string, MediaMetadata>>(new Map());
 
   const { data: post } = useQuery({
     queryKey: ['post', postId],
@@ -32,18 +36,53 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ route }) => {
     queryFn: () => newsfeedAPI.getPostComments(postId).then((res) => res.data),
   });
 
-  const commentMutation = useMutation({
-    mutationFn: (content: string) => newsfeedAPI.commentPost(postId, content),
-    onSuccess: () => {
-      Toast.show({ type: 'success', text1: 'Đã bình luận' });
-      setCommentText('');
-      queryClient.invalidateQueries({ queryKey: ['postComments', postId] });
-    },
-  });
+  // Get post images
+  const postImages = post
+    ? (post.images && Array.isArray(post.images) ? post.images : post.image_url ? [post.image_url] : []).filter((img: string) => img)
+    : [];
 
-  const handleComment = () => {
-    if (!commentText.trim()) return;
-    commentMutation.mutate(commentText);
+  // Preload image metadata
+  useLayoutEffect(() => {
+    if (postImages.length === 0) return;
+
+    const metadataPromises = postImages.map((imageUrl: string) =>
+      getImageMetadata(imageUrl)
+        .then((metadata) => {
+          if (metadata) {
+            setImageMetadata((prev) => {
+              const newMap = new Map(prev);
+              newMap.set(imageUrl, metadata);
+              return newMap;
+            });
+          }
+          return metadata;
+        })
+        .catch(() => null)
+    );
+
+    Promise.all(metadataPromises);
+  }, [post?.id, JSON.stringify(postImages)]);
+
+  // Handle image press - open lightbox
+  const handleImagePress = (index: number) => {
+    if (postImages.length === 0) return;
+
+    const items: ImageSource[] = postImages.map((img: string, i: number) => {
+      const metadata = imageMetadata.get(img);
+      return {
+        uri: getImageURL(img),
+        thumbUri: getImageURL(img),
+        alt: undefined,
+        dimensions: metadata ? { width: metadata.width, height: metadata.height } : null,
+        thumbRect: null,
+        thumbDimensions: null,
+      };
+    });
+
+    openLightbox({
+      images: items,
+      index,
+    });
   };
 
   if (!post) {
@@ -86,27 +125,15 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ route }) => {
               <Text style={styles.postContent}>{post.content}</Text>
             )}
 
-            {(post.images && post.images.length > 0) || post.image_url ? (
+            {postImages.length > 0 && (
               <View style={styles.imagesContainer}>
-                {(post.images && Array.isArray(post.images) ? post.images : [post.image_url])
-                  .filter((img: string) => img)
-                  .map((image: string, index: number) => {
-                    const imageUrl = getImageURL(image);
-                    return (
-                      <View key={index} style={styles.imageWrapper}>
-                        <Image
-                          source={{ uri: imageUrl }}
-                          style={styles.postImage}
-                          resizeMode="contain"
-                          onError={(error) => {
-                            console.log('Image load error:', imageUrl, error);
-                          }}
-                        />
-                      </View>
-                    );
-                  })}
+                <FacebookImageLayout
+                  images={postImages}
+                  onPressImage={handleImagePress}
+                  imageMetadata={imageMetadata}
+                />
               </View>
-            ) : null}
+            )}
 
             <View style={styles.actions}>
               <Button
@@ -140,24 +167,8 @@ const PostDetailScreen: React.FC<PostDetailScreenProps> = ({ route }) => {
         />
       </ScrollView>
 
-      <View style={styles.commentInputContainer}>
-        <TextInput
-          placeholder="Viết bình luận..."
-          value={commentText}
-          onChangeText={setCommentText}
-          multiline
-          style={styles.commentInput}
-          mode="outlined"
-        />
-        <Button
-          mode="contained"
-          onPress={handleComment}
-          loading={Boolean(commentMutation.isLoading)}
-          disabled={Boolean(!commentText.trim())}
-        >
-          Gửi
-        </Button>
-      </View>
+      {/* Lightbox for image viewing */}
+      <Lightbox />
     </KeyboardAvoidingView>
   );
 };
@@ -204,18 +215,6 @@ const styles = StyleSheet.create({
   imagesContainer: {
     marginTop: 12,
   },
-  imageWrapper: {
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginBottom: 8,
-    backgroundColor: '#f0f0f0',
-  },
-  postImage: {
-    width: '100%',
-    minHeight: 200,
-    maxHeight: 600,
-    borderRadius: 8,
-  },
   actions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -223,15 +222,6 @@ const styles = StyleSheet.create({
   },
   commentsHeader: {
     padding: 16,
-  },
-  commentInputContainer: {
-    flexDirection: 'row',
-    padding: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-  },
-  commentInput: {
-    flex: 1,
   },
 });
 

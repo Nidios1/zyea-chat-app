@@ -469,8 +469,8 @@ const StickerPickerInline = React.forwardRef<{ scrollToPack: (packId: string) =>
       const response = await stickerAPI.getStickerPacks();
       return response.data.packs || [];
     },
-    staleTime: 0, // Luôn coi là stale để refresh ngay khi cần
-    gcTime: 10 * 60 * 1000, // Giữ trong cache 10 phút
+    staleTime: 5 * 60 * 1000, // 5 phút - sticker packs không thay đổi thường xuyên
+    gcTime: 15 * 60 * 1000, // 15 phút cache
   });
 
   // Auto refresh sticker packs khi mở emoji panel với sticker tab
@@ -1498,8 +1498,8 @@ const ChatDetailScreen = () => {
       const response = await stickerAPI.getStickerPacks();
       return response.data.packs || [];
     },
-    staleTime: 0,
-    gcTime: 10 * 60 * 1000,
+    staleTime: 5 * 60 * 1000, // 5 phút - sticker packs không thay đổi thường xuyên
+    gcTime: 15 * 60 * 1000, // 15 phút cache
     // Use cached data immediately if available, don't wait for refetch
     placeholderData: (previousData) => previousData,
   });
@@ -1686,10 +1686,9 @@ const ChatDetailScreen = () => {
       }
     },
     enabled: !!conversationId, // Only fetch if conversationId exists
-    staleTime: 0, // Always fetch fresh data on mount for instant updates
-    gcTime: 5 * 60 * 1000, // Keep in cache for instant display while fetching
-    refetchOnMount: true, // Always refetch on mount for fresh data (no delay)
-    refetchOnWindowFocus: false, // Don't refetch on focus
+    staleTime: 30 * 1000, // 30 giây - messages cần refresh nhưng socket sẽ update real-time
+    gcTime: 10 * 60 * 1000, // 10 phút cache
+    refetchOnWindowFocus: false, // Don't refetch on focus - socket handles updates
     retry: (failureCount, error: any) => {
       // Retry logic: retry up to 2 times for 5xx errors, but not for 4xx errors (reduced from 3)
       const status = error?.status || error?.response?.status || error?.originalError?.response?.status;

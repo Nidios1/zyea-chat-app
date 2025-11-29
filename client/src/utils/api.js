@@ -269,4 +269,9 @@ export const stickerAPI = {
     api.delete(`/app/sticker-packs/${packId}`),
 };
 
+export const feedbackAPI = {
+  submitFeedback: (content, type = 'feedback', mediaUrl = null, reportedUserId = null) =>
+    api.post('/feedback', { content, type, mediaUrl, reported_user_id: reportedUserId }),
+};
+
 export default api;

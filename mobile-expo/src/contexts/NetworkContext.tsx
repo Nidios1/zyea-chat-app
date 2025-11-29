@@ -3,6 +3,7 @@ import { View, StyleSheet, Modal, Text, ActivityIndicator, TouchableOpacity, Ani
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from './ThemeContext';
 import apiClient from '../utils/api';
+import { NetworkLoadingOverlay } from '../components/Common/NetworkLoadingOverlay';
 
 interface NetworkContextType {
   isConnected: boolean;
@@ -161,71 +162,61 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <NetworkContext.Provider value={{ isConnected, isChecking, checkConnection }}>
       {children}
-      <Modal
-        visible={showModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => {}}
-        statusBarTranslucent={true}
-        presentationStyle="overFullScreen"
-      >
-        <View
-          style={[
-            styles.modalOverlay,
-            {
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            },
-          ]}
+      {/* Loading overlay - hiển thị khi mất kết nối */}
+      <NetworkLoadingOverlay visible={!isConnected} isChecking={isChecking} />
+      
+      {/* Modal với nút retry - chỉ hiển thị khi không đang checking */}
+      {!isChecking && !isConnected && (
+        <Modal
+          visible={!isConnected}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => {}}
+          statusBarTranslucent={true}
+          presentationStyle="overFullScreen"
         >
           <View
             style={[
-              styles.modalContent,
+              styles.modalOverlay,
               {
-                backgroundColor: colors.surface || '#FFFFFF',
+                backgroundColor: 'rgba(0, 0, 0, 0.7)',
               },
             ]}
           >
-            <MaterialCommunityIcons
-              name="wifi-off"
-              size={64}
-              color={colors.error || '#e74c3c'}
-            />
-            <Text
+            <View
               style={[
-                styles.title,
+                styles.modalContent,
                 {
-                  color: colors.text || '#000000',
+                  backgroundColor: colors.surface || '#FFFFFF',
                 },
               ]}
             >
-              Mất kết nối
-            </Text>
-            <Text
-              style={[
-                styles.message,
-                {
-                  color: colors.textSecondary || '#666666',
-                },
-              ]}
-            >
-              Không thể kết nối đến server.{'\n'}
-              Vui lòng kiểm tra kết nối mạng của bạn.
-            </Text>
-            {isChecking ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color={colors.primary || '#0084ff'} />
-                <Text
-                  style={[
-                    styles.loadingText,
-                    {
-                      color: colors.textSecondary || '#666666',
-                    },
-                  ]}
-                >
-                  Đang kiểm tra kết nối...
-                </Text>
-              </View>
-            ) : (
+              <MaterialCommunityIcons
+                name="wifi-off"
+                size={64}
+                color={colors.error || '#e74c3c'}
+              />
+              <Text
+                style={[
+                  styles.title,
+                  {
+                    color: colors.text || '#000000',
+                  },
+                ]}
+              >
+                Mất kết nối
+              </Text>
+              <Text
+                style={[
+                  styles.message,
+                  {
+                    color: colors.textSecondary || '#666666',
+                  },
+                ]}
+              >
+                Không thể kết nối đến server.{'\n'}
+                Vui lòng kiểm tra kết nối mạng của bạn.
+              </Text>
               <TouchableOpacity
                 style={[
                   styles.retryButton,
@@ -239,10 +230,10 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 <MaterialCommunityIcons name="refresh" size={20} color="#FFFFFF" />
                 <Text style={styles.retryButtonText}>Thử lại</Text>
               </TouchableOpacity>
-            )}
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
     </NetworkContext.Provider>
   );
 };

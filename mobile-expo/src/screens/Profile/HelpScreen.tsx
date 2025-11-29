@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { ProfileStackParamList } from '../../navigation/types';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -21,8 +21,17 @@ const HelpScreen = () => {
   const navigation = useNavigation<HelpScreenNavigationProp>();
   const { colors, themeMode, isDarkMode } = useTheme();
   const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const dynamicStyles = createStyles(colors);
+
+  // Reset scroll position when screen is focused to ensure clean state
+  useFocusEffect(
+    useCallback(() => {
+      // Reset scroll to top when screen is focused
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
 
   const helpSections = [
     {
@@ -98,11 +107,9 @@ const HelpScreen = () => {
       </View>
 
       <ScrollView
+        ref={scrollViewRef}
         style={dynamicStyles.content}
-        contentContainerStyle={[
-          dynamicStyles.contentContainer,
-          { paddingBottom: Math.max(insets.bottom, 20) + 20 }
-        ]}
+        contentContainerStyle={dynamicStyles.contentContainer}
         showsVerticalScrollIndicator={true}
       >
         {helpSections.map((section, sectionIndex) => (

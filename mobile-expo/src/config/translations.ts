@@ -10,8 +10,9 @@ export type TranslationKeys =
   | 'auth.enterYourEmail' | 'auth.rememberPassword' | 'auth.forgotPassword' | 'auth.noAccount' | 'auth.haveAccount' | 'auth.continue'
   | 'auth.welcome' | 'auth.joinZyea' | 'auth.welcomeDescription' | 'auth.agreeTerms1' | 'auth.agreeTerms2' | 'auth.agreeTerms3' | 'auth.agreeTerms4'
   | 'auth.mustAgreeTerms' | 'auth.emailRequired' | 'auth.emailEmpty' | 'auth.emailInvalid' | 'auth.emailInvalidDesc' | 'auth.passwordRequired'
-  | 'auth.passwordEmpty' | 'auth.loggingIn' | 'auth.passwordIncorrect' | 'auth.passwordIncorrectDesc' | 'auth.emailNotExist' | 'auth.emailNotExistDesc'
-  | 'auth.loginFailed' | 'auth.loginError' | 'auth.terms' | 'auth.mustAgreeTermsDesc' | 'auth.backToLogin' | 'auth.sendEmail' | 'auth.emailSent'
+  | 'auth.passwordEmpty' | 'auth.loggingIn'   | 'auth.passwordIncorrect' | 'auth.passwordIncorrectDesc' | 'auth.emailNotExist' | 'auth.emailNotExistDesc'
+  | 'auth.loginFailed' | 'auth.loginError' | 'auth.serverConnectionError' | 'auth.serverConnectionErrorDesc'
+  | 'auth.invalidCredentials' | 'auth.invalidCredentialsDesc' | 'auth.terms' | 'auth.mustAgreeTermsDesc' | 'auth.backToLogin' | 'auth.sendEmail' | 'auth.emailSent'
   | 'auth.emailSentDesc' | 'auth.firstName' | 'auth.lastName' | 'auth.firstNameRequired' | 'auth.lastNameRequired' | 'auth.firstNameTooShort'
   | 'auth.lastNameTooShort' | 'auth.nameInvalid' | 'auth.nameInvalidDesc' | 'auth.nameNotReal' | 'auth.birthDate' | 'auth.selectBirthDate'
   | 'auth.gender' | 'auth.male' | 'auth.female' | 'auth.other' | 'auth.phone' | 'auth.enterPhone' | 'auth.phoneInvalid' | 'auth.phoneRequired'
@@ -110,6 +111,10 @@ export const translations: Record<'vi' | 'en', Record<TranslationKeys, string>> 
     'auth.passwordIncorrectDesc': 'Mật khẩu bạn nhập không đúng. Vui lòng thử lại.',
     'auth.emailNotExist': 'Email không tồn tại',
     'auth.emailNotExistDesc': 'Email này chưa được đăng ký. Vui lòng kiểm tra lại.',
+    'auth.invalidCredentials': 'Tài khoản hoặc mật khẩu không đúng',
+    'auth.invalidCredentialsDesc': 'Tài khoản hoặc mật khẩu bạn nhập không đúng. Vui lòng kiểm tra lại và thử lại.',
+    'auth.serverConnectionError': 'Không thể kết nối đến server',
+    'auth.serverConnectionErrorDesc': 'Không thể kết nối đến server. Vui lòng kiểm tra kết nối internet của bạn và đảm bảo server đang hoạt động.',
     'auth.loginFailed': 'Đăng nhập thất bại',
     'auth.loginError': 'Đã xảy ra lỗi. Vui lòng thử lại sau.',
     'auth.terms': 'Điều khoản',
@@ -337,6 +342,10 @@ export const translations: Record<'vi' | 'en', Record<TranslationKeys, string>> 
     'auth.passwordIncorrectDesc': 'The password you entered is incorrect. Please try again.',
     'auth.emailNotExist': 'Email does not exist',
     'auth.emailNotExistDesc': 'This email is not registered. Please check again.',
+    'auth.invalidCredentials': 'Invalid email or password',
+    'auth.invalidCredentialsDesc': 'The email or password you entered is incorrect. Please check and try again.',
+    'auth.serverConnectionError': 'Cannot connect to server',
+    'auth.serverConnectionErrorDesc': 'Cannot connect to server. Please check your internet connection and ensure the server is running.',
     'auth.loginFailed': 'Login failed',
     'auth.loginError': 'An error occurred. Please try again later.',
     'auth.terms': 'Terms',

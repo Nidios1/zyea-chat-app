@@ -2,6 +2,7 @@ const express = require('express');
 const { getConnection } = require('../config/database');
 const { authenticateToken, isAdmin } = require('../middleware/auth');
 const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
 
 const router = express.Router();
 
@@ -503,6 +504,275 @@ router.delete('/posts/:id', async (req, res) => {
   } catch (error) {
     console.error('Admin delete post error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ==================== ADMIN MESSAGING ====================
+// Send message to user from admin
+router.post('/users/:id/send-message', async (req, res) => {
+  try {
+    const userId = parseId(req.params.id);
+    const { content, message_type = 'text' } = req.body;
+    const adminId = req.user.id;
+    const connection = getConnection();
+    
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: 'Nội dung tin nhắn không được để trống' });
+    }
+
+    // Get or create system user (same logic as sendQRLoginSystemMessage)
+    let systemUserId;
+    const botUserIdFromEnv = process.env.BOT_USER_ID;
+    
+    if (botUserIdFromEnv) {
+      const [botUser] = await connection.execute(
+        'SELECT id, username, full_name, avatar_url FROM users WHERE id = ?',
+        [botUserIdFromEnv]
+      );
+      
+      if (botUser.length === 0) {
+        return res.status(404).json({ message: 'Bot user not found' });
+      }
+      
+      systemUserId = botUser[0].id;
+    } else {
+      // Get or create system user
+      let [systemUsers] = await connection.execute(
+        'SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1',
+        ['system', 'system@zyea.com']
+      );
+      
+      if (systemUsers.length === 0) {
+        const bcrypt = require('bcryptjs');
+        const dummyPassword = await bcrypt.hash('system_user_no_login', 10);
+        const systemAvatarUrl = '/assets/icon.jpg';
+        const [result] = await connection.execute(
+          'INSERT INTO users (username, email, password, full_name, role, status, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          ['system', 'system@zyea.com', dummyPassword, 'ZYEA Chat', 'admin', 'online', systemAvatarUrl]
+        );
+        systemUserId = result.insertId;
+      } else {
+        systemUserId = systemUsers[0].id;
+      }
+    }
+
+    // Get or create conversation between user and system
+    const [existingConvs] = await connection.execute(`
+      SELECT c.id FROM conversations c
+      JOIN conversation_participants cp1 ON c.id = cp1.conversation_id
+      JOIN conversation_participants cp2 ON c.id = cp2.conversation_id
+      WHERE cp1.user_id = ? AND cp2.user_id = ? AND c.type = 'private'
+    `, [userId, systemUserId]);
+
+    let conversationId;
+    if (existingConvs.length > 0) {
+      conversationId = existingConvs[0].id;
+      // Unhide conversation if it was hidden
+      await connection.execute(`
+        UPDATE conversation_settings 
+        SET hidden = FALSE 
+        WHERE conversation_id = ? AND user_id = ?
+      `, [conversationId, userId]);
+    } else {
+      // Create new conversation
+      const [convResult] = await connection.execute(
+        'INSERT INTO conversations (type, name) VALUES (?, ?)',
+        ['private', 'ZYEA Chat']
+      );
+      conversationId = convResult.insertId;
+
+      // Add participants
+      await connection.execute(
+        'INSERT INTO conversation_participants (conversation_id, user_id) VALUES (?, ?), (?, ?)',
+        [conversationId, userId, conversationId, systemUserId]
+      );
+
+      // Don't hide conversation - admin messages should be visible
+      await connection.execute(`
+        INSERT INTO conversation_settings (conversation_id, user_id, hidden)
+        VALUES (?, ?, FALSE)
+      `, [conversationId, userId]);
+    }
+
+    // Send message (sender is system user, but content is from admin)
+    const [messageResult] = await connection.execute(
+      'INSERT INTO messages (conversation_id, sender_id, content, message_type) VALUES (?, ?, ?, ?)',
+      [conversationId, systemUserId, content.trim(), message_type]
+    );
+
+    // Update conversation timestamp
+    await connection.execute(
+      'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [conversationId]
+    );
+
+    // Log admin action
+    console.log(`📤 Admin ${adminId} sent message to user ${userId} via system user ${systemUserId}`);
+
+    res.json({
+      message: 'Tin nhắn đã được gửi thành công',
+      conversationId,
+      messageId: messageResult.insertId
+    });
+  } catch (error) {
+    console.error('Admin send message error:', error);
+    if (error.message.includes('Invalid ID')) {
+      return res.status(400).json({ message: error.message });
+    }
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// Send message to all users from admin
+router.post('/users/send-message-all', async (req, res) => {
+  try {
+    const { content, message_type = 'text', exclude_user_ids = [] } = req.body;
+    const adminId = req.user.id;
+    const connection = getConnection();
+    
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: 'Nội dung tin nhắn không được để trống' });
+    }
+
+    // Get or create system user (same logic as sendQRLoginSystemMessage)
+    let systemUserId;
+    const botUserIdFromEnv = process.env.BOT_USER_ID;
+    
+    if (botUserIdFromEnv) {
+      const [botUser] = await connection.execute(
+        'SELECT id, username, full_name, avatar_url FROM users WHERE id = ?',
+        [botUserIdFromEnv]
+      );
+      
+      if (botUser.length === 0) {
+        return res.status(404).json({ message: 'Bot user not found' });
+      }
+      
+      systemUserId = botUser[0].id;
+    } else {
+      // Get or create system user
+      let [systemUsers] = await connection.execute(
+        'SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1',
+        ['system', 'system@zyea.com']
+      );
+      
+      if (systemUsers.length === 0) {
+        const bcrypt = require('bcryptjs');
+        const dummyPassword = await bcrypt.hash('system_user_no_login', 10);
+        const systemAvatarUrl = '/assets/icon.jpg';
+        const [result] = await connection.execute(
+          'INSERT INTO users (username, email, password, full_name, role, status, avatar_url) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          ['system', 'system@zyea.com', dummyPassword, 'ZYEA Chat', 'admin', 'online', systemAvatarUrl]
+        );
+        systemUserId = result.insertId;
+      } else {
+        systemUserId = systemUsers[0].id;
+      }
+    }
+
+    // Get all active users (exclude system user and admin sender, and any excluded users)
+    const excludeIds = [systemUserId, adminId, ...(Array.isArray(exclude_user_ids) ? exclude_user_ids : [])];
+    const placeholders = excludeIds.map(() => '?').join(',');
+    
+    const [allUsers] = await connection.execute(
+      `SELECT id FROM users WHERE id NOT IN (${placeholders}) AND status != 'deleted'`,
+      excludeIds
+    );
+
+    if (allUsers.length === 0) {
+      return res.status(400).json({ message: 'Không có người dùng nào để gửi tin nhắn' });
+    }
+
+    const userIds = allUsers.map(u => u.id);
+    let successCount = 0;
+    let errorCount = 0;
+    const errors = [];
+
+    // Process in batches to avoid overwhelming the database
+    const batchSize = 50;
+    for (let i = 0; i < userIds.length; i += batchSize) {
+      const batch = userIds.slice(i, i + batchSize);
+      
+      for (const userId of batch) {
+        try {
+          // Get or create conversation between user and system
+          const [existingConvs] = await connection.execute(`
+            SELECT c.id FROM conversations c
+            JOIN conversation_participants cp1 ON c.id = cp1.conversation_id
+            JOIN conversation_participants cp2 ON c.id = cp2.conversation_id
+            WHERE cp1.user_id = ? AND cp2.user_id = ? AND c.type = 'private'
+          `, [userId, systemUserId]);
+
+          let conversationId;
+          if (existingConvs.length > 0) {
+            conversationId = existingConvs[0].id;
+            // Unhide conversation if it was hidden
+            await connection.execute(`
+              UPDATE conversation_settings 
+              SET hidden = FALSE 
+              WHERE conversation_id = ? AND user_id = ?
+            `, [conversationId, userId]);
+          } else {
+            // Create new conversation
+            const [convResult] = await connection.execute(
+              'INSERT INTO conversations (type, name) VALUES (?, ?)',
+              ['private', 'ZYEA Chat']
+            );
+            conversationId = convResult.insertId;
+
+            // Add participants
+            await connection.execute(
+              'INSERT INTO conversation_participants (conversation_id, user_id) VALUES (?, ?), (?, ?)',
+              [conversationId, userId, conversationId, systemUserId]
+            );
+
+            // Don't hide conversation - admin messages should be visible
+            await connection.execute(`
+              INSERT INTO conversation_settings (conversation_id, user_id, hidden)
+              VALUES (?, ?, FALSE)
+            `, [conversationId, userId]);
+          }
+
+          // Send message (sender is system user, but content is from admin)
+          await connection.execute(
+            'INSERT INTO messages (conversation_id, sender_id, content, message_type) VALUES (?, ?, ?, ?)',
+            [conversationId, systemUserId, content.trim(), message_type]
+          );
+
+          // Update conversation timestamp
+          await connection.execute(
+            'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [conversationId]
+          );
+
+          successCount++;
+        } catch (userError) {
+          errorCount++;
+          errors.push(`User ${userId}: ${userError.message}`);
+          console.error(`Error sending message to user ${userId}:`, userError);
+        }
+      }
+    }
+
+    // Log admin action
+    console.log(`📤 Admin ${adminId} sent message to ${successCount} users (${errorCount} errors)`);
+
+    res.json({
+      message: `Đã gửi tin nhắn đến ${successCount} người dùng`,
+      successCount,
+      errorCount,
+      totalUsers: userIds.length,
+      errors: errors.length > 0 ? errors.slice(0, 10) : [] // Limit errors in response
+    });
+  } catch (error) {
+    console.error('Admin send message to all error:', error);
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
   }
 });
 
@@ -1076,6 +1346,646 @@ router.delete('/system-notifications/:id', async (req, res) => {
   } catch (error) {
     console.error('Admin delete system notification error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ==================== FEEDBACK MANAGEMENT ====================
+// Get all feedbacks with pagination and filters
+router.get('/feedbacks', async (req, res) => {
+  try {
+    console.log('📝 Admin get feedbacks - Request received', {
+      page: req.query.page,
+      limit: req.query.limit,
+      status: req.query.status,
+      type: req.query.type
+    });
+    
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const status = req.query.status || '';
+    const type = req.query.type || '';
+    const offset = (page - 1) * limit;
+    
+    const connection = getConnection();
+    
+    if (!connection) {
+      console.error('❌ Admin get feedbacks - Database connection is null');
+      return res.status(500).json({ message: 'Database connection not available' });
+    }
+    
+    // Check if feedbacks table exists, if not create it
+    try {
+      await connection.execute('SELECT 1 FROM feedbacks LIMIT 1');
+    } catch (tableError) {
+      console.log('⚠️ Feedbacks table does not exist yet, creating...');
+      try {
+        await connection.execute(`
+          CREATE TABLE IF NOT EXISTS feedbacks (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            content TEXT NOT NULL,
+            type ENUM('feedback', 'report', 'bug') DEFAULT 'feedback',
+            media_url VARCHAR(500) NULL,
+            reported_user_id INT NULL,
+            status ENUM('pending', 'reviewed', 'resolved', 'rejected') DEFAULT 'pending',
+            admin_response TEXT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (reported_user_id) REFERENCES users(id) ON DELETE SET NULL,
+            INDEX idx_user_id (user_id),
+            INDEX idx_reported_user_id (reported_user_id),
+            INDEX idx_status (status),
+            INDEX idx_created_at (created_at)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        console.log('✅ Feedbacks table created successfully');
+      } catch (createError) {
+        console.error('❌ Error creating feedbacks table:', createError);
+        return res.json({
+          feedbacks: [],
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0
+          }
+        });
+      }
+    }
+    
+    let query = `
+      SELECT 
+        f.id, f.user_id, f.content, f.type, f.media_url, f.reported_user_id, f.status, 
+        f.admin_response, f.created_at, f.updated_at,
+        u.username, u.full_name, u.email, u.avatar_url,
+        ru.username as reported_username, ru.full_name as reported_full_name, ru.avatar_url as reported_avatar_url
+      FROM feedbacks f
+      LEFT JOIN users u ON f.user_id = u.id
+      LEFT JOIN users ru ON f.reported_user_id = ru.id
+      WHERE 1=1
+    `;
+    const params = [];
+    
+    if (status) {
+      query += ' AND f.status = ?';
+      params.push(status);
+    }
+    
+    if (type) {
+      query += ' AND f.type = ?';
+      params.push(type);
+    }
+    
+    query += ` ORDER BY f.created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+    
+    console.log('📝 Admin get feedbacks - Executing query...');
+    const [feedbacks] = await connection.execute(query, params);
+    
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) as count FROM feedbacks WHERE 1=1';
+    const countParams = [];
+    
+    if (status) {
+      countQuery += ' AND status = ?';
+      countParams.push(status);
+    }
+    
+    if (type) {
+      countQuery += ' AND type = ?';
+      countParams.push(type);
+    }
+    
+    const [countResult] = await connection.execute(countQuery, countParams);
+    const total = countResult[0].count;
+    
+    console.log('📝 Admin get feedbacks - Found:', feedbacks.length, 'feedbacks (total:', total, ')');
+    
+    res.json({
+      feedbacks: feedbacks || [],
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('❌ Admin get feedbacks error:', error);
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Get feedback by ID
+router.get('/feedbacks/:id', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    console.log('📝 Admin get feedback by ID - Request received:', id);
+    
+    const connection = getConnection();
+    
+    if (!connection) {
+      console.error('❌ Admin get feedback - Database connection is null');
+      return res.status(500).json({ message: 'Database connection not available' });
+    }
+    
+    const [feedbacks] = await connection.execute(
+      `SELECT 
+        f.id, f.user_id, f.content, f.type, f.media_url, f.reported_user_id, f.status, 
+        f.admin_response, f.created_at, f.updated_at,
+        u.username, u.full_name, u.email, u.avatar_url,
+        ru.username as reported_username, ru.full_name as reported_full_name, ru.avatar_url as reported_avatar_url
+      FROM feedbacks f
+      LEFT JOIN users u ON f.user_id = u.id
+      LEFT JOIN users ru ON f.reported_user_id = ru.id
+      WHERE f.id = ?`,
+      [id]
+    );
+    
+    if (feedbacks.length === 0) {
+      console.log('⚠️ Admin get feedback - Feedback not found:', id);
+      return res.status(404).json({ message: 'Feedback not found' });
+    }
+    
+    console.log('✅ Admin get feedback - Found feedback:', id);
+    
+    res.json(feedbacks[0]);
+  } catch (error) {
+    console.error('❌ Admin get feedback error:', error);
+    if (error.message.includes('Invalid ID')) {
+      return res.status(400).json({ message: error.message });
+    }
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Update feedback status and admin response
+router.put('/feedbacks/:id', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    const { status, admin_response } = req.body;
+    console.log('📝 Admin update feedback - Request received:', { id, status, hasResponse: !!admin_response });
+    
+    const connection = getConnection();
+    
+    if (!connection) {
+      console.error('❌ Admin update feedback - Database connection is null');
+      return res.status(500).json({ message: 'Database connection not available' });
+    }
+    
+    // Check if feedback exists
+    const [feedbacks] = await connection.execute('SELECT id FROM feedbacks WHERE id = ?', [id]);
+    if (feedbacks.length === 0) {
+      console.log('⚠️ Admin update feedback - Feedback not found:', id);
+      return res.status(404).json({ message: 'Feedback not found' });
+    }
+    
+    const updates = [];
+    const params = [];
+    
+    if (status !== undefined) {
+      updates.push('status = ?');
+      params.push(status);
+    }
+    
+    if (admin_response !== undefined) {
+      updates.push('admin_response = ?');
+      params.push(admin_response);
+    }
+    
+    if (updates.length === 0) {
+      return res.status(400).json({ message: 'No fields to update' });
+    }
+    
+    params.push(id);
+    await connection.execute(
+      `UPDATE feedbacks SET ${updates.join(', ')} WHERE id = ?`,
+      params
+    );
+    
+    console.log('✅ Admin update feedback - Feedback updated successfully:', id);
+    res.json({ message: 'Feedback updated successfully' });
+  } catch (error) {
+    console.error('❌ Admin update feedback error:', error);
+    if (error.message.includes('Invalid ID')) {
+      return res.status(400).json({ message: error.message });
+    }
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Delete feedback
+router.delete('/feedbacks/:id', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    console.log('📝 Admin delete feedback - Request received:', id);
+    
+    const connection = getConnection();
+    
+    if (!connection) {
+      console.error('❌ Admin delete feedback - Database connection is null');
+      return res.status(500).json({ message: 'Database connection not available' });
+    }
+    
+    // Check if feedback exists
+    const [feedbacks] = await connection.execute('SELECT id FROM feedbacks WHERE id = ?', [id]);
+    if (feedbacks.length === 0) {
+      console.log('⚠️ Admin delete feedback - Feedback not found:', id);
+      return res.status(404).json({ message: 'Feedback not found' });
+    }
+    
+    await connection.execute('DELETE FROM feedbacks WHERE id = ?', [id]);
+    
+    console.log('✅ Admin delete feedback - Feedback deleted successfully:', id);
+    res.json({ message: 'Feedback deleted successfully' });
+  } catch (error) {
+    console.error('❌ Admin delete feedback error:', error);
+    if (error.message.includes('Invalid ID')) {
+      return res.status(400).json({ message: error.message });
+    }
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// ==================== VERIFICATION MANAGEMENT ====================
+// Get all verification requests with pagination
+router.get('/verifications', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const status = req.query.status || '';
+    const offset = (page - 1) * limit;
+    const connection = getConnection();
+
+    // Ensure users table has is_verified column
+    try {
+      await connection.execute('SELECT is_verified FROM users LIMIT 1');
+    } catch (error) {
+      console.log('⚠️ Adding is_verified column to users table...');
+      try {
+        await connection.execute(`
+          ALTER TABLE users
+          ADD COLUMN is_verified BOOLEAN DEFAULT FALSE,
+          ADD COLUMN verified_by VARCHAR(255) NULL,
+          ADD COLUMN verified_at DATETIME NULL
+        `);
+        console.log('✅ Verification columns added to users table');
+      } catch (alterError) {
+        if (alterError.code !== 'ER_DUP_FIELDNAME') {
+          console.error('Error adding verification columns:', alterError.message);
+        }
+      }
+    }
+
+    // Ensure verification_requests table exists
+    try {
+      await connection.execute('SELECT 1 FROM verification_requests LIMIT 1');
+    } catch (tableError) {
+      console.log('⚠️ Verification requests table does not exist yet, creating...');
+      try {
+        await connection.execute(`
+          CREATE TABLE IF NOT EXISTS verification_requests (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            full_name VARCHAR(255) NOT NULL,
+            category ENUM('individual', 'organization', 'brand', 'public_figure', 'other') DEFAULT 'individual',
+            reason TEXT NOT NULL,
+            email VARCHAR(255) NOT NULL,
+            id_card_image VARCHAR(500) NULL,
+            status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+            admin_id INT NULL,
+            admin_response TEXT NULL,
+            verified_by VARCHAR(255) NULL,
+            verified_at DATETIME NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE SET NULL,
+            INDEX idx_user_id (user_id),
+            INDEX idx_status (status),
+            INDEX idx_created_at (created_at)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        console.log('✅ Verification requests table created successfully');
+      } catch (createError) {
+        console.error('❌ Error creating verification_requests table:', createError);
+        return res.json({ requests: [], pagination: { page, limit, total: 0, totalPages: 0 } });
+      }
+    }
+
+    // Ensure email and id_card_image columns exist
+    try {
+      await connection.execute('SELECT email, id_card_image FROM verification_requests LIMIT 1');
+    } catch (error) {
+      // Columns don't exist, add them
+      console.log('⚠️ Adding email and id_card_image columns to verification_requests table...');
+      try {
+        // Try to add email and id_card_image columns
+        // Note: MySQL doesn't support IF NOT EXISTS in ALTER TABLE, so we'll try-catch each column
+        try {
+          await connection.execute(`
+            ALTER TABLE verification_requests
+            ADD COLUMN email VARCHAR(255) NULL
+          `);
+          console.log('✅ email column added');
+        } catch (e) {
+          if (e.code !== 'ER_DUP_FIELDNAME') {
+            console.error('Error adding email column:', e.message);
+          }
+        }
+        
+        try {
+          await connection.execute(`
+            ALTER TABLE verification_requests
+            ADD COLUMN id_card_image VARCHAR(500) NULL
+          `);
+          console.log('✅ id_card_image column added');
+        } catch (e) {
+          if (e.code !== 'ER_DUP_FIELDNAME') {
+            console.error('Error adding id_card_image column:', e.message);
+          }
+        }
+        console.log('✅ email and id_card_image columns added to verification_requests table');
+      } catch (alterError) {
+        console.error('❌ Error adding columns:', alterError);
+      }
+    }
+
+    // Check if is_verified column exists in users table before querying
+    let hasIsVerified = false;
+    try {
+      await connection.execute('SELECT is_verified FROM users LIMIT 1');
+      hasIsVerified = true;
+    } catch (e) {
+      // Column doesn't exist, will use COALESCE or default
+      hasIsVerified = false;
+    }
+
+    let query = `
+      SELECT
+        vr.id, vr.user_id, vr.full_name, vr.category, vr.reason, vr.email, vr.id_card_image,
+        vr.status, vr.admin_id, vr.admin_response, vr.verified_by, vr.verified_at,
+        vr.created_at, vr.updated_at,
+        u.username, u.email as user_email, u.avatar_url,
+        ${hasIsVerified ? 'u.is_verified' : 'FALSE as is_verified'},
+        admin.username as admin_username, admin.full_name as admin_full_name
+      FROM verification_requests vr
+      LEFT JOIN users u ON vr.user_id = u.id
+      LEFT JOIN users admin ON vr.admin_id = admin.id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (status) {
+      query += ' AND vr.status = ?';
+      params.push(status);
+    }
+
+    query += ` ORDER BY vr.created_at DESC LIMIT ${limit} OFFSET ${offset}`;
+    const [requests] = await connection.execute(query, params);
+
+    // Get total count
+    let countQuery = 'SELECT COUNT(*) as total FROM verification_requests vr WHERE 1=1';
+    const countParams = [];
+    if (status) {
+      countQuery += ' AND vr.status = ?';
+      countParams.push(status);
+    }
+    const [countResult] = await connection.execute(countQuery, countParams);
+    const total = countResult[0].total;
+    const totalPages = Math.ceil(total / limit);
+
+    console.log('📋 Admin Verifications - Query result:', {
+      requestsCount: requests.length,
+      total,
+      page,
+      limit,
+      statusFilter: status,
+    });
+
+    res.json({
+      requests,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages
+      }
+    });
+  } catch (error) {
+    console.error('❌ Get verification requests error:', error);
+    console.error('❌ Error stack:', error.stack);
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Get single verification request
+router.get('/verifications/:id', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    const connection = getConnection();
+
+    const [requests] = await connection.execute(
+      `SELECT
+        vr.id, vr.user_id, vr.full_name, vr.category, vr.reason, vr.email, vr.id_card_image,
+        vr.status, vr.admin_id, vr.admin_response, vr.verified_by, vr.verified_at,
+        vr.created_at, vr.updated_at,
+        u.username, u.email as user_email, u.avatar_url, u.is_verified,
+        admin.username as admin_username, admin.full_name as admin_full_name
+      FROM verification_requests vr
+      LEFT JOIN users u ON vr.user_id = u.id
+      LEFT JOIN users admin ON vr.admin_id = admin.id
+      WHERE vr.id = ?`,
+      [id]
+    );
+
+    if (requests.length === 0) {
+      return res.status(404).json({ message: 'Verification request not found' });
+    }
+
+    res.json(requests[0]);
+  } catch (error) {
+    console.error('❌ Get verification request error:', error);
+    if (error.message.includes('Invalid ID')) {
+      return res.status(400).json({ message: error.message });
+    }
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// Helper function to create email transporter
+const createEmailTransporter = () => {
+  const emailUser = process.env.EMAIL_USER;
+  const emailPass = process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD;
+
+  if (!emailUser || !emailPass || emailUser === 'your_email@gmail.com' || emailPass === 'your_app_password_here') {
+    console.log('⚠️  Email credentials not configured. Email notification will log to console only.');
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: emailUser,
+      pass: emailPass
+    }
+  });
+};
+
+// Approve verification request
+router.put('/verifications/:id/approve', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    const { verified_by } = req.body;
+    const adminId = req.user.id;
+    const connection = getConnection();
+
+    // Get verification request with email
+    const [requests] = await connection.execute(
+      'SELECT user_id, email, full_name, status FROM verification_requests WHERE id = ?',
+      [id]
+    );
+
+    if (requests.length === 0) {
+      return res.status(404).json({ message: 'Verification request not found' });
+    }
+
+    if (requests[0].status !== 'pending') {
+      return res.status(400).json({ message: 'Verification request is not pending' });
+    }
+
+    const userId = requests[0].user_id;
+    const userEmail = requests[0].email;
+    const fullName = requests[0].full_name;
+
+    // Update verification request
+    await connection.execute(
+      `UPDATE verification_requests 
+     SET status = 'approved', admin_id = ?, verified_by = ?, verified_at = NOW(), updated_at = NOW()
+     WHERE id = ?`,
+      [adminId, verified_by || 'Zyea', id]
+    );
+
+    // Update user verification status
+    await connection.execute(
+      'UPDATE users SET is_verified = 1, verified_by = ?, verified_at = NOW() WHERE id = ?',
+      [verified_by || 'Zyea', userId]
+    );
+
+    // Send email notification
+    if (userEmail) {
+      try {
+        const transporter = createEmailTransporter();
+        if (transporter) {
+          await transporter.sendMail({
+            from: process.env.EMAIL_USER || 'noreply@zyea.com',
+            to: userEmail,
+            subject: '🎉 Yêu cầu xác minh tài khoản đã được duyệt - Zyea+',
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #0084ff;">Xin chào ${fullName || 'bạn'}!</h2>
+                <p>Chúng tôi rất vui mừng thông báo rằng yêu cầu xác minh tài khoản của bạn đã được duyệt thành công.</p>
+                <div style="background-color: #f0f8ff; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 0;"><strong>Thông tin xác minh:</strong></p>
+                  <ul style="margin: 10px 0; padding-left: 20px;">
+                    <li>Tài khoản: ${fullName || 'N/A'}</li>
+                    <li>Xác minh bởi: ${verified_by || 'Zyea'}</li>
+                    <li>Ngày xác minh: ${new Date().toLocaleDateString('vi-VN')}</li>
+                  </ul>
+                </div>
+                <p>Tài khoản của bạn giờ đây đã có dấu tích xác minh (✓) và sẽ hiển thị trên trang cá nhân của bạn.</p>
+                <p>Cảm ơn bạn đã sử dụng Zyea+!</p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                <p style="color: #666; font-size: 12px;">Email này được gửi tự động từ hệ thống Zyea+</p>
+              </div>
+            `,
+          });
+          console.log(`✅ Verification approval email sent to ${userEmail}`);
+        } else {
+          console.log(`📧 Verification approval notification for ${userEmail}: Your verification request has been approved!`);
+        }
+      } catch (emailError) {
+        console.error('❌ Error sending verification approval email:', emailError);
+        // Don't fail the request if email fails
+      }
+    }
+
+    res.json({ message: 'Verification request approved successfully' });
+  } catch (error) {
+    console.error('❌ Approve verification error:', error);
+    if (error.message.includes('Invalid ID')) {
+      return res.status(400).json({ message: error.message });
+    }
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
+  }
+});
+
+// Reject verification request
+router.put('/verifications/:id/reject', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    const { admin_response } = req.body;
+    const adminId = req.user.id;
+    const connection = getConnection();
+
+    // Get verification request
+    const [requests] = await connection.execute(
+      'SELECT status FROM verification_requests WHERE id = ?',
+      [id]
+    );
+
+    if (requests.length === 0) {
+      return res.status(404).json({ message: 'Verification request not found' });
+    }
+
+    if (requests[0].status !== 'pending') {
+      return res.status(400).json({ message: 'Verification request is not pending' });
+    }
+
+    // Update verification request
+    await connection.execute(
+      `UPDATE verification_requests 
+     SET status = 'rejected', admin_id = ?, admin_response = ?, updated_at = NOW()
+     WHERE id = ?`,
+      [adminId, admin_response || 'Yêu cầu xác minh đã bị từ chối', id]
+    );
+
+    res.json({ message: 'Verification request rejected successfully' });
+  } catch (error) {
+    console.error('❌ Reject verification error:', error);
+    if (error.message.includes('Invalid ID')) {
+      return res.status(400).json({ message: error.message });
+    }
+    res.status(500).json({
+      message: 'Server error',
+      error: error.message
+    });
   }
 });
 

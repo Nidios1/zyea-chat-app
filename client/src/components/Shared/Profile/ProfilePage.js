@@ -17,11 +17,13 @@ import {
   FiMessageCircle,
   FiUserMinus,
   FiUserCheck,
-  FiUserX
+  FiUserX,
+  FiFlag
 } from 'react-icons/fi';
 import { profileAPI, friendsAPI } from '../../../utils/api';
 import { getInitials } from '../../../utils/nameUtils';
 import { getAvatarURL, getUploadedImageURL } from '../../../utils/imageUtils';
+import ReportUserModal from './ReportUserModal';
 
 const ProfileContainer = styled.div`
   position: fixed;
@@ -805,6 +807,7 @@ const ProfilePage = ({ user, onBack, onLogout, isOwnProfile = false }) => {
   const [isFollowing, setIsFollowing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [showFriendMenu, setShowFriendMenu] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   // Generate avatar color based on name
   const getAvatarColor = (name) => {
@@ -1244,6 +1247,16 @@ const ProfilePage = ({ user, onBack, onLogout, isOwnProfile = false }) => {
                   </FriendMenuItem>
                 </FriendMenu>
               )}
+
+              {/* Report button - Always show for other users */}
+              <ActionButton 
+                onClick={() => setShowReportModal(true)} 
+                className="danger"
+                style={{ marginTop: '0.5rem' }}
+              >
+                <FiFlag size={18} />
+                Báo cáo tài khoản
+              </ActionButton>
             </ActionButtons>
           )}
         </ProfileCard>
@@ -1429,6 +1442,13 @@ const ProfilePage = ({ user, onBack, onLogout, isOwnProfile = false }) => {
           </EditModalContent>
         </EditModal>
       )}
+
+      <ReportUserModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        reportedUserId={user?.id}
+        reportedUserName={profile?.full_name || profile?.username}
+      />
     </ProfileContainer>
   );
 };

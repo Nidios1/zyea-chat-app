@@ -23,14 +23,15 @@ import { UpdateModal } from './components/Common/UpdateModal';
 import MessageNotificationBanner from './components/Common/MessageNotificationBanner';
 import useSocket from './hooks/useSocket';
 import { chatAPI } from './utils/api';
+import { lightTheme, darkTheme } from './config/theme';
 
 
 // Wrapper component to pass theme to PaperProvider and update StatusBar
 const PaperWrapper = ({ children }: { children: React.ReactNode }) => {
-  const { isDarkMode, colors } = useTheme();
+  const { isDarkMode } = useTheme();
   
   return (
-    <PaperProvider>
+    <PaperProvider theme={isDarkMode ? darkTheme : lightTheme}>
       {children}
     </PaperProvider>
   );

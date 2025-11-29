@@ -78,72 +78,53 @@ jobs:
       - name: 📦 Install CocoaPods dependencies
         working-directory: ./mobile-expo/ios
         run: |
-          echo "📦 Installing CocoaPods dependencies..."
-          pod repo update || true
           pod install --repo-update || pod install
-          echo "✅ CocoaPods dependencies installed"
 
-      - name: 🏗️ Build IPA (unsigned)
+      - name: 🏗️ Build IPA (unsigned) with expo run:ios
         working-directory: ./mobile-expo
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          echo "🏗️ Building iOS app (unsigned)..."
+          echo "🏗️ Building iOS app..."
           cd ios
           
-          # Find workspace dynamically - search for .xcworkspace
-          echo "🔍 Searching for workspace file..."
-          WORKSPACE=$(find . -name "*.xcworkspace" -type d | head -1)
-          
+          WORKSPACE=$(find . -name "*.xcworkspace" | head -1)
           if [ -z "$WORKSPACE" ]; then
             echo "❌ No .xcworkspace found!"
             echo "📂 Current directory contents:"
             ls -la
-            echo ""
-            echo "📂 Searching for workspace/project files:"
-            find . -name "*.xcworkspace" -o -name "*.xcodeproj" 2>/dev/null | head -10
+            echo "📂 Searching for workspace files:"
+            find . -name "*.xcworkspace" -o -name "*.xcodeproj" 2>/dev/null || true
             exit 1
           fi
           
-          # Get absolute path
-          WORKSPACE=$(cd "$(dirname "$WORKSPACE")" && pwd)/$(basename "$WORKSPACE")
           echo "✅ Found workspace: $WORKSPACE"
           
-          # Get scheme name from workspace
-          echo "🔍 Detecting scheme..."
           SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 10 "Schemes:" | grep -v "Schemes:" | head -1 | xargs)
-          
           if [ -z "$SCHEME" ]; then
-            # Try to get from project name or use default
-            PROJECT_NAME=$(basename "$WORKSPACE" .xcworkspace)
-            if [ -n "$PROJECT_NAME" ] && [ "$PROJECT_NAME" != "." ]; then
-              SCHEME="$PROJECT_NAME"
-            else
-              SCHEME="zyea-mobile"
-            fi
-            echo "⚠️ Could not detect scheme, using: $SCHEME"
-          else
-            echo "✅ Detected scheme: $SCHEME"
+            SCHEME="zyea-mobile"
+            echo "⚠️ Could not detect scheme, using default: $SCHEME"
           fi
           
-          # Clean build
+          echo "✅ Using workspace: $WORKSPACE, scheme: $SCHEME"
+          
+          # Get app target name
+          APP_TARGET=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 20 "Targets:" | grep -v "Targets:" | head -1 | xargs)
+          if [ -z "$APP_TARGET" ]; then
+            APP_TARGET="$SCHEME"
+          fi
+          echo "✅ App target: $APP_TARGET"
+          
           echo "🧹 Cleaning build..."
           rm -rf build/DerivedData || true
           xcodebuild clean -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release || true
           
-          # Build
-          echo "🏗️ Building app (unsigned)..."
+          echo "🏗️ Building app target (unsigned)..."
           echo "📋 Build command:"
-          echo "  Workspace: $WORKSPACE"
-          echo "  Scheme: $SCHEME"
-          echo "  Configuration: Release"
-          echo "  SDK: iphoneos"
-          echo "  Destination: generic/platform=iOS"
-          echo "  Code Signing: DISABLED"
+          echo "xcodebuild build -workspace \"$WORKSPACE\" -scheme \"$SCHEME\" -configuration Release -sdk iphoneos -derivedDataPath build/DerivedData CODE_SIGN_IDENTITY=\"\" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM=\"\" ONLY_ACTIVE_ARCH=NO ARCHS=\"arm64\""
           
+          # Build with better error handling
           BUILD_OUTPUT=$(mktemp)
-          trap "rm -f '$BUILD_OUTPUT' 2>/dev/null || true" EXIT
-          
           set +e
           xcodebuild build \
             -workspace "$WORKSPACE" \
@@ -151,51 +132,52 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -derivedDataPath build/DerivedData \
-            -destination "generic/platform=iOS" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            PROVISIONING_PROFILE="" \
             ONLY_ACTIVE_ARCH=NO \
-            ARCHS="arm64" \
-            -allowProvisioningUpdates 2>&1 | tee "$BUILD_OUTPUT"
+            ARCHS="arm64" 2>&1 | tee "$BUILD_OUTPUT"
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
           set -e
           
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo "❌ Build failed with exit code: $BUILD_EXIT_CODE"
+            echo "📋 Last 50 lines of build output:"
+            tail -50 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
             echo ""
-            echo "📋 Error details:"
-            grep -i "error:" "$BUILD_OUTPUT" | tail -30 || echo "No error messages found"
-            echo ""
-            echo "📋 Last 100 lines:"
-            tail -100 "$BUILD_OUTPUT"
+            echo "📋 Checking for build logs..."
+            if [ -d "build/DerivedData/Logs/Build" ]; then
+              echo "📂 Build log files:"
+              ls -la build/DerivedData/Logs/Build/ 2>/dev/null || true
+              echo ""
+              echo "📋 Recent build log:"
+              find build/DerivedData/Logs/Build -name "*.xcactivitylog" -type f | head -1 | xargs -I {} sh -c 'gunzip -c "{}" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null | tail -100 || echo "Could not read log"' || true
+            fi
             rm -f "$BUILD_OUTPUT"
-            trap - EXIT
             exit 1
           fi
           
           rm -f "$BUILD_OUTPUT"
-          trap - EXIT
-          echo "✅ Build completed successfully"
+          echo "✅ Build command completed successfully"
           
-          # Check if .app was created immediately after build
           echo "🔍 Checking for .app file immediately after build..."
-          APP_IN_BUILD=$(find build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
-          if [ -n "$APP_IN_BUILD" ]; then
-            echo "✅ Found .app in DerivedData: $APP_IN_BUILD"
-          else
-            echo "⚠️ .app not found in DerivedData/Build/Products"
-            echo "📂 Checking DerivedData structure:"
-            find build/DerivedData -type d -maxdepth 4 2>/dev/null | head -20 || echo "DerivedData structure not found"
-            echo ""
-            echo "📂 Trying archive method instead..."
-            
-            # Try archive - this usually creates .app in Products/Applications
-            ARCHIVE_OUTPUT=$(mktemp)
-            trap "rm -f '$ARCHIVE_OUTPUT' 2>/dev/null || true" EXIT
+          echo "📂 DerivedData structure:"
+          find build/DerivedData -type d -maxdepth 5 2>/dev/null | head -30 || true
+          echo ""
+          echo "📂 Build/Products directory:"
+          ls -la build/DerivedData/Build/Products/ 2>/dev/null || echo "Products directory does not exist"
+          echo ""
+          echo "📂 Looking for Release-iphoneos:"
+          ls -la build/DerivedData/Build/Products/Release-iphoneos/ 2>/dev/null || echo "Release-iphoneos directory does not exist"
+          echo ""
+          
+          # Check if .app was created in DerivedData
+          APP_IN_DERIVED=$(find build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
+          
+          if [ -z "$APP_IN_DERIVED" ]; then
+            echo "⚠️ .app not found in DerivedData/Build/Products, trying archive method..."
+            # Try archive as fallback
             set +e
             xcodebuild archive \
               -workspace "$WORKSPACE" \
@@ -203,112 +185,94 @@ jobs:
               -configuration Release \
               -archivePath build/app.xcarchive \
               -sdk iphoneos \
-              -destination "generic/platform=iOS" \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO \
               DEVELOPMENT_TEAM="" \
-              PROVISIONING_PROFILE_SPECIFIER="" \
-              PROVISIONING_PROFILE="" \
               SKIP_INSTALL=NO \
-              ARCHS="arm64" \
-              -allowProvisioningUpdates 2>&1 | tee "$ARCHIVE_OUTPUT"
+              ARCHS="arm64" 2>&1 | tee "$BUILD_OUTPUT"
             ARCHIVE_EXIT_CODE=${PIPESTATUS[0]}
             set -e
             
             if [ $ARCHIVE_EXIT_CODE -ne 0 ]; then
               echo "❌ Archive also failed with exit code: $ARCHIVE_EXIT_CODE"
-              echo "📋 Archive error details:"
-              grep -i "error:" "$ARCHIVE_OUTPUT" | tail -20 || echo "No error messages found"
-              echo ""
-              echo "📋 Last 50 lines of archive output:"
-              tail -50 "$ARCHIVE_OUTPUT"
-              rm -f "$ARCHIVE_OUTPUT"
-              trap - EXIT
-              # Continue to search for .app anyway
-            else
-              echo "✅ Archive completed successfully"
-              rm -f "$ARCHIVE_OUTPUT"
-              trap - EXIT
+              tail -50 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
+              rm -f "$BUILD_OUTPUT"
+              exit 1
             fi
+            rm -f "$BUILD_OUTPUT"
+            echo "✅ Archive completed"
+          else
+            echo "✅ Found .app in DerivedData: $APP_IN_DERIVED"
           fi
           
+          echo "✅ Build process completed"
           cd ..
           
-          # Find .app file - comprehensive search
-          echo "🔍 Finding .app file (comprehensive search)..."
+          echo "🔍 Finding .app file from mobile-expo directory..."
+          pwd
           APP_PATH=""
           
-          # Method 1: Check archive Products/Applications (if archive was created)
-          if [ -d "ios/build/app.xcarchive/Products/Applications" ]; then
-            echo "📂 Checking Archive Products/Applications..."
-            ls -la ios/build/app.xcarchive/Products/Applications/ 2>/dev/null || true
-            APP_PATH=$(find ios/build/app.xcarchive/Products/Applications -maxdepth 1 -name "*.app" -type d 2>/dev/null | head -1)
-            if [ -n "$APP_PATH" ]; then
-              echo "✅ Found via Archive Applications: $APP_PATH"
-            else
-              echo "⚠️ No .app found in Archive Products/Applications"
-            fi
-          fi
-          
-          # Method 2: Check archive Products (recursive, any depth)
-          if [ -z "$APP_PATH" ] && [ -d "ios/build/app.xcarchive/Products" ]; then
-            echo "📂 Checking Archive Products (recursive)..."
-            APP_PATH=$(find ios/build/app.xcarchive/Products -name "*.app" -type d 2>/dev/null | head -1)
-            if [ -n "$APP_PATH" ]; then
-              echo "✅ Found via Archive Products: $APP_PATH"
-            else
-              echo "⚠️ No .app found in Archive Products"
-              echo "📂 Listing Archive Products contents:"
-              find ios/build/app.xcarchive/Products -type d -maxdepth 3 2>/dev/null | head -20 || true
-            fi
-          fi
-          
-          # Method 2b: Check archive root (sometimes .app is at root)
-          if [ -z "$APP_PATH" ] && [ -d "ios/build/app.xcarchive" ]; then
-            APP_PATH=$(find ios/build/app.xcarchive -maxdepth 1 -name "*.app" -type d 2>/dev/null | head -1)
-            if [ -n "$APP_PATH" ]; then
-              echo "✅ Found via Archive root: $APP_PATH"
-            fi
-          fi
-          
-          # Method 3: Check DerivedData/Build/Products/Release-iphoneos
-          if [ -z "$APP_PATH" ] && [ -d "ios/build/DerivedData/Build/Products/Release-iphoneos" ]; then
-            APP_PATH=$(find ios/build/DerivedData/Build/Products/Release-iphoneos -name "*.app" -type d 2>/dev/null | head -1)
-            if [ -n "$APP_PATH" ]; then
-              echo "✅ Found via DerivedData Release-iphoneos: $APP_PATH"
-            fi
-          fi
-          
-          # Method 4: Check DerivedData/Build/Products (any subdirectory)
-          if [ -z "$APP_PATH" ] && [ -d "ios/build/DerivedData/Build/Products" ]; then
+          # Method 1: Check DerivedData/Build/Products first (where build puts it)
+          if [ -d "ios/build/DerivedData/Build/Products" ]; then
+            echo "📂 Checking ios/build/DerivedData/Build/Products..."
             APP_PATH=$(find ios/build/DerivedData/Build/Products -name "*.app" -type d 2>/dev/null | head -1)
             if [ -n "$APP_PATH" ]; then
-              echo "✅ Found via DerivedData Products: $APP_PATH"
+              echo "✅ Found via Method 1: $APP_PATH"
             fi
           fi
           
-          # Method 5: Check entire DerivedData
+          # Method 2: Check entire DerivedData
           if [ -z "$APP_PATH" ] && [ -d "ios/build/DerivedData" ]; then
+            echo "📂 Checking entire ios/build/DerivedData..."
             APP_PATH=$(find ios/build/DerivedData -name "*.app" -type d 2>/dev/null | head -1)
             if [ -n "$APP_PATH" ]; then
-              echo "✅ Found via DerivedData: $APP_PATH"
+              echo "✅ Found via Method 2: $APP_PATH"
             fi
           fi
           
-          # Method 6: Check entire ios/build
+          # Method 3: Check archive Products/Applications (if archive was created)
+          if [ -z "$APP_PATH" ] && [ -d "ios/build/app.xcarchive/Products/Applications" ]; then
+            echo "📂 Checking archive Products/Applications..."
+            APP_PATH=$(find ios/build/app.xcarchive/Products/Applications -maxdepth 1 -name "*.app" -type d 2>/dev/null | head -1)
+            if [ -n "$APP_PATH" ]; then
+              echo "✅ Found via Method 3: $APP_PATH"
+            fi
+          fi
+          
+          # Method 4: Check archive Products
+          if [ -z "$APP_PATH" ] && [ -d "ios/build/app.xcarchive" ]; then
+            echo "📂 Checking archive Products..."
+            APP_PATH=$(find ios/build/app.xcarchive/Products -name "*.app" -type d 2>/dev/null | head -1)
+            if [ -n "$APP_PATH" ]; then
+              echo "✅ Found via Method 4: $APP_PATH"
+            fi
+          fi
+          
+          # Method 5: Check ios/build directory
           if [ -z "$APP_PATH" ] && [ -d "ios/build" ]; then
+            echo "📂 Checking ios/build directory..."
             APP_PATH=$(find ios/build -name "*.app" -type d 2>/dev/null | head -1)
             if [ -n "$APP_PATH" ]; then
-              echo "✅ Found via ios/build: $APP_PATH"
+              echo "✅ Found via Method 5: $APP_PATH"
             fi
           fi
           
-          # Method 7: Check entire ios directory
+          # Method 6: Search in ios directory
           if [ -z "$APP_PATH" ]; then
+            echo "📂 Searching entire ios directory..."
             APP_PATH=$(find ios -name "*.app" -type d 2>/dev/null | grep -v node_modules | grep -v ".expo" | head -1)
             if [ -n "$APP_PATH" ]; then
-              echo "✅ Found via ios directory: $APP_PATH"
+              echo "✅ Found via Method 6: $APP_PATH"
+            fi
+          fi
+          
+          # Method 7: Search from current directory (mobile-expo)
+          if [ -z "$APP_PATH" ]; then
+            echo "📂 Searching from current directory..."
+            APP_PATH=$(find . -name "*.app" -type d 2>/dev/null | grep -v node_modules | grep -v ".expo" | head -1)
+            if [ -n "$APP_PATH" ]; then
+              echo "✅ Found via Method 7: $APP_PATH"
             fi
           fi
           
@@ -321,47 +285,41 @@ jobs:
             echo "📂 ios/build structure:"
             ls -la ios/build/ 2>/dev/null || echo "ios/build does not exist"
             echo ""
-            echo "📂 Archive structure (detailed):"
+            echo "📂 Archive structure:"
             if [ -d "ios/build/app.xcarchive" ]; then
-              echo "Archive exists at: ios/build/app.xcarchive"
+              echo "Archive exists!"
+              ls -la ios/build/app.xcarchive/ 2>/dev/null || true
               echo ""
-              echo "📂 Archive root contents:"
-              ls -la ios/build/app.xcarchive/ 2>/dev/null || echo "Cannot list archive root"
+              echo "Products directory:"
+              ls -la ios/build/app.xcarchive/Products/ 2>/dev/null || true
               echo ""
-              echo "📂 Archive Products contents:"
-              ls -la ios/build/app.xcarchive/Products/ 2>/dev/null || echo "Products directory does not exist"
-              echo ""
-              echo "📂 Archive Products/Applications (if exists):"
-              if [ -d "ios/build/app.xcarchive/Products/Applications" ]; then
-                ls -la ios/build/app.xcarchive/Products/Applications/ 2>/dev/null || echo "Cannot list Applications"
-              else
-                echo "Products/Applications directory does not exist"
-              fi
-              echo ""
-              echo "📂 All files in Archive Products (recursive):"
-              find ios/build/app.xcarchive/Products -type f 2>/dev/null | head -30 || echo "No files found"
-              echo ""
-              echo "📂 All directories in Archive Products (recursive):"
-              find ios/build/app.xcarchive/Products -type d 2>/dev/null | head -30 || echo "No directories found"
+              echo "Applications directory:"
+              ls -la ios/build/app.xcarchive/Products/Applications/ 2>/dev/null || true
             else
               echo "Archive does not exist"
             fi
             echo ""
-            echo "📂 DerivedData structure (first 30 dirs):"
-            find ios/build/DerivedData -type d -maxdepth 4 2>/dev/null | head -30 || echo "DerivedData does not exist"
+            echo "📂 DerivedData structure (first 50 dirs):"
+            find ios/build/DerivedData -type d -maxdepth 4 2>/dev/null | head -50 || echo "DerivedData does not exist"
             echo ""
-            echo "📂 All .app files in entire project:"
-            find . -type d -name "*.app" 2>/dev/null | head -20 || echo "No .app files found anywhere"
+            echo "📂 Build/Products directory:"
+            ls -la ios/build/DerivedData/Build/Products/ 2>/dev/null || echo "Products directory does not exist"
             echo ""
-            echo "📂 All files ending with .app (including files, not just dirs):"
-            find . -name "*.app" 2>/dev/null | head -20 || echo "No .app files/dirs found"
+            echo "📂 Release-iphoneos directory:"
+            ls -la ios/build/DerivedData/Build/Products/Release-iphoneos/ 2>/dev/null || echo "Release-iphoneos does not exist"
+            echo ""
+            echo "🔍 All .app files found in entire project:"
+            find . -name "*.app" -type d 2>/dev/null | head -20 || echo "No .app files found anywhere"
+            echo ""
+            echo "🔍 All directories in ios/build/DerivedData/Build:"
+            find ios/build/DerivedData/Build -type d -maxdepth 3 2>/dev/null | head -30 || true
             exit 1
           fi
           
           echo "✅ Found .app at: $APP_PATH"
-          ls -lh "$APP_PATH" | head -5
-          
-          # Create IPA
+          echo "📦 App details:"
+          ls -lh "$APP_PATH" | head -10
+          echo ""
           echo "📦 Creating IPA from $APP_PATH..."
           mkdir -p Payload
           APP_NAME=$(basename "$APP_PATH")
@@ -369,32 +327,49 @@ jobs:
           zip -r build.ipa Payload
           rm -rf Payload
           
-          if [ ! -f "build.ipa" ]; then
+          if [ -f "build.ipa" ]; then
+            echo "✅ IPA created successfully!"
+            ls -lh build.ipa
+          else
             echo "❌ Failed to create IPA"
             exit 1
           fi
-          
-          echo "✅ IPA created successfully!"
-          ls -lh build.ipa
 
-      - name: 🧹 Cleanup build artifacts
+      - name: 🔍 Find IPA file
         working-directory: ./mobile-expo
         run: |
-          echo "🧹 Cleaning up build artifacts..."
-          rm -rf Payload || true
-          rm -rf ios/build/DerivedData || true
-          rm -rf ios/build/*.xcarchive || true
-          find ios/build -type f ! -name "*.ipa" -delete 2>/dev/null || true
-          find ios/build -type d -empty -delete 2>/dev/null || true
-          echo "✅ Cleanup completed - only IPA file remains"
-
+          echo "🔍 Searching for IPA file..."
+          find . -name "*.ipa" -type f 2>/dev/null | head -5 || echo "No IPA files found yet"
+          
       - name: ✅ Verify IPA file
         working-directory: ./mobile-expo
         run: |
-          if [ ! -f "build.ipa" ]; then
+          # Try to find IPA file in common locations
+          IPA_FILE=""
+          if [ -f "build.ipa" ]; then
+            IPA_FILE="build.ipa"
+          elif [ -f "ios/build/*.ipa" ]; then
+            IPA_FILE=$(find ios/build -name "*.ipa" -type f | head -1)
+          elif [ -f "*.ipa" ]; then
+            IPA_FILE=$(find . -maxdepth 1 -name "*.ipa" -type f | head -1)
+          else
+            IPA_FILE=$(find . -name "*.ipa" -type f | head -1)
+          fi
+          
+          if [ -z "$IPA_FILE" ] || [ ! -f "$IPA_FILE" ]; then
             echo "❌ Error: IPA file not found!"
+            echo "📂 Current directory contents:"
             ls -la
+            echo "📂 Searching in subdirectories:"
+            find . -type f -name "*.ipa" 2>/dev/null || echo "No IPA files found"
             exit 1
+          fi
+          
+          # If found file is not build.ipa, copy it
+          if [ "$IPA_FILE" != "build.ipa" ]; then
+            echo "📋 Found IPA at: $IPA_FILE"
+            cp "$IPA_FILE" build.ipa
+            echo "✅ Copied to build.ipa"
           fi
           
           FILE_SIZE=$(stat -f%z build.ipa 2>/dev/null || stat -c%s build.ipa 2>/dev/null || echo "0")
@@ -403,12 +378,16 @@ jobs:
           
           if [ "$FILE_SIZE" -lt 1000000 ]; then
             echo "❌ Error: IPA file is too small ($FILE_SIZE bytes). Expected at least 1MB."
+            echo "📄 File type:"
+            file build.ipa || echo "Could not determine file type"
+            echo "📄 First 500 bytes (hex dump):"
+            head -c 500 build.ipa | xxd | head -20 || head -c 500 build.ipa
             exit 1
           fi
           
           echo "✅ IPA file verified successfully!"
 
-      - name: 📤 Upload IPA artifact (IPA only)
+      - name: 📤 Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-ipa-unsigned

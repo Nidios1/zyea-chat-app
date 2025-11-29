@@ -4,6 +4,7 @@ import { Text, useTheme } from 'react-native-paper';
 import { getInitials } from '../../utils/nameUtils';
 import { getAvatarURL } from '../../utils/imageUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { VerifiedBadge } from '../Common/VerifiedBadge';
 
 interface ConversationItemProps {
   conversation: {
@@ -15,6 +16,7 @@ interface ConversationItemProps {
     last_message_time?: string;
     unread_count?: number;
     status?: 'online' | 'offline';
+    is_verified?: boolean;
   };
   onPress: () => void;
 }
@@ -74,12 +76,18 @@ const ConversationItem: React.FC<ConversationItemProps> = ({
 
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text
-            style={[styles.name, hasUnread && styles.nameUnread]}
-            numberOfLines={1}
-          >
-            {conversation.full_name || conversation.username}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <Text
+              style={[styles.name, hasUnread && styles.nameUnread]}
+              numberOfLines={1}
+            >
+              {conversation.full_name || conversation.username}
+            </Text>
+            {/* Verified badge */}
+            {conversation.is_verified && (
+              <VerifiedBadge size={14} />
+            )}
+          </View>
           {conversation.last_message_time && (
             <Text style={styles.time} numberOfLines={1}>
               {new Date(conversation.last_message_time).toLocaleTimeString('vi', {

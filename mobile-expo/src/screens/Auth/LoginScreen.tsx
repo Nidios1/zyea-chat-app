@@ -201,11 +201,41 @@ const LoginScreen = () => {
         throw new Error('Invalid response from server');
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || '';
+      // Kiểm tra lỗi kết nối server trước
+      const isNetworkError = 
+        !err.response || // Không có response từ server
+        err.code === 'ECONNABORTED' || // Timeout
+        err.code === 'ECONNREFUSED' || // Server từ chối kết nối
+        err.code === 'ENOTFOUND' || // Không tìm thấy server
+        err.code === 'ETIMEDOUT' || // Hết thời gian chờ
+        err.code === 'ERR_NETWORK' || // Lỗi mạng
+        err.message?.includes('Network Error') || // Lỗi mạng
+        err.message?.includes('timeout') || // Timeout
+        err.message?.includes('Failed to fetch') || // Không thể kết nối
+        err.message?.includes('Network request failed'); // Lỗi kết nối mạng
       
-      if (errorMessage.includes('password') || errorMessage.includes('mật khẩu')) {
+      if (isNetworkError) {
+        showAlert(t('auth.serverConnectionError'), t('auth.serverConnectionErrorDesc'));
+        return;
+      }
+      
+      // Kiểm tra lỗi từ server response
+      const errorMessage = err.response?.data?.message || '';
+      const statusCode = err.response?.status;
+      
+      // Lỗi 401 thường là sai mật khẩu hoặc tài khoản không tồn tại
+      if (statusCode === 401) {
+        if (errorMessage.includes('password') || errorMessage.includes('mật khẩu') || errorMessage.includes('Password')) {
+          showAlert(t('auth.passwordIncorrect'), t('auth.passwordIncorrectDesc'));
+        } else if (errorMessage.includes('email') || errorMessage.includes('Email') || errorMessage.includes('user') || errorMessage.includes('User')) {
+          showAlert(t('auth.emailNotExist'), t('auth.emailNotExistDesc'));
+        } else {
+          // Mặc định cho 401 là sai tài khoản hoặc mật khẩu
+          showAlert(t('auth.invalidCredentials'), t('auth.invalidCredentialsDesc'));
+        }
+      } else if (errorMessage.includes('password') || errorMessage.includes('mật khẩu') || errorMessage.includes('Password')) {
         showAlert(t('auth.passwordIncorrect'), t('auth.passwordIncorrectDesc'));
-      } else if (errorMessage.includes('email') || errorMessage.includes('Email') || errorMessage.includes('user')) {
+      } else if (errorMessage.includes('email') || errorMessage.includes('Email') || errorMessage.includes('user') || errorMessage.includes('User')) {
         showAlert(t('auth.emailNotExist'), t('auth.emailNotExistDesc'));
       } else if (errorMessage) {
         showAlert(t('auth.loginFailed'), errorMessage);
