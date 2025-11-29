@@ -123,9 +123,18 @@ jobs:
           echo "📋 Build command:"
           echo "xcodebuild build -workspace \"$WORKSPACE\" -scheme \"$SCHEME\" -configuration Release -sdk iphoneos -derivedDataPath build/DerivedData CODE_SIGN_IDENTITY=\"\" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM=\"\" ONLY_ACTIVE_ARCH=NO ARCHS=\"arm64\""
           
+          # Verify scheme exists
+          echo "🔍 Verifying scheme..."
+          SCHEMES=$(xcodebuild -list -workspace "$WORKSPACE" 2>/dev/null | grep -A 20 "Schemes:" | grep -v "Schemes:" | xargs)
+          if [[ ! "$SCHEMES" =~ "$SCHEME" ]]; then
+            echo "⚠️ Warning: Scheme '$SCHEME' may not exist"
+            echo "📋 Available schemes: $SCHEMES"
+          fi
+          
           # Build with better error handling
           BUILD_OUTPUT=$(mktemp)
           set +e
+          echo "🚀 Starting xcodebuild..."
           xcodebuild build \
             -workspace "$WORKSPACE" \
             -scheme "$SCHEME" \
@@ -143,8 +152,18 @@ jobs:
           
           if [ $BUILD_EXIT_CODE -ne 0 ]; then
             echo "❌ Build failed with exit code: $BUILD_EXIT_CODE"
-            echo "📋 Last 50 lines of build output:"
-            tail -50 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
+            echo ""
+            echo "📋 Searching for error messages in build output..."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            grep -i "error:" "$BUILD_OUTPUT" | tail -30 || echo "No 'error:' found"
+            echo ""
+            grep -i "failed" "$BUILD_OUTPUT" | tail -20 || echo "No 'failed' found"
+            echo ""
+            grep -i "warning:" "$BUILD_OUTPUT" | tail -20 || echo "No 'warning:' found"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            echo "📋 Last 100 lines of build output:"
+            tail -100 "$BUILD_OUTPUT" || cat "$BUILD_OUTPUT"
             echo ""
             echo "📋 Checking for build logs..."
             if [ -d "build/DerivedData/Logs/Build" ]; then
@@ -154,6 +173,13 @@ jobs:
               echo "📋 Recent build log:"
               find build/DerivedData/Logs/Build -name "*.xcactivitylog" -type f | head -1 | xargs -I {} sh -c 'gunzip -c "{}" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null | tail -100 || echo "Could not read log"' || true
             fi
+            echo ""
+            echo "📋 Full build output saved to: $BUILD_OUTPUT"
+            echo "💡 Common issues:"
+            echo "   - Missing dependencies: Check pod install completed successfully"
+            echo "   - Code signing: Ensure CODE_SIGNING_REQUIRED=NO is set"
+            echo "   - Scheme mismatch: Verify scheme name matches project"
+            echo "   - Xcode version: Check compatibility with React Native version"
             rm -f "$BUILD_OUTPUT"
             exit 1
           fi
