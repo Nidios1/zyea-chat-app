@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+web-build/
+.expo/
+
+# Documentation
+*.md
+!README.md
+
+# Scripts (not needed for build)
+scripts/
+*.js
+!index.js
+!metro.config.js
+!babel.config.js
+
+# Test files
+**/__tests__/
+**/*.test.*
+**/*.spec.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Temporary files
+*.tmp
+*.temp
+

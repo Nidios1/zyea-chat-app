@@ -30,6 +30,14 @@
         "channel": "preview"
       }
     },
+    "simulator": {
+      "ios": {
+        "simulator": true,
+        "autoIncrement": true,
+        "buildConfiguration": "Release",
+        "channel": "preview"
+      }
+    },
     "production": {
       "ios": {
         "simulator": false,
